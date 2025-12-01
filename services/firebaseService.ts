@@ -13,9 +13,9 @@ import {
 import { 
   createUserWithEmailAndPassword, 
   updateProfile, 
-  initializeApp,
   getAuth
 } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
 import { db, auth } from '../firebaseConfig';
 import { ExamRequest, ExamStatus, User, UserRole } from '../types';
 
