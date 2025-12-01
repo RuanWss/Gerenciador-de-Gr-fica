@@ -49,6 +49,13 @@ export const PrintShopDashboard: React.FC = () => {
     }
   };
 
+  const handleStartPrint = async (exam: ExamRequest) => {
+    // Abre o arquivo primeiro (para evitar bloqueio de popup se demorar muito no await)
+    handleViewFile(exam.fileName);
+    // Atualiza o status no banco
+    await handleStatusChange(exam.id, ExamStatus.IN_PROGRESS);
+  };
+
   const toggleClass = (className: string) => {
     if (selectedClasses.includes(className)) {
         setSelectedClasses(selectedClasses.filter(c => c !== className));
@@ -308,7 +315,7 @@ export const PrintShopDashboard: React.FC = () => {
                             </Button>
                             
                             {exam.status === ExamStatus.PENDING && (
-                                <Button onClick={() => handleStatusChange(exam.id, ExamStatus.IN_PROGRESS)} className="w-full bg-yellow-500 hover:bg-yellow-600 text-white">
+                                <Button onClick={() => handleStartPrint(exam)} className="w-full bg-yellow-500 hover:bg-yellow-600 text-white">
                                     <Printer size={16} className="mr-2"/> Iniciar Impressão
                                 </Button>
                             )}
