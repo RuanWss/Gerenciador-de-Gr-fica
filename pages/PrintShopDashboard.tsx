@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getExams, updateExamStatus, saveUser } from '../services/mockStorage';
+import { getExams, updateExamStatus, createTeacherUser } from '../services/firebaseService'; // Changed import
 import { ExamRequest, ExamStatus, UserRole } from '../types';
 import { Button } from '../components/Button';
 import { Printer, CheckCircle, Clock, Download, Eye, UserPlus, X, Briefcase } from 'lucide-react';
@@ -9,9 +9,12 @@ export const PrintShopDashboard: React.FC = () => {
   const { user } = useAuth();
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [isLoading, setIsLoading] = useState(false);
   
   // State for Add Teacher Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSavingTeacher, setIsSavingTeacher] = useState(false);
+  
   const [newTeacherName, setNewTeacherName] = useState('');
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newTeacherPassword, setNewTeacherPassword] = useState('');
@@ -22,17 +25,19 @@ export const PrintShopDashboard: React.FC = () => {
   const morningClasses = ['6º Ano EFAI', '7º Ano EFAI', '8º Ano EFAI', '9º Ano EFAI'];
   const afternoonClasses = ['1ª Série EM', '2ª Série EM', '3ª Série EM'];
 
-  const refreshExams = () => {
-    const allExams = getExams();
-    setExams(allExams.sort((a,b) => a.createdAt - b.createdAt)); // Oldest first for queue
+  const refreshExams = async () => {
+    setIsLoading(true);
+    const allExams = await getExams();
+    setExams(allExams.sort((a,b) => a.createdAt - b.createdAt)); 
+    setIsLoading(false);
   };
 
   useEffect(() => {
     refreshExams();
   }, [user]);
 
-  const handleStatusChange = (id: string, newStatus: ExamStatus) => {
-    updateExamStatus(id, newStatus);
+  const handleStatusChange = async (id: string, newStatus: ExamStatus) => {
+    await updateExamStatus(id, newStatus);
     refreshExams();
   };
 
@@ -52,28 +57,35 @@ export const PrintShopDashboard: React.FC = () => {
     }
   };
 
-  const handleAddTeacher = (e: React.FormEvent) => {
+  const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSavingTeacher(true);
+
     const newUser = {
-        id: crypto.randomUUID(),
+        id: '', // Will be set by Firebase Auth UID
         name: newTeacherName,
         email: newTeacherEmail,
-        password: newTeacherPassword,
         role: UserRole.TEACHER,
         subject: newTeacherSubject,
         classes: selectedClasses
     };
     
-    saveUser(newUser);
-    alert('Professor cadastrado com sucesso!');
-    setIsModalOpen(false);
-    
-    // Reset form
-    setNewTeacherName('');
-    setNewTeacherEmail('');
-    setNewTeacherPassword('');
-    setNewTeacherSubject('');
-    setSelectedClasses([]);
+    try {
+        await createTeacherUser(newUser, newTeacherPassword);
+        alert('Professor cadastrado com sucesso!');
+        setIsModalOpen(false);
+        
+        // Reset form
+        setNewTeacherName('');
+        setNewTeacherEmail('');
+        setNewTeacherPassword('');
+        setNewTeacherSubject('');
+        setSelectedClasses([]);
+    } catch (error: any) {
+        alert('Erro ao criar professor: ' + error.message);
+    } finally {
+        setIsSavingTeacher(false);
+    }
   };
 
   const filteredExams = exams.filter(exam => {
@@ -178,7 +190,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                     <div className="flex justify-end pt-4 gap-2">
                         <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                        <Button type="submit">Salvar Professor</Button>
+                        <Button type="submit" isLoading={isSavingTeacher}>Salvar Professor</Button>
                     </div>
                 </form>
             </div>
@@ -226,7 +238,11 @@ export const PrintShopDashboard: React.FC = () => {
       </header>
 
       <div className="grid grid-cols-1 gap-6">
-        {filteredExams.length === 0 ? (
+        {isLoading ? (
+            <div className="bg-white p-12 text-center rounded-lg border border-gray-200 text-gray-500">
+                <p>Carregando dados da fila...</p>
+             </div>
+        ) : filteredExams.length === 0 ? (
              <div className="bg-white p-12 text-center rounded-lg border border-gray-200 text-gray-500">
                 <p>Nenhuma prova encontrada com este filtro.</p>
              </div>

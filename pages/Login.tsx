@@ -3,18 +3,22 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 
 export const Login: React.FC = () => {
-  const [email, setEmail] = useState('prof@escola.com');
-  const [password, setPassword] = useState('123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const { login } = useAuth();
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (login(email, password)) {
-      setError('');
-    } else {
+    setIsLoading(true);
+    setError('');
+    
+    const success = await login(email, password);
+    if (!success) {
       setError('Credenciais inválidas. Verifique e-mail e senha.');
     }
+    setIsLoading(false);
   };
 
   return (
@@ -69,14 +73,8 @@ export const Login: React.FC = () => {
             </div>
           )}
 
-          <div className="flex gap-2 justify-center text-xs text-gray-400 mb-4">
-             <span className="cursor-pointer hover:text-white hover:underline transition-colors" onClick={() => {setEmail('prof@escola.com'); setPassword('123');}}>Sou Professor</span>
-             <span>|</span>
-             <span className="cursor-pointer hover:text-white hover:underline transition-colors" onClick={() => {setEmail('grafica@escola.com'); setPassword('123');}}>Sou Gráfica</span>
-          </div>
-
           <div>
-            <Button type="submit" className="w-full h-12 text-lg font-bold tracking-wide shadow-lg shadow-brand-900/50">
+            <Button type="submit" isLoading={isLoading} className="w-full h-12 text-lg font-bold tracking-wide shadow-lg shadow-brand-900/50">
               Entrar no Sistema
             </Button>
           </div>

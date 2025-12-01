@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getExams, saveExam } from '../services/mockStorage';
+import { getExams, saveExam } from '../services/firebaseService'; // Changed import
 import { generateExamQuestions, suggestExamInstructions } from '../services/geminiService';
 import { ExamRequest, ExamStatus } from '../types';
 import { Button } from '../components/Button';
-import { Plus, FileText, BrainCircuit, RefreshCw, UploadCloud, AlertTriangle, Calendar, Clock } from 'lucide-react';
+import { Plus, FileText, BrainCircuit, RefreshCw, UploadCloud, AlertTriangle } from 'lucide-react';
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'new' | 'ai'>('list');
+  const [isLoadingExams, setIsLoadingExams] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [subject, setSubject] = useState('');
   const [title, setTitle] = useState('');
-  // Quantity removed from UI, defaulting to 0 internally
   const [gradeLevel, setGradeLevel] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -29,25 +30,28 @@ export const TeacherDashboard: React.FC = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [instructionLoading, setInstructionLoading] = useState(false);
 
+  // Fetch Exams from Firebase
+  useEffect(() => {
+    const fetchExams = async () => {
+        if (user) {
+            setIsLoadingExams(true);
+            const allExams = await getExams();
+            setExams(allExams.filter(e => e.teacherId === user.id).sort((a,b) => b.createdAt - a.createdAt));
+            setIsLoadingExams(false);
+        }
+    };
+    fetchExams();
+  }, [user, activeTab]);
+
+  // Pre-fill user data
   useEffect(() => {
     if (user) {
-        const allExams = getExams();
-        setExams(allExams.filter(e => e.teacherId === user.id).sort((a,b) => b.createdAt - a.createdAt));
-
-        // Pre-fill user data for new requests
-        if (user.subject) {
-            setSubject(user.subject);
-        }
-        
-        // Set default class if available
+        if (user.subject) setSubject(user.subject);
         if (user.classes && user.classes.length > 0) {
             setGradeLevel(user.classes[0]);
-        } else if (!gradeLevel) {
-            // Fallback for legacy users
-            setGradeLevel('Ensino Médio - 1º Ano');
         }
     }
-  }, [user, activeTab]);
+  }, [user]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -62,7 +66,6 @@ export const TeacherDashboard: React.FC = () => {
     if (selectedDateStr) {
       const selectedDate = new Date(selectedDateStr);
       const today = new Date();
-      // Reset hours to compare only dates or roughly 48h
       today.setHours(0,0,0,0);
       
       const diffTime = selectedDate.getTime() - today.getTime();
@@ -74,17 +77,18 @@ export const TeacherDashboard: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    setIsSubmitting(true);
 
     const newExam: ExamRequest = {
-      id: crypto.randomUUID(),
+      id: '', // Firestore will generate
       teacherId: user.id,
       teacherName: user.name,
       subject,
       title,
-      quantity: 0, // Default 0 as UI input was removed
+      quantity: 0,
       gradeLevel,
       instructions,
       fileName: fileName || 'Sem anexo (apenas instruções)',
@@ -93,16 +97,18 @@ export const TeacherDashboard: React.FC = () => {
       dueDate
     };
 
-    saveExam(newExam);
-    setActiveTab('list');
-    // Reset form fields that aren't fixed
-    setTitle('');
-    setFileName('');
-    setDueDate('');
-    setShowDateWarning(false);
-    // Note: We don't reset Subject or GradeLevel if they are fixed by user profile
-    if (!user.classes || user.classes.length === 0) setGradeLevel('');
-    if (!user.subject) setSubject('');
+    try {
+        await saveExam(newExam);
+        setActiveTab('list');
+        setTitle('');
+        setFileName('');
+        setDueDate('');
+        setShowDateWarning(false);
+    } catch (error) {
+        alert('Erro ao enviar solicitação.');
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   const handleGenerateQuestions = async () => {
@@ -128,7 +134,7 @@ export const TeacherDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 relative">
-      {/* Date Warning Modal - Redesigned */}
+      {/* Date Warning Modal */}
       {showDateWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all animate-in zoom-in-95 duration-200">
@@ -192,7 +198,11 @@ export const TeacherDashboard: React.FC = () => {
       <main>
         {activeTab === 'list' && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-             {exams.length === 0 ? (
+             {isLoadingExams ? (
+                 <div className="p-12 text-center text-gray-500">
+                    <p>Carregando solicitações...</p>
+                 </div>
+             ) : exams.length === 0 ? (
                 <div className="p-12 text-center text-gray-500">
                     <FileText className="mx-auto h-12 w-12 text-gray-300 mb-3"/>
                     <p>Nenhuma solicitação de prova encontrada.</p>
@@ -339,7 +349,7 @@ export const TeacherDashboard: React.FC = () => {
 
                 <div className="flex justify-end pt-4">
                     <Button type="button" variant="secondary" className="mr-3" onClick={() => setActiveTab('list')}>Cancelar</Button>
-                    <Button type="submit">Enviar para Gráfica</Button>
+                    <Button type="submit" isLoading={isSubmitting}>Enviar para Gráfica</Button>
                 </div>
             </form>
           </div>
