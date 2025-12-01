@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User } from '../types';
+import { User, UserRole } from '../types';
 import { auth } from '../firebaseConfig';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getUserProfile } from '../services/firebaseService';
@@ -21,17 +21,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // VERIFICAÇÃO DE ADMIN (GRÁFICA)
+        // Força o acesso para a conta específica por UID ou Email
+        if (
+             firebaseUser.uid === 'QX1GxorHhxU3jPUVXAJVLRndb7E2' || 
+             firebaseUser.email === 'graficacemal@gmail.com'
+           ) {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Central de Cópias',
+                email: firebaseUser.email || 'graficacemal@gmail.com',
+                role: UserRole.PRINTSHOP, // Força o papel de Gráfica
+                subject: '',
+                classes: []
+              });
+              setLoading(false);
+              return;
+        }
+
         // Busca dados adicionais do Firestore (Role, Disciplina, Turmas)
         const userProfile = await getUserProfile(firebaseUser.uid);
         if (userProfile) {
           setUser(userProfile);
         } else {
-          // Fallback se não tiver perfil no banco (ex: criou via console)
+          // Fallback se não tiver perfil no banco
           setUser({
             id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'Usuário',
+            name: firebaseUser.displayName || 'Professor',
             email: firebaseUser.email || '',
-            role: 'TEACHER' as any // Default perigoso, ideal ter perfil
+            role: UserRole.TEACHER, 
+            subject: '',
+            classes: []
           });
         }
       } else {
