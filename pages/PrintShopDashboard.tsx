@@ -51,7 +51,8 @@ import {
   AlertTriangle,
   CalendarClock,
   RefreshCw,
-  UploadCloud
+  UploadCloud,
+  MonitorPlay
 } from 'lucide-react';
 
 type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'subjects' | 'answer_keys' | 'statistics' | 'schedule';
@@ -158,7 +159,14 @@ export const PrintShopDashboard: React.FC = () => {
   const [selectedStatsKey, setSelectedStatsKey] = useState<AnswerKey | null>(null);
 
   // System Config (Banner)
-  const [sysConfig, setSysConfig] = useState<SystemConfig>({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
+  const [sysConfig, setSysConfig] = useState<SystemConfig>({ 
+      bannerMessage: '', 
+      bannerType: 'info', 
+      isBannerActive: false,
+      showOnTV: false,
+      tvStart: '',
+      tvEnd: ''
+  });
 
   // Schedule Management State
   const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
@@ -652,17 +660,56 @@ export const PrintShopDashboard: React.FC = () => {
                                     <option value="success">Sucesso (Verde)</option>
                                 </select>
                             </div>
-                            <div className="flex items-center gap-4 pb-2">
-                                <label className="flex items-center gap-2 cursor-pointer">
+                            <div className="flex flex-col gap-2">
+                                 <label className="flex items-center gap-2 cursor-pointer bg-gray-50 p-2 rounded-md border border-gray-200">
                                     <input 
                                         type="checkbox" 
                                         className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500"
                                         checked={sysConfig.isBannerActive}
                                         onChange={e => setSysConfig({...sysConfig, isBannerActive: e.target.checked})}
                                     />
-                                    <span className="text-sm font-bold text-gray-700">Ativar Aviso</span>
+                                    <span className="text-sm font-bold text-gray-700">Ativar Aviso Geral</span>
                                 </label>
-                                <Button type="submit" className="flex-1">Salvar Configuração</Button>
+                            </div>
+                            
+                            {/* TV CONFIGURATION */}
+                            <div className="col-span-1 md:col-span-2 border-t border-gray-100 pt-4 mt-2">
+                                <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><MonitorPlay size={16}/> Configuração de TV (Quadro de Horários)</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                     <div className="flex items-center">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500"
+                                                checked={sysConfig.showOnTV || false}
+                                                onChange={e => setSysConfig({...sysConfig, showOnTV: e.target.checked})}
+                                            />
+                                            <span className="text-sm font-medium text-gray-700">Exibir Aviso na TV</span>
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500">Início da Exibição</label>
+                                        <input 
+                                            type="datetime-local" 
+                                            className="mt-1 block w-full border border-gray-300 rounded-md p-1.5 text-xs text-gray-900 bg-white"
+                                            value={sysConfig.tvStart || ''}
+                                            onChange={e => setSysConfig({...sysConfig, tvStart: e.target.value})}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500">Fim da Exibição</label>
+                                        <input 
+                                            type="datetime-local" 
+                                            className="mt-1 block w-full border border-gray-300 rounded-md p-1.5 text-xs text-gray-900 bg-white"
+                                            value={sysConfig.tvEnd || ''}
+                                            onChange={e => setSysConfig({...sysConfig, tvEnd: e.target.value})}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="col-span-1 md:col-span-2 pt-2">
+                                <Button type="submit" className="w-full">Salvar Todas as Configurações</Button>
                             </div>
                         </form>
                     </div>

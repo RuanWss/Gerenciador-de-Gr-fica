@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { listenToSchedule } from '../services/firebaseService';
-import { ScheduleEntry, TimeSlot } from '../types';
-import { Clock, Calendar, X, Maximize2, AlertCircle, Volume2 } from 'lucide-react';
+import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
+import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
+import { Clock, Calendar, X, Maximize2, AlertCircle, Volume2, Megaphone, ArrowRight } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -37,8 +37,8 @@ const AFTERNOON_CLASSES = [
     { id: '3em', name: '3ª SÉRIE EM' },
 ];
 
-// Som de Gongo de Aeroporto (Mais grave e longo)
-const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/999/999-preview.mp3";
+// Som de Alerta (Sino de Serviço / Aeroporto)
+const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 export const PublicSchedule: React.FC = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -46,6 +46,7 @@ export const PublicSchedule: React.FC = () => {
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [currentSlot, setCurrentSlot] = useState<TimeSlot | null>(null);
     const [showModal, setShowModal] = useState(false);
+    const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     
     // Estado para controlar se o áudio foi ativado pelo usuário
     const [audioEnabled, setAudioEnabled] = useState(false);
@@ -53,12 +54,18 @@ export const PublicSchedule: React.FC = () => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastSlotId = useRef<string>('');
 
-    // 1. Realtime Database Listener
+    // 1. Realtime Database Listener (Schedule & Config)
     useEffect(() => {
-        const unsubscribe = listenToSchedule((data) => {
+        const unsubscribeSchedule = listenToSchedule((data) => {
             setSchedule(data || []);
         });
-        return () => unsubscribe();
+        const unsubscribeConfig = listenToSystemConfig((config) => {
+            setSysConfig(config);
+        });
+        return () => {
+            unsubscribeSchedule();
+            unsubscribeConfig();
+        };
     }, []);
 
     // 2. Clock & Shift Logic
@@ -166,6 +173,29 @@ export const PublicSchedule: React.FC = () => {
         return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === currentSlot.id);
     };
 
+    const getNextEntry = (classId: string) => {
+        if (!currentSlot) return null;
+        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+        const currentIndex = slots.findIndex(s => s.id === currentSlot.id);
+        
+        // Se for o último horário ou não achou
+        if (currentIndex === -1 || currentIndex === slots.length - 1) return null;
+
+        let nextSlotIndex = currentIndex + 1;
+        let nextSlot = slots[nextSlotIndex];
+
+        // Se o próximo for intervalo, pega o seguinte
+        if (nextSlot.type === 'break') {
+            nextSlotIndex++;
+            nextSlot = slots[nextSlotIndex];
+        }
+
+        if (!nextSlot) return null;
+
+        const day = currentTime.getDay();
+        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === nextSlot.id);
+    };
+
     const getFullEntry = (classId: string, slotId: string, day: number) => {
         return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === slotId);
     };
@@ -177,6 +207,27 @@ export const PublicSchedule: React.FC = () => {
 
     // Grid Layout Logic
     const gridCols = currentShift === 'morning' ? 4 : 3;
+
+    // Warning Visibility Logic
+    const isWarningVisible = () => {
+        if (!sysConfig?.isBannerActive || !sysConfig?.showOnTV || !sysConfig?.bannerMessage) return false;
+        
+        const now = new Date();
+        
+        // Check Start Time
+        if (sysConfig.tvStart) {
+            const startDate = new Date(sysConfig.tvStart);
+            if (startDate > now) return false;
+        }
+
+        // Check End Time
+        if (sysConfig.tvEnd) {
+            const endDate = new Date(sysConfig.tvEnd);
+            if (endDate < now) return false;
+        }
+
+        return true;
+    };
 
     return (
         <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
@@ -211,26 +262,39 @@ export const PublicSchedule: React.FC = () => {
                     {timeString}
                 </h1>
                 
-                {/* Date Centered */}
-                <div className="mt-2 bg-white/5 px-6 py-1 rounded-full border border-white/5">
-                    <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
-                        {dateString}
-                    </p>
+                {/* Date & Warning Area */}
+                <div className="mt-2 flex items-center justify-center gap-4">
+                    <div className="bg-white/5 px-6 py-2 rounded-full border border-white/5">
+                        <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
+                            {dateString}
+                        </p>
+                    </div>
+
+                    {/* SYSTEM WARNING */}
+                    {isWarningVisible() && (
+                        <div className="bg-black/60 px-6 py-2 rounded-full border border-yellow-400 animate-pulse shadow-[0_0_15px_rgba(250,204,21,0.3)] flex items-center gap-3 backdrop-blur-md">
+                            <Megaphone size={16} className="text-yellow-400" />
+                            <p className="text-[1.6vh] text-yellow-100 font-bold tracking-wide uppercase">
+                                {sysConfig?.bannerMessage}
+                            </p>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* --- SHIFT INDICATOR (Fixed Height 5%) --- */}
-            <div className="h-[5%] flex items-center justify-center shrink-0 z-10">
+            {/* --- SHIFT INDICATOR (Fixed Height 5% + Margem Top para afastar da data) --- */}
+            <div className="h-[5%] flex items-center justify-center shrink-0 z-10 mt-6">
                  <div className="flex items-center gap-3 px-6 py-1 bg-black/40 rounded-full border border-white/10 shadow-lg backdrop-blur-md">
-                    <span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
+                    {/* Ícone reduzido para w-2 h-2 */}
+                    <span className={`h-2 w-2 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
                     <span className="text-[1.4vh] font-bold tracking-[0.15em] text-gray-200 uppercase">
                         {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Fora de Horário'}
                     </span>
                 </div>
             </div>
 
-            {/* --- CARDS GRID SECTION (Restante da altura - 55%) --- */}
-            <div className="flex-1 w-full p-4 pb-6 flex items-center justify-center h-[55%]">
+            {/* --- CARDS GRID SECTION (Flex-1 para ocupar o resto) --- */}
+            <div className="flex-1 w-full p-4 pb-6 flex items-center justify-center">
                 
                 {currentShift === 'off' ? (
                      <div className="flex flex-col items-center justify-center opacity-40 animate-pulse">
@@ -246,18 +310,20 @@ export const PublicSchedule: React.FC = () => {
                     >
                         {activeClasses.map(cls => {
                             const entry = getEntry(cls.id);
+                            const nextEntry = getNextEntry(cls.id);
+
                             return (
                                 <div key={cls.id} className="flex flex-col bg-[#121212] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl h-full relative group transform transition-transform duration-300 hover:scale-[1.01]">
                                     
                                     {/* Class Name Header */}
-                                    <div className="h-[18%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
+                                    <div className="h-[15%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
                                         <h2 className="text-[3vh] font-black text-gray-200 uppercase tracking-widest">
                                             {cls.name}
                                         </h2>
                                     </div>
                                     
                                     {/* Card Content */}
-                                    <div className="h-[82%] relative w-full flex flex-col">
+                                    <div className="h-[85%] relative w-full flex flex-col">
                                         {currentSlot?.type === 'break' ? (
                                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/10 z-20">
                                                 <Clock size={64} className="text-yellow-500 mb-6 drop-shadow-lg animate-bounce"/>
@@ -265,20 +331,44 @@ export const PublicSchedule: React.FC = () => {
                                              </div>
                                         ) : entry ? (
                                             <>
-                                                {/* Subject Section (Top) */}
-                                                <div className="flex-1 flex flex-col items-center justify-center border-b border-white/5 px-2 bg-gradient-to-b from-[#151515] to-[#121212] w-full text-center">
-                                                    <p className="text-[1.5vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Disciplina</p>
-                                                    <h3 className="text-[5vh] leading-[0.9] font-black text-white uppercase drop-shadow-md break-words w-full px-1 line-clamp-3">
+                                                {/* CURRENT CLASS (Main Body) - 65% Height */}
+                                                <div className="h-[65%] flex flex-col items-center justify-center border-b border-white/5 px-2 bg-gradient-to-b from-[#151515] to-[#121212] w-full text-center">
+                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Agora</p>
+                                                    
+                                                    {/* Disciplina */}
+                                                    <h3 className="text-[4.5vh] leading-[0.9] font-black text-white uppercase drop-shadow-md break-words w-full px-1 line-clamp-2 mb-2">
                                                         {entry.subject}
                                                     </h3>
-                                                </div>
-
-                                                {/* Professor Section (Bottom) */}
-                                                <div className="h-[30%] flex flex-col items-center justify-center px-2 bg-[#101010] w-full text-center">
-                                                    <p className="text-[1.5vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Professor</p>
-                                                    <p className="text-[2.8vh] font-bold text-red-500 uppercase tracking-wide truncate w-full px-1">
+                                                    
+                                                    {/* Professor Atual (Agora em baixo da disciplina) */}
+                                                    <p className="text-[2vh] font-bold text-gray-400 uppercase tracking-wide truncate w-full px-1">
                                                         {entry.professor}
                                                     </p>
+                                                </div>
+
+                                                {/* NEXT CLASS (Footer) - 35% Height */}
+                                                <div className="h-[35%] flex flex-col items-center justify-center px-2 bg-[#0a0a0a] w-full text-center relative overflow-hidden">
+                                                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-gray-800 to-transparent"></div>
+                                                    
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-[1.2vh] font-bold text-red-500 uppercase tracking-widest">A Seguir</span>
+                                                        <ArrowRight size="1.2vh" className="text-red-500"/>
+                                                    </div>
+
+                                                    {nextEntry ? (
+                                                        <div className="flex flex-col items-center w-full">
+                                                            <p className="text-[1.8vh] font-bold text-gray-200 uppercase truncate w-full px-1">
+                                                                {nextEntry.subject}
+                                                            </p>
+                                                            <p className="text-[1.4vh] font-medium text-gray-500 uppercase truncate w-full px-1">
+                                                                {nextEntry.professor}
+                                                            </p>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[1.5vh] font-bold text-gray-600 uppercase tracking-widest">
+                                                            Fim das Aulas
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </>
                                         ) : (

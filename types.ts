@@ -76,6 +76,10 @@ export interface SystemConfig {
   bannerMessage: string;
   bannerType: 'info' | 'warning' | 'error' | 'success';
   isBannerActive: boolean;
+  // TV Control
+  showOnTV?: boolean;
+  tvStart?: string; // ISO Date String
+  tvEnd?: string;   // ISO Date String
 }
 
 // --- SCHEDULE TYPES ---
