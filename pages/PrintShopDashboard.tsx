@@ -52,7 +52,8 @@ import {
   CalendarClock,
   RefreshCw,
   UploadCloud,
-  MonitorPlay
+  MonitorPlay,
+  FileDown
 } from 'lucide-react';
 
 type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'subjects' | 'answer_keys' | 'statistics' | 'schedule';
@@ -350,6 +351,109 @@ export const PrintShopDashboard: React.FC = () => {
       return entry ? entry[field] : '';
   };
 
+  const handleDownloadSchedulePDF = () => {
+      const dayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+      const dayLabel = dayNames[selectedDay];
+
+      const printWindow = window.open('', '', 'width=900,height=800');
+      if (!printWindow) return;
+
+      const html = `
+        <html>
+        <head>
+          <title>Quadro de Horários - ${dayLabel}</title>
+          <style>
+            body { font-family: 'Arial', sans-serif; padding: 20px; }
+            h1 { text-align: center; margin-bottom: 5px; color: #333; }
+            h2 { text-align: center; margin-bottom: 20px; color: #666; font-size: 14px; text-transform: uppercase; }
+            .turn-title { font-size: 16px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #b91c1c; border-bottom: 2px solid #b91c1c; padding-bottom: 5px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+            th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+            th { background-color: #f3f4f6; font-weight: bold; }
+            .break { background-color: #fef3c7; font-weight: bold; color: #92400e; }
+            .subject { font-weight: bold; font-size: 12px; display: block; }
+            .prof { font-size: 10px; color: #555; display: block; margin-top: 2px; }
+            .footer { text-align: center; font-size: 10px; color: #999; margin-top: 40px; }
+            @media print {
+                body { -webkit-print-color-adjust: exact; }
+                .break { background-color: #fef3c7 !important; }
+                th { background-color: #f3f4f6 !important; }
+            }
+          </style>
+        </head>
+        <body>
+            <h1>Quadro de Horários</h1>
+            <h2>${dayLabel}</h2>
+
+            <div class="turn-title">TURNO MATUTINO</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Horário</th>
+                        ${MORNING_CLASSES_LIST.map(c => `<th>${c.name}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${MORNING_SLOTS.map(slot => `
+                        <tr class="${slot.type === 'break' ? 'break' : ''}">
+                            <td>${slot.start} - ${slot.end}</td>
+                            ${slot.type === 'break' 
+                                ? `<td colspan="${MORNING_CLASSES_LIST.length}">INTERVALO</td>`
+                                : MORNING_CLASSES_LIST.map(cls => {
+                                    const entry = scheduleData.find(s => s.classId === cls.id && s.dayOfWeek === selectedDay && s.slotId === slot.id);
+                                    return `
+                                        <td>
+                                            <span class="subject">${entry?.subject || '-'}</span>
+                                            <span class="prof">${entry?.professor || ''}</span>
+                                        </td>
+                                    `;
+                                }).join('')
+                            }
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+
+            <div class="turn-title">TURNO VESPERTINO</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Horário</th>
+                        ${AFTERNOON_CLASSES_LIST.map(c => `<th>${c.name}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${AFTERNOON_SLOTS.map(slot => `
+                        <tr class="${slot.type === 'break' ? 'break' : ''}">
+                            <td>${slot.start} - ${slot.end}</td>
+                             ${slot.type === 'break' 
+                                ? `<td colspan="${AFTERNOON_CLASSES_LIST.length}">INTERVALO</td>`
+                                : AFTERNOON_CLASSES_LIST.map(cls => {
+                                    const entry = scheduleData.find(s => s.classId === cls.id && s.dayOfWeek === selectedDay && s.slotId === slot.id);
+                                    return `
+                                        <td>
+                                            <span class="subject">${entry?.subject || '-'}</span>
+                                            <span class="prof">${entry?.professor || ''}</span>
+                                        </td>
+                                    `;
+                                }).join('')
+                            }
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+
+            <div class="footer">Gerado pelo sistema SchoolPrint Manager em ${new Date().toLocaleString()}</div>
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.write(html);
+      printWindow.document.close();
+  };
 
   // Answer Key / Exam Flow Handlers
   const startCreateExam = () => {
@@ -740,10 +844,19 @@ export const PrintShopDashboard: React.FC = () => {
                         
                         <div className="h-8 w-px bg-white/20 mx-2"></div>
                         
+                        <Button
+                            onClick={handleDownloadSchedulePDF}
+                            variant="secondary"
+                            className="bg-white text-gray-900 hover:bg-gray-200 border border-gray-200 text-xs font-bold"
+                        >
+                            <FileDown size={16} className="mr-2"/>
+                            PDF
+                        </Button>
+
                         <a 
                             href="/#horarios" 
                             target="_blank" 
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-white text-gray-900 hover:bg-gray-200 transition-all border border-gray-200"
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-white text-gray-900 hover:bg-gray-200 transition-all border border-gray-200 ml-2"
                         >
                             <Eye size={16}/> Abrir TV
                         </a>
