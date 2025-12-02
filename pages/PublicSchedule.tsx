@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getFullSchedule } from '../services/firebaseService';
+import { listenToSchedule } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot } from '../types';
 import { Clock, Calendar, X, Maximize2 } from 'lucide-react';
 
@@ -49,24 +49,23 @@ export const PublicSchedule: React.FC = () => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastSlotId = useRef<string>('');
 
+    // Listener de Tempo Real para o Banco de Dados
+    useEffect(() => {
+        const unsubscribe = listenToSchedule((data) => {
+            setSchedule(data || []);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // Relógio e Verificação de Status Local
     useEffect(() => {
         const timer = setInterval(() => {
             const now = new Date();
             setCurrentTime(now);
             checkCurrentStatus(now);
         }, 1000);
-        loadSchedule();
         return () => clearInterval(timer);
     }, []);
-
-    const loadSchedule = async () => {
-        try {
-            const data = await getFullSchedule();
-            setSchedule(data || []);
-        } catch (e) {
-            console.error(e);
-        }
-    };
 
     const checkCurrentStatus = (now: Date) => {
         const day = now.getDay();

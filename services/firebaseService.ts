@@ -249,6 +249,15 @@ export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
     }
 };
 
+// Nova função para ouvir em tempo real
+export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) => {
+    const q = query(collection(db, SCHEDULE_COLLECTION));
+    return onSnapshot(q, (snapshot) => {
+        const entries = snapshot.docs.map(doc => doc.data() as ScheduleEntry);
+        callback(entries);
+    });
+};
+
 export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
     try {
         // ID composto para facilitar a sobreposição: "turma_dia_slot"
