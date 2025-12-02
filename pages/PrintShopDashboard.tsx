@@ -679,6 +679,13 @@ export const PrintShopDashboard: React.FC = () => {
                                 {day.label}
                             </button>
                         ))}
+                        <a 
+                            href="/#horarios" 
+                            target="_blank" 
+                            className="ml-4 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-white text-gray-900 hover:bg-gray-200 transition-all border border-gray-200"
+                        >
+                            <Eye size={16}/> Abrir TV
+                        </a>
                     </div>
 
                     <div className="flex-1 overflow-auto bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col">
@@ -782,7 +789,104 @@ export const PrintShopDashboard: React.FC = () => {
             )}
             
             {/* 2. PRINTING QUEUE */}
-            {activeTab === 'printing' && (<div className="max-w-6xl mx-auto space-y-6"><div className="flex items-center justify-between"><h2 className="text-2xl font-bold text-white flex items-center gap-2"><Printer className="text-brand-500" /> Central de Impressão</h2><div className="flex bg-gray-900/50 p-1 rounded-lg backdrop-blur-sm border border-white/10"><button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Todas</button><button onClick={() => setFilter('pending')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'pending' ? 'bg-white text-brand-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Fila</button><button onClick={() => setFilter('completed')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'completed' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Concluídas</button></div></div><div className="space-y-4">{isLoading ? (<div className="bg-white/5 border border-white/10 p-12 text-center rounded-xl text-gray-400"><p>Carregando dados da fila...</p></div>) : filteredExams.length === 0 ? (<div className="bg-white/5 border border-white/10 p-12 text-center rounded-xl text-gray-400"><p>Nenhuma prova encontrada com este filtro.</p></div>) : (filteredExams.map((exam) => (<div key={exam.id} className={`bg-white rounded-xl shadow-lg border-l-4 p-6 transition-all hover:scale-[1.01] ${exam.status === ExamStatus.COMPLETED ? 'border-l-green-500 opacity-90' : 'border-l-brand-500'}`}><div className="flex flex-col md:flex-row justify-between gap-6"><div className="flex-1"><div className="flex items-center gap-3 mb-3"><span className={`text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wide border ${exam.status === ExamStatus.PENDING ? 'bg-red-50 border-red-200 text-red-700' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-green-50 border-green-200 text-green-700'}`}>{exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Em andamento' : 'Finalizado'}</span><span className="text-gray-400 text-sm flex items-center"><Clock size={14} className="mr-1"/> Enviado em {new Date(exam.createdAt).toLocaleDateString()}</span></div><h3 className="text-xl font-bold text-gray-900 mb-1">{exam.title}</h3><p className="text-gray-600 font-medium mb-4">{exam.teacherName} — {exam.subject}</p><div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-500 bg-gray-50 p-4 rounded-lg border border-gray-100"><div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Turma</span>{exam.gradeLevel}</div><div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Qtd.</span>{exam.quantity > 0 ? <><span className="font-bold text-gray-900">{exam.quantity}</span> cópias</> : <span className="text-gray-800 font-medium text-xs bg-gray-200 px-2 py-1 rounded">Ver Arquivo</span>}</div><div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Prazo</span><span className="text-brand-600 font-bold">{new Date(exam.dueDate).toLocaleDateString()}</span></div><div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Arquivo</span><span className="truncate block max-w-[120px]" title={exam.fileName}>{exam.fileName}</span></div></div></div><div className="flex flex-col gap-3 justify-center border-l border-gray-100 pl-0 md:pl-6 min-w-[200px]"><Button variant="outline" className="w-full justify-start h-10 border-gray-300 text-gray-700 hover:bg-gray-50" onClick={() => handleViewFile(exam)}>{exam.fileName.toLowerCase().endsWith('.pdf') ? <><Eye size={18} className="mr-2 text-gray-500"/> Visualizar PDF</> : <><Download size={18} className="mr-2 text-gray-500"/> Baixar Arquivo</>}</Button>{exam.status === ExamStatus.PENDING && <Button onClick={() => handleStartPrint(exam)} className="w-full justify-start h-10 bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm"><Printer size={18} className="mr-2"/> Iniciar Impressão</Button>}{exam.status === ExamStatus.IN_PROGRESS && <Button onClick={() => handleStatusChange(exam.id, ExamStatus.COMPLETED)} className="w-full justify-start h-10 bg-green-600 hover:bg-green-700 border-none shadow-sm"><CheckCircle size={18} className="mr-2"/> Marcar Pronto</Button>}{exam.status === ExamStatus.COMPLETED && <Button onClick={() => handleStatusChange(exam.id, ExamStatus.IN_PROGRESS)} variant="outline" className="w-full justify-center text-xs opacity-75 hover:opacity-100">Reabrir Pedido</Button>}</div></div></div>))}</div></div>)}
+            {activeTab === 'printing' && (
+                <div className="max-w-6xl mx-auto space-y-6">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                            <Printer className="text-brand-500" /> Central de Impressão
+                        </h2>
+                        <div className="flex bg-gray-900/50 p-1 rounded-lg backdrop-blur-sm border border-white/10">
+                            <button 
+                                onClick={() => setFilter('all')} 
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
+                            >
+                                Todas
+                            </button>
+                            <button 
+                                onClick={() => setFilter('pending')} 
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'pending' ? 'bg-white text-brand-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
+                            >
+                                Fila
+                            </button>
+                            <button 
+                                onClick={() => setFilter('completed')} 
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'completed' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
+                            >
+                                Concluídas
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        {isLoading ? (
+                            <div className="bg-white/5 border border-white/10 p-12 text-center rounded-xl text-gray-400">
+                                <p>Carregando dados da fila...</p>
+                            </div>
+                        ) : filteredExams.length === 0 ? (
+                            <div className="bg-white/5 border border-white/10 p-12 text-center rounded-xl text-gray-400">
+                                <p>Nenhuma prova encontrada com este filtro.</p>
+                            </div>
+                        ) : (
+                            filteredExams.map((exam) => (
+                                <div key={exam.id} className={`bg-white rounded-xl shadow-lg border-l-4 p-6 transition-all hover:scale-[1.01] ${exam.status === ExamStatus.COMPLETED ? 'border-l-green-500 opacity-90' : 'border-l-brand-500'}`}>
+                                    <div className="flex flex-col md:flex-row justify-between gap-6">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wide border ${exam.status === ExamStatus.PENDING ? 'bg-red-50 border-red-200 text-red-700' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
+                                                    {exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Em andamento' : 'Finalizado'}
+                                                </span>
+                                                <span className="text-gray-400 text-sm flex items-center">
+                                                    <Clock size={14} className="mr-1"/> Enviado em {new Date(exam.createdAt).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <h3 className="text-xl font-bold text-gray-900 mb-1">{exam.title}</h3>
+                                            <p className="text-gray-600 font-medium mb-4">{exam.teacherName} — {exam.subject}</p>
+                                            
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-500 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                                <div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Turma</span>{exam.gradeLevel}</div>
+                                                <div>
+                                                    <span className="block text-xs uppercase font-bold text-gray-400 mb-1">Qtd.</span>
+                                                    {exam.quantity > 0 ? (
+                                                        <><span className="font-bold text-gray-900">{exam.quantity}</span> cópias</>
+                                                    ) : (
+                                                        <span className="text-gray-800 font-medium text-xs bg-gray-200 px-2 py-1 rounded">Ver Arquivo</span>
+                                                    )}
+                                                </div>
+                                                <div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Prazo</span><span className="text-brand-600 font-bold">{new Date(exam.dueDate).toLocaleDateString()}</span></div>
+                                                <div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Arquivo</span><span className="truncate block max-w-[120px]" title={exam.fileName}>{exam.fileName}</span></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex flex-col gap-3 justify-center border-l border-gray-100 pl-0 md:pl-6 min-w-[200px]">
+                                            <Button variant="outline" className="w-full justify-start h-10 border-gray-300 text-gray-700 hover:bg-gray-50" onClick={() => handleViewFile(exam)}>
+                                                {exam.fileName.toLowerCase().endsWith('.pdf') ? <><Eye size={18} className="mr-2 text-gray-500"/> Visualizar PDF</> : <><Download size={18} className="mr-2 text-gray-500"/> Baixar Arquivo</>}
+                                            </Button>
+                                            
+                                            {exam.status === ExamStatus.PENDING && (
+                                                <Button onClick={() => handleStartPrint(exam)} className="w-full justify-start h-10 bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm">
+                                                    <Printer size={18} className="mr-2"/> Iniciar Impressão
+                                                </Button>
+                                            )}
+                                            
+                                            {exam.status === ExamStatus.IN_PROGRESS && (
+                                                <Button onClick={() => handleStatusChange(exam.id, ExamStatus.COMPLETED)} className="w-full justify-start h-10 bg-green-600 hover:bg-green-700 border-none shadow-sm">
+                                                    <CheckCircle size={18} className="mr-2"/> Marcar Pronto
+                                                </Button>
+                                            )}
+                                            
+                                            {exam.status === ExamStatus.COMPLETED && (
+                                                <Button onClick={() => handleStatusChange(exam.id, ExamStatus.IN_PROGRESS)} variant="outline" className="w-full justify-center text-xs opacity-75 hover:opacity-100">
+                                                    Reabrir Pedido
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Other tabs... */}
             {activeTab === 'teachers' && (<div className="max-w-4xl mx-auto"><h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><UserPlus className="text-brand-500"/> Gestão de Professores</h2><div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100"><form onSubmit={handleAddTeacher} className="space-y-5"><div><label className="block text-sm font-medium text-gray-700">Nome Completo</label><input required type="text" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherName} onChange={e => setNewTeacherName(e.target.value)} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-sm font-medium text-gray-700">Login (Email)</label><input required type="email" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherEmail} onChange={e => setNewTeacherEmail(e.target.value)} /></div><div><label className="block text-sm font-medium text-gray-700">Senha</label><input required type="password" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherPassword} onChange={e => setNewTeacherPassword(e.target.value)} /></div></div><div><label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><Briefcase size={14} /> Disciplina Principal</label><input required type="text" className="block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherSubject} onChange={e => setNewTeacherSubject(e.target.value)} /></div><div className="bg-gray-50 p-5 rounded-xl border border-gray-200"><label className="block text-sm font-bold text-gray-700 mb-3">Vincular Turmas</label><div className="flex gap-6 mb-4 pb-4 border-b border-gray-200"><label className="flex items-center space-x-2"><input type="radio" checked={newTeacherShift === 'morning'} onChange={() => {setNewTeacherShift('morning'); setSelectedClasses([]);}} className="text-brand-600 focus:ring-brand-500" /><span className="text-sm font-medium text-gray-700">Manhã (EFAI)</span></label><label className="flex items-center space-x-2"><input type="radio" checked={newTeacherShift === 'afternoon'} onChange={() => {setNewTeacherShift('afternoon'); setSelectedClasses([]);}} className="text-brand-600 focus:ring-brand-500" /><span className="text-sm font-medium text-gray-700">Tarde (Ensino Médio)</span></label></div><div className="grid grid-cols-2 gap-3">{(newTeacherShift === 'morning' ? morningClasses : afternoonClasses).map(cls => (<label key={cls} className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-white rounded-lg border border-transparent hover:border-gray-200 transition-colors"><input type="checkbox" checked={selectedClasses.includes(cls)} onChange={() => toggleClass(cls)} className="rounded text-brand-600 focus:ring-brand-500 w-4 h-4" /><span className="text-sm text-gray-600">{cls}</span></label>))}</div></div><Button type="submit" isLoading={isSavingTeacher} className="w-full py-3 text-lg">Confirmar Cadastro</Button></form></div></div>)}
