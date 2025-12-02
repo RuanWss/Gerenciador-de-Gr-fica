@@ -266,19 +266,19 @@ export const PublicSchedule: React.FC = () => {
                     className="h-[6vh] w-auto object-contain mb-2 drop-shadow-lg"
                 />
 
-                {/* Middle: Clock + Warning (Side by Side) */}
-                <div className="flex-1 flex items-center justify-center gap-16 w-full px-8">
+                {/* Middle: Clock Area */}
+                <div className="flex-1 w-full relative flex items-center justify-center">
                     
-                    {/* Clock */}
-                    <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums">
+                    {/* Clock (Centered) */}
+                    <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums text-center">
                         {timeString}
                     </h1>
 
-                    {/* Warning Box (Square, Right of Clock) */}
+                    {/* Warning Box (Absolute Right) */}
                     {isWarningVisible() && (
-                        <div className="h-[18vh] w-[18vh] shrink-0 bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-2xl flex flex-col items-center justify-center p-2 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse">
-                            <Megaphone size={'4vh'} className="text-yellow-400 mb-2" />
-                            <p className="text-[1.8vh] font-bold text-yellow-100 uppercase text-center leading-tight line-clamp-3 overflow-hidden">
+                        <div className="absolute right-12 top-1/2 -translate-y-1/2 max-w-[25vw] bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-2xl flex flex-col items-center justify-center p-4 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse z-20">
+                            <Megaphone size={40} className="text-yellow-400 mb-2 shrink-0" />
+                            <p className="text-[2vh] font-bold text-yellow-100 uppercase text-center leading-tight break-words w-full">
                                 {sysConfig?.bannerMessage}
                             </p>
                         </div>
