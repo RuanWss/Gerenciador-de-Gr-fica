@@ -195,18 +195,18 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             )}
 
-            {/* --- HEADER SECTION (Fixed Height 25%) --- */}
-            <div className="h-[25%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-4">
+            {/* --- HEADER SECTION (Aumentado para 35% para acomodar relógio maior) --- */}
+            <div className="h-[35%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-4">
                 
-                {/* Logo Top Centered */}
+                {/* Logo Top Centered (Com margem para descer) */}
                 <img 
                     src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
                     alt="Logo" 
-                    className="h-[6vh] w-auto object-contain mb-2 drop-shadow-lg"
+                    className="h-[8vh] w-auto object-contain mb-2 mt-4 drop-shadow-lg"
                 />
 
-                {/* Clock Centered */}
-                <h1 className="text-[12vh] leading-none font-black tracking-tighter text-white drop-shadow-2xl font-mono tabular-nums">
+                {/* Clock Centered (AUMENTADO) */}
+                <h1 className="text-[18vh] leading-none font-black tracking-tighter text-white drop-shadow-2xl font-mono tabular-nums">
                     {timeString}
                 </h1>
                 
@@ -228,8 +228,8 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </div>
 
-            {/* --- CARDS GRID SECTION (Remaining Height) --- */}
-            <div className="flex-1 w-full p-8 pb-10 flex items-center justify-center">
+            {/* --- CARDS GRID SECTION (Restante da altura - Menor agora) --- */}
+            <div className="flex-1 w-full p-6 pb-8 flex items-center justify-center">
                 
                 {currentShift === 'off' ? (
                      <div className="flex flex-col items-center justify-center opacity-40 animate-pulse">
@@ -249,14 +249,14 @@ export const PublicSchedule: React.FC = () => {
                                 <div key={cls.id} className="flex flex-col bg-[#121212] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl h-full relative group transform transition-transform duration-300 hover:scale-[1.01]">
                                     
                                     {/* Class Name Header */}
-                                    <div className="h-[15%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
-                                        <h2 className="text-[2.5vh] font-black text-gray-200 uppercase tracking-widest">
+                                    <div className="h-[18%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
+                                        <h2 className="text-[2.2vh] font-black text-gray-200 uppercase tracking-widest">
                                             {cls.name}
                                         </h2>
                                     </div>
                                     
                                     {/* Card Content */}
-                                    <div className="h-[85%] relative w-full flex flex-col">
+                                    <div className="h-[82%] relative w-full flex flex-col">
                                         {currentSlot?.type === 'break' ? (
                                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/10 z-20">
                                                 <Clock size={64} className="text-yellow-500 mb-6 drop-shadow-lg animate-bounce"/>
@@ -265,17 +265,17 @@ export const PublicSchedule: React.FC = () => {
                                         ) : entry ? (
                                             <>
                                                 {/* Subject Section (Top) */}
-                                                <div className="flex-1 flex flex-col items-center justify-center border-b border-white/5 px-4 bg-gradient-to-b from-[#151515] to-[#121212] w-full text-center">
-                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-2">Disciplina</p>
-                                                    <h3 className="text-[3.5vh] leading-tight font-black text-white uppercase drop-shadow-md break-words w-full px-2">
+                                                <div className="flex-1 flex flex-col items-center justify-center border-b border-white/5 px-2 bg-gradient-to-b from-[#151515] to-[#121212] w-full text-center">
+                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Disciplina</p>
+                                                    <h3 className="text-[3vh] leading-tight font-black text-white uppercase drop-shadow-md break-words w-full px-1 line-clamp-3">
                                                         {entry.subject}
                                                     </h3>
                                                 </div>
 
                                                 {/* Professor Section (Bottom) */}
-                                                <div className="h-[35%] flex flex-col items-center justify-center px-4 bg-[#101010] w-full text-center">
+                                                <div className="h-[30%] flex flex-col items-center justify-center px-2 bg-[#101010] w-full text-center">
                                                     <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Professor</p>
-                                                    <p className="text-[2.2vh] font-bold text-red-500 uppercase tracking-wide truncate w-full px-2">
+                                                    <p className="text-[2vh] font-bold text-red-500 uppercase tracking-wide truncate w-full px-1">
                                                         {entry.professor}
                                                     </p>
                                                 </div>
