@@ -256,38 +256,42 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             )}
 
-            {/* --- HEADER SECTION (Aumentado para 40% para acomodar relógio maior) --- */}
-            <div className="h-[40%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-2">
+            {/* --- HEADER SECTION (40%) --- */}
+            <div className="h-[40%] w-full flex flex-col items-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-4">
                 
-                {/* Logo Top Centered (Com margem para descer) */}
+                {/* Logo (Top) */}
                 <img 
                     src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
                     alt="Logo" 
-                    className="h-[6vh] w-auto object-contain mb-2 mt-8 drop-shadow-lg"
+                    className="h-[6vh] w-auto object-contain mb-2 drop-shadow-lg"
                 />
 
-                {/* Clock Centered (AUMENTADO e com Fonte Montserrat) */}
-                <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums">
-                    {timeString}
-                </h1>
-                
-                {/* Date & Warning Area */}
-                <div className="mt-2 flex items-center justify-center gap-4 relative z-50">
-                    <div className="bg-white/5 px-6 py-2 rounded-full border border-white/5">
-                        <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
-                            {dateString}
-                        </p>
-                    </div>
+                {/* Middle: Clock + Warning (Side by Side) */}
+                <div className="flex-1 flex items-center justify-center gap-16 w-full px-8">
+                    
+                    {/* Clock */}
+                    <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums">
+                        {timeString}
+                    </h1>
 
-                    {/* SYSTEM WARNING */}
+                    {/* Warning Box (Square, Right of Clock) */}
                     {isWarningVisible() && (
-                        <div className="bg-black/60 px-6 py-2 rounded-full border-2 border-yellow-400 animate-pulse shadow-[0_0_20px_rgba(250,204,21,0.5)] flex items-center gap-3 backdrop-blur-md">
-                            <Megaphone size={18} className="text-yellow-400 animate-bounce" />
-                            <p className="text-[1.8vh] text-yellow-100 font-bold tracking-wide uppercase">
+                        <div className="h-[18vh] w-[18vh] shrink-0 bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-2xl flex flex-col items-center justify-center p-2 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse">
+                            <Megaphone size={'4vh'} className="text-yellow-400 mb-2" />
+                            <p className="text-[1.8vh] font-bold text-yellow-100 uppercase text-center leading-tight line-clamp-3 overflow-hidden">
                                 {sysConfig?.bannerMessage}
                             </p>
                         </div>
                     )}
+                </div>
+                
+                {/* Bottom: Date */}
+                <div className="mt-auto mb-2 relative z-10">
+                    <div className="bg-white/5 px-8 py-2 rounded-full border border-white/5">
+                        <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
+                            {dateString}
+                        </p>
+                    </div>
                 </div>
             </div>
 
