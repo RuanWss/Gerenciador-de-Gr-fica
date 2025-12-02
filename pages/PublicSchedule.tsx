@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot } from '../types';
-import { Clock, Calendar, X, Maximize2, AlertCircle } from 'lucide-react';
+import { Clock, Calendar, X, Maximize2, AlertCircle, Volume2 } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -46,6 +46,9 @@ export const PublicSchedule: React.FC = () => {
     const [currentSlot, setCurrentSlot] = useState<TimeSlot | null>(null);
     const [showModal, setShowModal] = useState(false);
     
+    // Estado para controlar se o áudio foi ativado pelo usuário
+    const [audioEnabled, setAudioEnabled] = useState(false);
+    
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastSlotId = useRef<string>('');
 
@@ -83,6 +86,7 @@ export const PublicSchedule: React.FC = () => {
         // Shift Logic
         let shift: 'morning' | 'afternoon' | 'off' = 'off';
 
+        // Faixas de horário ampliadas para cobrir todo o período
         if (timeVal >= 420 && timeVal < 750) { // 07:00 - 12:30
             shift = 'morning';
         } else if (timeVal >= 750 && timeVal < 1260) { // 12:30 - 21:00
@@ -103,30 +107,55 @@ export const PublicSchedule: React.FC = () => {
             });
 
             if (foundSlot) {
-                setCurrentSlot(foundSlot);
+                // Se encontrou um slot novo (diferente do anterior)
                 if (foundSlot.id !== lastSlotId.current) {
+                    console.log(`Troca de horário detectada: ${lastSlotId.current} -> ${foundSlot.id}`);
                     lastSlotId.current = foundSlot.id;
+                    setCurrentSlot(foundSlot);
+                    // Toca o alerta apenas se mudou o slot
                     playAlert();
                 }
             } else {
-                setCurrentSlot(null);
-                lastSlotId.current = ''; 
+                // Se não está em nenhum slot (ex: antes da primeira aula ou depois da última)
+                if (lastSlotId.current !== '') {
+                    lastSlotId.current = '';
+                    setCurrentSlot(null);
+                }
             }
         } else {
             setCurrentSlot(null);
         }
     };
 
+    const enableAudio = () => {
+        if (audioRef.current) {
+            // Tenta tocar e pausar imediatamente para desbloquear o áudio no navegador
+            audioRef.current.play().then(() => {
+                audioRef.current?.pause();
+                audioRef.current!.currentTime = 0;
+                setAudioEnabled(true);
+            }).catch(e => console.error("Erro ao desbloquear áudio:", e));
+        }
+    };
+
     const playAlert = () => {
         if (audioRef.current) {
-            audioRef.current.volume = 0.5;
-            audioRef.current.play().catch(() => {});
+            audioRef.current.volume = 1.0; // Volume máximo
+            const playPromise = audioRef.current.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.warn("Reprodução automática bloqueada pelo navegador. O usuário precisa interagir com a página primeiro.", error);
+                });
+            }
+
+            // Toca por 4 segundos conforme solicitado anteriormente, ou deixa o som acabar se for curto
             setTimeout(() => {
                 if (audioRef.current) {
                     audioRef.current.pause();
                     audioRef.current.currentTime = 0;
                 }
-            }, 3000);
+            }, 4000);
         }
     };
 
@@ -151,6 +180,20 @@ export const PublicSchedule: React.FC = () => {
     return (
         <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
+
+            {/* OVERLAY DE ATIVAÇÃO DE ÁUDIO */}
+            {!audioEnabled && (
+                <div 
+                    onClick={enableAudio}
+                    className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center cursor-pointer hover:bg-black/70 transition-colors"
+                >
+                    <div className="bg-red-600 p-8 rounded-full mb-6 animate-pulse shadow-[0_0_50px_rgba(220,38,38,0.5)]">
+                        <Volume2 size={64} className="text-white" />
+                    </div>
+                    <h1 className="text-4xl font-black text-white uppercase tracking-widest mb-4 text-center">Clique na tela para iniciar</h1>
+                    <p className="text-gray-400 text-xl font-medium">Necessário para ativar os alertas sonoros da TV</p>
+                </div>
+            )}
 
             {/* --- HEADER SECTION (Fixed Height 25%) --- */}
             <div className="h-[25%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-4">
