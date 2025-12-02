@@ -195,18 +195,18 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             )}
 
-            {/* --- HEADER SECTION (Aumentado para 35% para acomodar relógio maior) --- */}
-            <div className="h-[35%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-4">
+            {/* --- HEADER SECTION (Aumentado para 40% para acomodar relógio maior) --- */}
+            <div className="h-[40%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-2">
                 
                 {/* Logo Top Centered (Com margem para descer) */}
                 <img 
                     src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
                     alt="Logo" 
-                    className="h-[8vh] w-auto object-contain mb-2 mt-4 drop-shadow-lg"
+                    className="h-[6vh] w-auto object-contain mb-2 mt-8 drop-shadow-lg"
                 />
 
-                {/* Clock Centered (AUMENTADO) */}
-                <h1 className="text-[18vh] leading-none font-black tracking-tighter text-white drop-shadow-2xl font-mono tabular-nums">
+                {/* Clock Centered (AUMENTADO e com Fonte Montserrat) */}
+                <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums">
                     {timeString}
                 </h1>
                 
@@ -228,8 +228,8 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </div>
 
-            {/* --- CARDS GRID SECTION (Restante da altura - Menor agora) --- */}
-            <div className="flex-1 w-full p-6 pb-8 flex items-center justify-center">
+            {/* --- CARDS GRID SECTION (Restante da altura - 55%) --- */}
+            <div className="flex-1 w-full p-4 pb-6 flex items-center justify-center h-[55%]">
                 
                 {currentShift === 'off' ? (
                      <div className="flex flex-col items-center justify-center opacity-40 animate-pulse">
@@ -238,7 +238,7 @@ export const PublicSchedule: React.FC = () => {
                      </div>
                 ) : (
                     <div 
-                        className="grid gap-6 w-full h-full max-w-[95vw] mx-auto" 
+                        className="grid gap-4 w-full h-full max-w-[98vw] mx-auto" 
                         style={{ 
                             gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` 
                         }}
