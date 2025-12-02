@@ -80,14 +80,12 @@ export const PublicSchedule: React.FC = () => {
             return;
         }
 
-        // Shift Logic:
-        // Morning: 07:00 (420) to 12:30 (750)
-        // Afternoon: 12:30 (750) to 21:00 (1260)
+        // Shift Logic
         let shift: 'morning' | 'afternoon' | 'off' = 'off';
 
-        if (timeVal >= 420 && timeVal < 750) {
+        if (timeVal >= 420 && timeVal < 750) { // 07:00 - 12:30
             shift = 'morning';
-        } else if (timeVal >= 750 && timeVal < 1260) {
+        } else if (timeVal >= 750 && timeVal < 1260) { // 12:30 - 21:00
             shift = 'afternoon';
         }
 
@@ -106,7 +104,6 @@ export const PublicSchedule: React.FC = () => {
 
             if (foundSlot) {
                 setCurrentSlot(foundSlot);
-                // Trigger Alarm on Change
                 if (foundSlot.id !== lastSlotId.current) {
                     lastSlotId.current = foundSlot.id;
                     playAlert();
@@ -148,98 +145,99 @@ export const PublicSchedule: React.FC = () => {
 
     const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
 
-    // Definição de colunas baseado no turno e responsividade
-    const gridCols = currentShift === 'morning' 
-        ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' 
-        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+    // Definição rígida de grid para alinhamento
+    const gridCols = currentShift === 'morning' ? 4 : 3;
 
     return (
-        <div className="h-screen w-screen bg-gradient-to-b from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col items-center relative font-sans">
+        <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
 
-            {/* --- HEADER SECTION (30% Height max) --- */}
-            <div className="w-full flex flex-col items-center justify-center py-4 z-10 shrink-0 h-[30vh] min-h-[200px]">
-                {/* 1. Logo */}
-                <img 
-                    src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
-                    alt="Logo SchoolPrint" 
-                    className="h-[8vh] object-contain mb-2 drop-shadow-xl"
-                />
-
-                {/* 2. Clock */}
-                <h1 className="text-[12vh] leading-none font-bold tracking-tighter text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.15)] font-mono">
-                    {timeString}
-                </h1>
-
-                {/* 3. Date */}
-                <div className="bg-white/10 px-6 py-1 rounded-full backdrop-blur-sm border border-white/5 mt-2">
-                     <p className="text-[1.8vh] text-gray-200 font-bold tracking-widest uppercase text-center whitespace-nowrap">
-                        {dateString}
-                    </p>
+            {/* --- HEADER SECTION (Fixed Height 20%) --- */}
+            <div className="h-[20%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10">
+                <div className="flex flex-col items-center w-full">
+                    <div className="flex items-center gap-8 justify-center w-full">
+                         <img 
+                            src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
+                            alt="Logo" 
+                            className="h-[10vh] w-auto object-contain drop-shadow-xl"
+                        />
+                        <h1 className="text-[11vh] leading-none font-bold tracking-tighter text-white drop-shadow-2xl font-mono tabular-nums">
+                            {timeString}
+                        </h1>
+                    </div>
+                    <div className="mt-2 bg-white/5 px-8 py-1 rounded-full border border-white/5">
+                        <p className="text-[2vh] text-gray-300 font-bold tracking-[0.3em] uppercase">
+                            {dateString}
+                        </p>
+                    </div>
                 </div>
             </div>
 
-            {/* --- MAIN CONTENT SECTION (Fill remaining height) --- */}
-            <div className="flex-1 w-full max-w-[98%] mx-auto flex flex-col items-center pb-4 z-10 min-h-0">
-                
-                {/* Shift Indicator */}
-                <div className="mb-4 flex items-center gap-3 shrink-0">
-                    <span className={`h-3 w-3 rounded-full ${currentShift !== 'off' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-                    <span className="text-sm font-bold tracking-[0.2em] text-gray-400 uppercase">
+            {/* --- STATUS INDICATOR BAR (Fixed Height 6%) --- */}
+            <div className="h-[6%] flex items-center justify-center shrink-0 z-10 mt-2">
+                 <div className="flex items-center gap-3 px-6 py-1.5 bg-black/40 rounded-full border border-white/10 shadow-lg backdrop-blur-md">
+                    <span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
+                    <span className="text-[1.6vh] font-bold tracking-[0.15em] text-gray-200 uppercase">
                         {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Fora de Horário'}
                     </span>
                 </div>
+            </div>
 
+            {/* --- CARDS GRID SECTION (Remaining Height) --- */}
+            <div className="flex-1 w-full p-8 pb-10 flex items-center justify-center">
+                
                 {currentShift === 'off' ? (
-                     <div className="flex flex-col items-center justify-center h-full w-full opacity-50">
-                        <AlertCircle size={64} className="mb-4 text-gray-500"/>
-                        <p className="text-2xl font-bold text-gray-400 text-center">Escola Fechada / Intervalo entre Turnos</p>
+                     <div className="flex flex-col items-center justify-center opacity-40 animate-pulse">
+                        <AlertCircle size={100} className="mb-6 text-gray-600"/>
+                        <p className="text-4xl font-bold text-gray-500 tracking-widest uppercase">Sem Atividades</p>
                      </div>
                 ) : (
-                    <div className={`grid ${gridCols} gap-4 w-full h-full`}>
+                    <div 
+                        className="grid gap-6 w-full h-full" 
+                        style={{ 
+                            gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` 
+                        }}
+                    >
                         {activeClasses.map(cls => {
                             const entry = getEntry(cls.id);
                             return (
-                                <div key={cls.id} className="relative group bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl transition-all duration-500 hover:bg-white/10 h-full min-h-[140px]">
-                                    {/* Class Label Header */}
-                                    <div className="bg-[#ef4444] py-2 px-3 flex items-center justify-center shadow-lg shrink-0">
-                                        <h2 className="text-[2.5vh] font-black text-white uppercase tracking-wider truncate">
+                                <div key={cls.id} className="flex flex-col bg-[#121212] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl h-full relative group">
+                                    
+                                    {/* Card Header (Fixed Height 15%) */}
+                                    <div className="h-[15%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
+                                        <h2 className="text-[2.5vh] font-black text-gray-200 uppercase tracking-widest">
                                             {cls.name}
                                         </h2>
                                     </div>
                                     
-                                    {/* Info Body */}
-                                    <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative">
-                                        
+                                    {/* Card Body (Remaining 85%) */}
+                                    <div className="h-[85%] relative w-full">
                                         {currentSlot?.type === 'break' ? (
-                                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/20 backdrop-blur-sm animate-pulse">
-                                                <Clock size={40} className="text-yellow-400 mb-2"/>
-                                                <span className="text-2xl font-black text-yellow-100 uppercase tracking-widest">INTERVALO</span>
+                                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/10 z-20">
+                                                <Clock size={64} className="text-yellow-500 mb-6 drop-shadow-lg animate-bounce"/>
+                                                <span className="text-[4vh] font-black text-yellow-500 uppercase tracking-[0.2em]">INTERVALO</span>
                                              </div>
                                         ) : entry ? (
-                                            <>
-                                                <div className="mb-1 w-full">
-                                                    <p className="text-[1.2vh] font-bold text-gray-400 uppercase tracking-widest mb-1">Disciplina</p>
-                                                    <h3 className="text-[3vh] leading-tight font-black text-white line-clamp-2">
+                                            <div className="flex flex-col h-full">
+                                                {/* Subject Section - Fixed 60% Height */}
+                                                <div className="h-[60%] flex flex-col items-center justify-center border-b border-white/5 px-4 bg-gradient-to-b from-[#151515] to-[#121212]">
+                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-3">Disciplina</p>
+                                                    <h3 className="text-[3.2vh] leading-none font-black text-white text-center uppercase drop-shadow-md line-clamp-2">
                                                         {entry.subject}
                                                     </h3>
                                                 </div>
-                                                
-                                                <div className="w-12 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent my-2 shrink-0"></div>
 
-                                                <div className="w-full">
-                                                    <p className="text-[1.2vh] font-bold text-gray-400 uppercase tracking-widest mb-1">Professor(a)</p>
-                                                    <p className="text-[2.2vh] font-bold text-red-200 line-clamp-1">
+                                                {/* Professor Section - Fixed 40% Height */}
+                                                <div className="h-[40%] flex flex-col items-center justify-center px-4 bg-[#101010]">
+                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-2">Professor</p>
+                                                    <p className="text-[2.2vh] font-bold text-red-500 text-center uppercase tracking-wide truncate w-full">
                                                         {entry.professor}
                                                     </p>
                                                 </div>
-                                            </>
+                                            </div>
                                         ) : (
-                                            <div className="flex flex-col items-center opacity-30">
-                                                <div className="w-12 h-12 rounded-full border-2 border-gray-500 flex items-center justify-center mb-2">
-                                                    <Clock size={24} />
-                                                </div>
-                                                <span className="text-lg font-bold tracking-widest uppercase text-gray-400">SEM AULA</span>
+                                            <div className="flex flex-col items-center justify-center h-full opacity-20">
+                                                <span className="text-[3vh] font-bold tracking-widest uppercase text-gray-600">LIVRE</span>
                                             </div>
                                         )}
                                     </div>
@@ -253,10 +251,9 @@ export const PublicSchedule: React.FC = () => {
             {/* Floating Button for Full View */}
             <button 
                 onClick={() => setShowModal(true)}
-                className="absolute bottom-4 right-4 p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-gray-400 hover:text-white transition-all backdrop-blur-md z-50"
-                title="Ver Grade Completa"
+                className="absolute bottom-6 right-6 p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-full text-gray-500 hover:text-white transition-all backdrop-blur-md z-50"
             >
-                <Maximize2 size={20} />
+                <Maximize2 size={24} />
             </button>
 
              {/* MODAL FULL VIEW */}
@@ -264,83 +261,83 @@ export const PublicSchedule: React.FC = () => {
                  <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="w-full h-full max-w-[95vw] max-h-[95vh] bg-[#0f0f10] rounded-3xl border border-gray-800 flex flex-col overflow-hidden shadow-2xl">
                         <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#18181b] shrink-0">
-                            <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-3 uppercase tracking-wider">
+                            <h2 className="text-xl font-bold text-white flex items-center gap-3 uppercase tracking-wider">
                                 <Calendar className="text-red-500"/> Quadro Geral
                             </h2>
                             <button onClick={() => setShowModal(false)} className="bg-gray-800 p-2 rounded-full hover:bg-red-600 hover:text-white text-gray-400 transition-all">
                                 <X size={24} />
                             </button>
                         </div>
-                        <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-[#0f0f10]">
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                                {/* Morning */}
-                                <div className="bg-[#18181b] p-4 rounded-2xl border border-gray-800/50">
-                                    <h3 className="text-lg font-bold text-blue-400 mb-4 border-b border-gray-700 pb-2 uppercase tracking-wide">Matutino</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-xs md:text-sm text-gray-400">
-                                            <thead>
-                                                <tr className="text-left border-b border-gray-700">
-                                                    <th className="py-2 font-bold text-white w-16">H</th>
-                                                    {MORNING_CLASSES.map(c => <th key={c.id} className="py-2 px-1 font-bold text-white text-center">{c.name}</th>)}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-800">
-                                                {MORNING_SLOTS.filter(s => s.type === 'class').map(slot => (
-                                                    <tr key={slot.id} className="hover:bg-white/5">
-                                                        <td className="py-3 font-mono text-gray-500 text-[10px] md:text-xs font-bold whitespace-nowrap">{slot.start}</td>
-                                                        {MORNING_CLASSES.map(cls => {
-                                                            const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
-                                                            return (
-                                                                <td key={cls.id + slot.id} className="py-2 px-1 text-center border-l border-gray-800">
-                                                                    {entry ? (
-                                                                        <div>
-                                                                            <p className="font-bold text-white text-[10px] md:text-xs truncate max-w-[80px] md:max-w-none mx-auto">{entry.subject}</p>
-                                                                            <p className="text-[9px] text-gray-500 font-medium uppercase truncate max-w-[80px] md:max-w-none mx-auto">{entry.professor.split(' ')[0]}</p>
-                                                                        </div>
-                                                                    ) : <span className="text-gray-700 text-xs">-</span>}
-                                                                </td>
-                                                            )
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                        <div className="flex-1 overflow-auto p-6 custom-scrollbar bg-[#0f0f10]">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                {/* Morning Table */}
+                                <div className="bg-[#18181b] rounded-2xl border border-gray-800/50 overflow-hidden">
+                                    <div className="bg-blue-900/20 p-3 border-b border-blue-900/30">
+                                        <h3 className="text-lg font-bold text-blue-400 uppercase tracking-wide text-center">Matutino</h3>
                                     </div>
+                                    <table className="w-full text-sm text-gray-400">
+                                        <thead>
+                                            <tr className="bg-white/5 text-white">
+                                                <th className="py-3 px-2 font-bold w-20 border-r border-white/10">HORA</th>
+                                                {MORNING_CLASSES.map(c => <th key={c.id} className="py-3 px-1 font-bold text-center border-l border-white/10">{c.name}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {MORNING_SLOTS.filter(s => s.type === 'class').map(slot => (
+                                                <tr key={slot.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="py-3 px-2 font-mono text-gray-500 text-xs font-bold border-r border-white/10 text-center">{slot.start}</td>
+                                                    {MORNING_CLASSES.map(cls => {
+                                                        const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
+                                                        return (
+                                                            <td key={cls.id + slot.id} className="py-2 px-1 text-center border-l border-white/5">
+                                                                {entry ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-white text-xs">{entry.subject}</span>
+                                                                        <span className="text-[10px] text-gray-500 uppercase">{entry.professor.split(' ')[0]}</span>
+                                                                    </div>
+                                                                ) : <span className="text-gray-700 text-xs">-</span>}
+                                                            </td>
+                                                        )
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
 
-                                {/* Afternoon */}
-                                <div className="bg-[#18181b] p-4 rounded-2xl border border-gray-800/50">
-                                    <h3 className="text-lg font-bold text-red-400 mb-4 border-b border-gray-700 pb-2 uppercase tracking-wide">Vespertino</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-xs md:text-sm text-gray-400">
-                                            <thead>
-                                                <tr className="text-left border-b border-gray-700">
-                                                    <th className="py-2 font-bold text-white w-16">H</th>
-                                                    {AFTERNOON_CLASSES.map(c => <th key={c.id} className="py-2 px-1 font-bold text-white text-center">{c.name}</th>)}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-800">
-                                                {AFTERNOON_SLOTS.filter(s => s.type === 'class').map(slot => (
-                                                    <tr key={slot.id} className="hover:bg-white/5">
-                                                        <td className="py-3 font-mono text-gray-500 text-[10px] md:text-xs font-bold whitespace-nowrap">{slot.start}</td>
-                                                        {AFTERNOON_CLASSES.map(cls => {
-                                                            const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
-                                                            return (
-                                                                <td key={cls.id + slot.id} className="py-2 px-1 text-center border-l border-gray-800">
-                                                                    {entry ? (
-                                                                        <div>
-                                                                            <p className="font-bold text-white text-[10px] md:text-xs truncate max-w-[80px] md:max-w-none mx-auto">{entry.subject}</p>
-                                                                            <p className="text-[9px] text-gray-500 font-medium uppercase truncate max-w-[80px] md:max-w-none mx-auto">{entry.professor.split(' ')[0]}</p>
-                                                                        </div>
-                                                                    ) : <span className="text-gray-700 text-xs">-</span>}
-                                                                </td>
-                                                            )
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                {/* Afternoon Table */}
+                                <div className="bg-[#18181b] rounded-2xl border border-gray-800/50 overflow-hidden">
+                                     <div className="bg-red-900/20 p-3 border-b border-red-900/30">
+                                        <h3 className="text-lg font-bold text-red-400 uppercase tracking-wide text-center">Vespertino</h3>
                                     </div>
+                                    <table className="w-full text-sm text-gray-400">
+                                        <thead>
+                                            <tr className="bg-white/5 text-white">
+                                                <th className="py-3 px-2 font-bold w-20 border-r border-white/10">HORA</th>
+                                                {AFTERNOON_CLASSES.map(c => <th key={c.id} className="py-3 px-1 font-bold text-center border-l border-white/10">{c.name}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {AFTERNOON_SLOTS.filter(s => s.type === 'class').map(slot => (
+                                                <tr key={slot.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="py-3 px-2 font-mono text-gray-500 text-xs font-bold border-r border-white/10 text-center">{slot.start}</td>
+                                                    {AFTERNOON_CLASSES.map(cls => {
+                                                        const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
+                                                        return (
+                                                            <td key={cls.id + slot.id} className="py-2 px-1 text-center border-l border-white/5">
+                                                                {entry ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-white text-xs">{entry.subject}</span>
+                                                                        <span className="text-[10px] text-gray-500 uppercase">{entry.professor.split(' ')[0]}</span>
+                                                                    </div>
+                                                                ) : <span className="text-gray-700 text-xs">-</span>}
+                                                            </td>
+                                                        )
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
