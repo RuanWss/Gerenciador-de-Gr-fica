@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot } from '../types';
-import { Clock, Calendar, X, Maximize2 } from 'lucide-react';
+import { Clock, Calendar, X, Maximize2, AlertCircle } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -42,14 +42,14 @@ const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2568/2568-p
 export const PublicSchedule: React.FC = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
-    const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'night' | 'weekend'>('morning');
+    const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [currentSlot, setCurrentSlot] = useState<TimeSlot | null>(null);
     const [showModal, setShowModal] = useState(false);
     
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastSlotId = useRef<string>('');
 
-    // Listener de Tempo Real para o Banco de Dados
+    // 1. Realtime Database Listener
     useEffect(() => {
         const unsubscribe = listenToSchedule((data) => {
             setSchedule(data || []);
@@ -57,7 +57,7 @@ export const PublicSchedule: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    // Relógio e Verificação de Status Local
+    // 2. Clock & Shift Logic
     useEffect(() => {
         const timer = setInterval(() => {
             const now = new Date();
@@ -73,39 +73,50 @@ export const PublicSchedule: React.FC = () => {
         const minutes = now.getMinutes();
         const timeVal = hours * 60 + minutes;
 
+        // Weekend Check (Optional: remove if school has classes on weekends)
         if (day === 0 || day === 6) {
-            setCurrentShift('weekend');
+            setCurrentShift('off');
             setCurrentSlot(null);
             return;
         }
 
-        let shift: 'morning' | 'afternoon' | 'night' = 'night';
-        if (timeVal >= (7 * 60) && timeVal < (12 * 60 + 30)) {
+        // Shift Logic based on user prompt:
+        // Morning: 07:00 (420) to 12:30 (750)
+        // Afternoon: 12:30 (750) to 21:00 (1260)
+        let shift: 'morning' | 'afternoon' | 'off' = 'off';
+
+        if (timeVal >= 420 && timeVal < 750) {
             shift = 'morning';
-        } else if (timeVal >= (12 * 60 + 30) && timeVal < (22 * 60)) {
+        } else if (timeVal >= 750 && timeVal < 1260) {
             shift = 'afternoon';
         }
 
-        setCurrentShift(shift as any);
+        setCurrentShift(shift);
 
-        const slots = shift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
-        const foundSlot = slots.find(s => {
-            const [startH, startM] = s.start.split(':').map(Number);
-            const [endH, endM] = s.end.split(':').map(Number);
-            const startVal = startH * 60 + startM;
-            const endVal = endH * 60 + endM;
-            return timeVal >= startVal && timeVal < endVal;
-        });
+        // Slot Detection
+        if (shift !== 'off') {
+            const slots = shift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+            const foundSlot = slots.find(s => {
+                const [startH, startM] = s.start.split(':').map(Number);
+                const [endH, endM] = s.end.split(':').map(Number);
+                const startVal = startH * 60 + startM;
+                const endVal = endH * 60 + endM;
+                return timeVal >= startVal && timeVal < endVal;
+            });
 
-        if (foundSlot) {
-            setCurrentSlot(foundSlot);
-            if (foundSlot.id !== lastSlotId.current) {
-                lastSlotId.current = foundSlot.id;
-                playAlert();
+            if (foundSlot) {
+                setCurrentSlot(foundSlot);
+                // Trigger Alarm on Change
+                if (foundSlot.id !== lastSlotId.current) {
+                    lastSlotId.current = foundSlot.id;
+                    playAlert();
+                }
+            } else {
+                setCurrentSlot(null);
+                lastSlotId.current = ''; // Reset when between slots
             }
         } else {
             setCurrentSlot(null);
-            lastSlotId.current = '';
         }
     };
 
@@ -113,12 +124,13 @@ export const PublicSchedule: React.FC = () => {
         if (audioRef.current) {
             audioRef.current.volume = 0.5;
             audioRef.current.play().catch(() => {});
+            // Stop after 3 seconds
             setTimeout(() => {
                 if (audioRef.current) {
                     audioRef.current.pause();
                     audioRef.current.currentTime = 0;
                 }
-            }, 4000);
+            }, 3000);
         }
     };
 
@@ -135,104 +147,117 @@ export const PublicSchedule: React.FC = () => {
     const dateString = currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
     const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    const classes = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
+    // Determine which classes to show based on shift
+    const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
 
     return (
-        <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex relative font-sans">
+        <div className="min-h-screen w-screen bg-gradient-to-b from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col items-center relative font-sans">
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
 
-            {/* LEFT SIDE: CLASS CARDS */}
-            <div className="flex-1 p-8 flex flex-col justify-center h-full relative z-10 pl-16">
-                
-                {/* Floating Action Button */}
-                <div className="absolute top-1/2 -translate-y-1/2 left-[calc(100%+2rem)] z-30">
-                     <button 
-                        onClick={() => setShowModal(true)}
-                        className="bg-[#ef4444] hover:bg-red-700 text-white font-bold py-6 px-4 rounded-2xl shadow-[0_0_20px_rgba(239,68,68,0.5)] flex flex-col items-center gap-2 transition-transform hover:scale-105"
-                    >
-                        <Maximize2 size={28} />
-                        <span className="text-[10px] uppercase tracking-widest text-center" style={{ writingMode: 'vertical-rl' }}>
-                            VISUALIZAR<br/>QUADRO
-                        </span>
-                    </button>
-                </div>
+            {/* --- HEADER SECTION --- */}
+            <div className="w-full flex flex-col items-center justify-center pt-8 pb-4 z-10">
+                {/* 1. Logo (Top) */}
+                <img 
+                    src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
+                    alt="Logo SchoolPrint" 
+                    className="h-28 object-contain mb-2 drop-shadow-xl"
+                />
 
-                <div className={`grid gap-6 w-full max-w-2xl ${classes.length > 3 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                    {classes.map(cls => {
-                        const entry = getEntry(cls.id);
-                        return (
-                            <div key={cls.id} className="group relative h-40 bg-blue-600/20 backdrop-blur-md border border-blue-400/30 rounded-3xl overflow-hidden shadow-2xl flex transition-all hover:bg-blue-600/30">
-                                {/* Vertical Label Strip */}
-                                <div className="w-14 h-full bg-blue-800/60 border-r border-blue-400/30 flex items-center justify-center relative">
-                                    <span className="transform -rotate-90 whitespace-nowrap font-bold tracking-[0.2em] text-blue-100 text-sm absolute w-40 text-center">
-                                        {cls.name}
-                                    </span>
-                                </div>
-                                
-                                {/* Content Area */}
-                                <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-                                    {currentSlot?.type === 'break' ? (
-                                        <div className="text-yellow-400 animate-pulse">
-                                            <p className="text-2xl font-black uppercase tracking-widest">Intervalo</p>
-                                        </div>
-                                    ) : entry ? (
-                                        <>
-                                            <div className="w-full flex justify-between items-start mb-1 px-2">
-                                                 <Clock size={16} className="text-blue-300 opacity-60"/>
-                                            </div>
-                                            <h3 className="text-xl md:text-2xl font-black text-white leading-none mb-1">{entry.subject}</h3>
-                                            <p className="text-sm text-blue-200 font-medium tracking-wide">{entry.professor}</p>
-                                        </>
-                                    ) : (
-                                        <div className="flex flex-col items-center opacity-40">
-                                            <div className="w-10 h-10 rounded-full border border-blue-300/50 flex items-center justify-center mb-1">
-                                                <Clock size={20} />
-                                            </div>
-                                            <span className="text-sm font-bold tracking-widest uppercase text-blue-200">SEM AULA</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
-            </div>
+                {/* 2. Clock (Middle) */}
+                <h1 className="text-[9rem] leading-none font-bold tracking-tighter text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.15)] font-mono">
+                    {timeString}
+                </h1>
 
-            {/* RIGHT SIDE: INFO & CLOCK */}
-            <div className="w-[400px] h-full relative flex flex-col items-center justify-center p-0 bg-black/20 backdrop-blur-sm border-l border-white/5">
-                
-                {/* Vertical Date Line */}
-                <div className="absolute left-8 h-full flex items-center justify-center w-8">
-                     <div className="h-full w-px bg-gradient-to-b from-transparent via-red-600/50 to-transparent absolute left-1/2"></div>
-                     <p className="transform -rotate-180 text-gray-400 font-mono text-xs tracking-[0.4em] font-bold whitespace-nowrap z-10 bg-[#150505] py-4" style={{ writingMode: 'vertical-rl' }}>
+                {/* 3. Date (Bottom) */}
+                <div className="bg-white/10 px-6 py-2 rounded-full backdrop-blur-sm border border-white/5 mt-4">
+                     <p className="text-xl md:text-2xl text-gray-200 font-bold tracking-widest uppercase">
                         {dateString}
                     </p>
                 </div>
-
-                <div className="flex flex-col items-center text-center z-10 pl-16 pr-8 w-full">
-                     {/* Shift Badge */}
-                    <div className="mb-16">
-                        <span className="px-6 py-2 rounded-full bg-[#1e1b4b] border border-[#4f46e5] text-[#818cf8] font-bold uppercase tracking-widest text-xs shadow-[0_0_15px_rgba(79,70,229,0.4)]">
-                            {currentShift === 'morning' ? 'TURNO DA MANHÃ' : currentShift === 'afternoon' ? 'TURNO DA TARDE' : 'SEM TURNO'}
-                        </span>
-                    </div>
-
-                    {/* Clock */}
-                    <div className="relative mb-20 text-center">
-                        <h1 className="text-8xl leading-none font-bold tracking-tighter text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.2)]">
-                            {timeString}
-                        </h1>
-                    </div>
-
-                    {/* Logo */}
-                    <div className="mt-auto mb-12">
-                         <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="w-48 opacity-90 drop-shadow-lg" alt="Logo" />
-                    </div>
-                </div>
             </div>
 
-            {/* MODAL FULL VIEW */}
-            {showModal && (
+            {/* --- MAIN CONTENT SECTION --- */}
+            <div className="flex-1 w-full max-w-[95%] mx-auto flex flex-col items-center justify-center pb-8 z-10">
+                
+                {/* Shift Indicator */}
+                <div className="mb-6 flex items-center gap-3">
+                    <span className={`h-3 w-3 rounded-full ${currentShift !== 'off' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                    <span className="text-sm font-bold tracking-[0.2em] text-gray-400 uppercase">
+                        {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Fora de Horário'}
+                    </span>
+                </div>
+
+                {currentShift === 'off' ? (
+                     <div className="flex flex-col items-center justify-center h-64 opacity-50">
+                        <AlertCircle size={64} className="mb-4 text-gray-500"/>
+                        <p className="text-2xl font-bold text-gray-400">Escola Fechada / Intervalo entre Turnos</p>
+                     </div>
+                ) : (
+                    <div className={`grid gap-6 w-full ${currentShift === 'morning' ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'}`}>
+                        {activeClasses.map(cls => {
+                            const entry = getEntry(cls.id);
+                            return (
+                                <div key={cls.id} className="relative group bg-white/5 backdrop-blur-md border border-white/10 rounded-[2rem] overflow-hidden flex flex-col shadow-2xl transition-all duration-500 hover:scale-[1.02] hover:bg-white/10 h-72">
+                                    {/* Class Label Header */}
+                                    <div className="bg-[#ef4444] p-3 flex items-center justify-center shadow-lg">
+                                        <h2 className="text-2xl font-black text-white uppercase tracking-wider">
+                                            {cls.name}
+                                        </h2>
+                                    </div>
+                                    
+                                    {/* Info Body */}
+                                    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative">
+                                        
+                                        {currentSlot?.type === 'break' ? (
+                                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/20 backdrop-blur-sm animate-pulse">
+                                                <Clock size={48} className="text-yellow-400 mb-2"/>
+                                                <span className="text-3xl font-black text-yellow-100 uppercase tracking-widest">INTERVALO</span>
+                                             </div>
+                                        ) : entry ? (
+                                            <>
+                                                <div className="mb-2">
+                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Disciplina</p>
+                                                    <h3 className="text-2xl md:text-3xl font-black text-white leading-tight line-clamp-2">
+                                                        {entry.subject}
+                                                    </h3>
+                                                </div>
+                                                
+                                                <div className="w-16 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent my-4"></div>
+
+                                                <div>
+                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Professor(a)</p>
+                                                    <p className="text-xl font-bold text-red-200">
+                                                        {entry.professor}
+                                                    </p>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="flex flex-col items-center opacity-30">
+                                                <div className="w-16 h-16 rounded-full border-2 border-gray-500 flex items-center justify-center mb-2">
+                                                    <Clock size={32} />
+                                                </div>
+                                                <span className="text-xl font-bold tracking-widest uppercase text-gray-400">SEM AULA</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Floating Button for Full View (Bottom Right) */}
+            <button 
+                onClick={() => setShowModal(true)}
+                className="absolute bottom-6 right-6 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-gray-400 hover:text-white transition-all backdrop-blur-md"
+                title="Ver Grade Completa"
+            >
+                <Maximize2 size={24} />
+            </button>
+
+             {/* MODAL FULL VIEW (SAME AS BEFORE) */}
+             {showModal && (
                  <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="w-full h-full max-w-[90vw] max-h-[90vh] bg-[#0f0f10] rounded-3xl border border-gray-800 flex flex-col overflow-hidden shadow-2xl">
                         <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-[#18181b]">
