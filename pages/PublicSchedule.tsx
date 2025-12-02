@@ -259,28 +259,28 @@ export const PublicSchedule: React.FC = () => {
             )}
 
             {/* --- HEADER SECTION (40%) --- */}
-            <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 transition-all duration-500">
+            <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 transition-all duration-700">
                 
                 {/* 
                     LEFT COLUMN: Logo, Clock, Date 
                     Se tiver aviso: 65% width + borda direita
                     Se NÃO tiver aviso: 100% width (centralizado)
                 */}
-                <div className={`${showWarning ? 'w-[65%] border-r border-white/5' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-500`}>
+                <div className={`${showWarning ? 'w-[65%] border-r border-white/10' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-700`}>
                     {/* Logo */}
                     <img 
                         src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
                         alt="Logo" 
-                        className="h-[6vh] w-auto object-contain mb-2 drop-shadow-lg"
+                        className="h-[6vh] w-auto object-contain mb-4 drop-shadow-lg"
                     />
 
                     {/* Clock */}
-                    <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums text-center">
+                    <h1 className="text-[20vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums text-center">
                         {timeString}
                     </h1>
 
                     {/* Date */}
-                    <div className="mt-2 bg-white/5 px-8 py-2 rounded-full border border-white/5">
+                    <div className="mt-4 bg-white/5 px-8 py-2 rounded-full border border-white/5">
                         <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
                             {dateString}
                         </p>
@@ -292,10 +292,11 @@ export const PublicSchedule: React.FC = () => {
                     Renderizado condicionalmente
                 */}
                 {showWarning && (
-                    <div className="w-[35%] h-full flex items-center justify-center p-6 relative bg-gradient-to-l from-black/20 to-transparent animate-in fade-in slide-in-from-right duration-500">
-                        <div className="w-full h-auto bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-3xl flex flex-col items-center justify-center p-8 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse">
-                            <Megaphone size={50} className="text-yellow-400 mb-4 shrink-0" />
-                            <p className="text-[3vh] font-bold text-yellow-100 uppercase text-center leading-tight break-words w-full">
+                    <div className="w-[35%] h-full flex items-center justify-center p-8 animate-in fade-in slide-in-from-right duration-700">
+                        {/* Box - h-auto to fit text */}
+                        <div className="w-full h-auto min-h-[150px] bg-black/80 backdrop-blur-xl border-[6px] border-yellow-500 rounded-3xl p-8 shadow-[0_0_50px_rgba(234,179,8,0.4)] animate-pulse flex flex-col items-center justify-center gap-6">
+                            <Megaphone size={50} className="text-yellow-400 shrink-0" />
+                            <p className="text-[3.5vh] font-bold text-yellow-50 uppercase text-center leading-tight break-words w-full">
                                 {sysConfig?.bannerMessage}
                             </p>
                         </div>
@@ -303,10 +304,9 @@ export const PublicSchedule: React.FC = () => {
                 )}
             </div>
 
-            {/* --- SHIFT INDICATOR (Fixed Height 5% + Margem Top para afastar da data) --- */}
+            {/* --- SHIFT INDICATOR --- */}
             <div className="h-[5%] flex items-center justify-center shrink-0 z-10 mt-6">
                  <div className="flex items-center gap-3 px-6 py-1 bg-black/40 rounded-full border border-white/10 shadow-lg backdrop-blur-md">
-                    {/* Ícone reduzido para w-2 h-2 */}
                     <span className={`h-2 w-2 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
                     <span className="text-[1.4vh] font-bold tracking-[0.15em] text-gray-200 uppercase">
                         {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Fora de Horário'}
@@ -314,7 +314,7 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </div>
 
-            {/* --- CARDS GRID SECTION (Flex-1 para ocupar o resto) --- */}
+            {/* --- CARDS GRID SECTION --- */}
             <div className="flex-1 w-full p-4 pb-6 flex items-center justify-center">
                 
                 {currentShift === 'off' ? (
