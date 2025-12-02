@@ -1,4 +1,4 @@
-import { GoogleGenAI, SchemaType } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const getClient = () => {
   const apiKey = process.env.API_KEY;
@@ -96,7 +96,7 @@ export const correctExamWithAI = async (
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', // Usando Flash para ser rápido, ou Pro se precisar de mais precisão em caligrafia
+            model: 'gemini-2.5-flash',
             contents: [
                 {
                     inlineData: {
@@ -114,7 +114,6 @@ export const correctExamWithAI = async (
         const text = response.text || "{}";
         const result = JSON.parse(text);
 
-        // Calcular Score (Nota de 0 a 10)
         const hitCount = result.hits ? result.hits.length : 0;
         const score = (hitCount / numQuestions) * 10;
 

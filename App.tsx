@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { TeacherDashboard } from './pages/TeacherDashboard';
@@ -9,10 +9,25 @@ import { LogOut } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const [currentHash, setCurrentHash] = useState(window.location.hash);
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+        setCurrentPath(window.location.pathname);
+        setCurrentHash(window.location.hash);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+        window.removeEventListener('popstate', handleLocationChange);
+        window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
   
-  // Check for Public Schedule Route (simple router implementation)
-  const path = window.location.pathname;
-  if (path === '/horarios') {
+  // Rota segura para o Quadro de Horários (aceita /horarios ou /#horarios)
+  if (currentPath === '/horarios' || currentHash === '#horarios') {
       return <PublicSchedule />;
   }
 
