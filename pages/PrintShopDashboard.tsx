@@ -529,7 +529,7 @@ export const PrintShopDashboard: React.FC = () => {
   );
 
   const filteredExams = exams.filter(exam => {
-    if (filter === 'pending') return exam.status !== ExamStatus.PENDING;
+    if (filter === 'pending') return exam.status !== ExamStatus.COMPLETED;
     if (filter === 'completed') return exam.status === ExamStatus.COMPLETED;
     return true;
   });
