@@ -238,6 +238,8 @@ export const PublicSchedule: React.FC = () => {
         return true;
     };
 
+    const showWarning = isWarningVisible();
+
     return (
         <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
@@ -257,10 +259,14 @@ export const PublicSchedule: React.FC = () => {
             )}
 
             {/* --- HEADER SECTION (40%) --- */}
-            <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/20 backdrop-blur-sm z-10">
+            <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 transition-all duration-500">
                 
-                {/* LEFT COLUMN: Logo, Clock, Date (65% Width) */}
-                <div className="w-[65%] h-full flex flex-col items-center justify-center relative border-r border-white/5 p-4">
+                {/* 
+                    LEFT COLUMN: Logo, Clock, Date 
+                    Se tiver aviso: 65% width + borda direita
+                    Se NÃO tiver aviso: 100% width (centralizado)
+                */}
+                <div className={`${showWarning ? 'w-[65%] border-r border-white/5' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-500`}>
                     {/* Logo */}
                     <img 
                         src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
@@ -281,23 +287,20 @@ export const PublicSchedule: React.FC = () => {
                     </div>
                 </div>
 
-                {/* RIGHT COLUMN: Warnings (35% Width) */}
-                <div className="w-[35%] h-full flex items-center justify-center p-6 relative bg-gradient-to-l from-black/20 to-transparent">
-                    {isWarningVisible() ? (
-                        <div className="w-full h-full max-h-[85%] bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-3xl flex flex-col items-center justify-center p-6 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse">
-                            <Megaphone size={60} className="text-yellow-400 mb-6 shrink-0" />
+                {/* 
+                    RIGHT COLUMN: Warnings (35% Width) 
+                    Renderizado condicionalmente
+                */}
+                {showWarning && (
+                    <div className="w-[35%] h-full flex items-center justify-center p-6 relative bg-gradient-to-l from-black/20 to-transparent animate-in fade-in slide-in-from-right duration-500">
+                        <div className="w-full h-auto bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-3xl flex flex-col items-center justify-center p-8 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse">
+                            <Megaphone size={50} className="text-yellow-400 mb-4 shrink-0" />
                             <p className="text-[3vh] font-bold text-yellow-100 uppercase text-center leading-tight break-words w-full">
                                 {sysConfig?.bannerMessage}
                             </p>
                         </div>
-                    ) : (
-                        // Placeholder discreto quando não há avisos
-                         <div className="opacity-10 flex flex-col items-center justify-center border-2 border-white/10 border-dashed rounded-3xl w-full h-2/3">
-                            <Megaphone size={40} className="mb-2" />
-                            <span className="text-xs uppercase tracking-widest text-center px-4">Área de Avisos</span>
-                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {/* --- SHIFT INDICATOR (Fixed Height 5% + Margem Top para afastar da data) --- */}
