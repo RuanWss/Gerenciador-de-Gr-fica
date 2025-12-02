@@ -257,41 +257,46 @@ export const PublicSchedule: React.FC = () => {
             )}
 
             {/* --- HEADER SECTION (40%) --- */}
-            <div className="h-[40%] w-full flex flex-col items-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-4">
+            <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/20 backdrop-blur-sm z-10">
                 
-                {/* Logo (Top) */}
-                <img 
-                    src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
-                    alt="Logo" 
-                    className="h-[6vh] w-auto object-contain mb-2 drop-shadow-lg"
-                />
+                {/* LEFT COLUMN: Logo, Clock, Date (65% Width) */}
+                <div className="w-[65%] h-full flex flex-col items-center justify-center relative border-r border-white/5 p-4">
+                    {/* Logo */}
+                    <img 
+                        src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
+                        alt="Logo" 
+                        className="h-[6vh] w-auto object-contain mb-2 drop-shadow-lg"
+                    />
 
-                {/* Middle: Clock Area */}
-                <div className="flex-1 w-full relative flex items-center justify-center">
-                    
-                    {/* Clock (Centered) */}
+                    {/* Clock */}
                     <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums text-center">
                         {timeString}
                     </h1>
 
-                    {/* Warning Box (Absolute Right) */}
-                    {isWarningVisible() && (
-                        <div className="absolute right-12 top-1/2 -translate-y-1/2 max-w-[25vw] bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-2xl flex flex-col items-center justify-center p-4 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse z-20">
-                            <Megaphone size={40} className="text-yellow-400 mb-2 shrink-0" />
-                            <p className="text-[2vh] font-bold text-yellow-100 uppercase text-center leading-tight break-words w-full">
-                                {sysConfig?.bannerMessage}
-                            </p>
-                        </div>
-                    )}
-                </div>
-                
-                {/* Bottom: Date */}
-                <div className="mt-auto mb-2 relative z-10">
-                    <div className="bg-white/5 px-8 py-2 rounded-full border border-white/5">
+                    {/* Date */}
+                    <div className="mt-2 bg-white/5 px-8 py-2 rounded-full border border-white/5">
                         <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
                             {dateString}
                         </p>
                     </div>
+                </div>
+
+                {/* RIGHT COLUMN: Warnings (35% Width) */}
+                <div className="w-[35%] h-full flex items-center justify-center p-6 relative bg-gradient-to-l from-black/20 to-transparent">
+                    {isWarningVisible() ? (
+                        <div className="w-full h-full max-h-[85%] bg-black/60 backdrop-blur-md border-4 border-yellow-500 rounded-3xl flex flex-col items-center justify-center p-6 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse">
+                            <Megaphone size={60} className="text-yellow-400 mb-6 shrink-0" />
+                            <p className="text-[3vh] font-bold text-yellow-100 uppercase text-center leading-tight break-words w-full">
+                                {sysConfig?.bannerMessage}
+                            </p>
+                        </div>
+                    ) : (
+                        // Placeholder discreto quando não há avisos
+                         <div className="opacity-10 flex flex-col items-center justify-center border-2 border-white/10 border-dashed rounded-3xl w-full h-2/3">
+                            <Megaphone size={40} className="mb-2" />
+                            <span className="text-xs uppercase tracking-widest text-center px-4">Área de Avisos</span>
+                         </div>
+                    )}
                 </div>
             </div>
 
