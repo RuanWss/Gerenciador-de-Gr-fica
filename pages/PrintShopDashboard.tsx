@@ -705,14 +705,14 @@ export const PrintShopDashboard: React.FC = () => {
                                                             <input 
                                                                 type="text" 
                                                                 placeholder="Matéria" 
-                                                                className="w-full text-xs font-bold p-1 border rounded"
+                                                                className="w-full text-xs font-bold p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
                                                                 value={getScheduleValue(cls.id, slot.id, 'subject')}
                                                                 onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'subject', e.target.value)}
                                                             />
                                                             <input 
                                                                 type="text" 
                                                                 placeholder="Professor" 
-                                                                className="w-full text-[10px] p-1 border rounded text-gray-600"
+                                                                className="w-full text-[10px] p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
                                                                 value={getScheduleValue(cls.id, slot.id, 'professor')}
                                                                 onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'professor', e.target.value)}
                                                             />
@@ -753,14 +753,14 @@ export const PrintShopDashboard: React.FC = () => {
                                                             <input 
                                                                 type="text" 
                                                                 placeholder="Matéria" 
-                                                                className="w-full text-xs font-bold p-1 border rounded"
+                                                                className="w-full text-xs font-bold p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
                                                                 value={getScheduleValue(cls.id, slot.id, 'subject')}
                                                                 onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'subject', e.target.value)}
                                                             />
                                                             <input 
                                                                 type="text" 
                                                                 placeholder="Professor" 
-                                                                className="w-full text-[10px] p-1 border rounded text-gray-600"
+                                                                className="w-full text-[10px] p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
                                                                 value={getScheduleValue(cls.id, slot.id, 'professor')}
                                                                 onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'professor', e.target.value)}
                                                             />

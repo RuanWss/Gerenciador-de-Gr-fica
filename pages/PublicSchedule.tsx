@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { getFullSchedule } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot } from '../types';
-import { Clock, Calendar, ArrowLeft, Maximize2, X } from 'lucide-react';
+import { Clock, Calendar, X, AlertCircle, Maximize2 } from 'lucide-react';
 
-// --- FIXED CONFIGURATIONS ---
+// --- CONFIGURATIONS ---
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -34,12 +35,11 @@ const MORNING_CLASSES = [
 ];
 
 const AFTERNOON_CLASSES = [
-    { id: '1em', name: '1ª Série EM' },
-    { id: '2em', name: '2ª Série EM' },
-    { id: '3em', name: '3ª Série EM' },
+    { id: '1em', name: '1ª SÉRIE EM' },
+    { id: '2em', name: '2ª SÉRIE EM' },
+    { id: '3em', name: '3ª SÉRIE EM' },
 ];
 
-// Alert Sound (Soft Chime)
 const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3";
 
 export const PublicSchedule: React.FC = () => {
@@ -49,21 +49,16 @@ export const PublicSchedule: React.FC = () => {
     const [currentSlot, setCurrentSlot] = useState<TimeSlot | null>(null);
     const [showModal, setShowModal] = useState(false);
     
-    // Audio Ref
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastSlotId = useRef<string>('');
 
-    // Clock & Slot Calculation
     useEffect(() => {
         const timer = setInterval(() => {
             const now = new Date();
             setCurrentTime(now);
             checkCurrentStatus(now);
         }, 1000);
-        
-        // Initial Data Load
         loadSchedule();
-
         return () => clearInterval(timer);
     }, []);
 
@@ -73,29 +68,26 @@ export const PublicSchedule: React.FC = () => {
     };
 
     const checkCurrentStatus = (now: Date) => {
-        const day = now.getDay(); // 0 = Sunday
+        const day = now.getDay();
         const hours = now.getHours();
         const minutes = now.getMinutes();
         const timeVal = hours * 60 + minutes;
 
-        // Check Weekend
         if (day === 0 || day === 6) {
             setCurrentShift('weekend');
             setCurrentSlot(null);
             return;
         }
 
-        // Determine Shift based on hour
         let shift: 'morning' | 'afternoon' | 'night' = 'night';
-        if (timeVal >= (7 * 60 + 20) && timeVal < (12 * 60)) {
+        if (timeVal >= (7 * 60) && timeVal < (12 * 60 + 30)) {
             shift = 'morning';
-        } else if (timeVal >= (13 * 60) && timeVal < (20 * 60)) {
+        } else if (timeVal >= (12 * 60 + 30) && timeVal < (22 * 60)) {
             shift = 'afternoon';
         }
 
         setCurrentShift(shift as any);
 
-        // Find Current Slot
         const slots = shift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
         const foundSlot = slots.find(s => {
             const [startH, startM] = s.start.split(':').map(Number);
@@ -107,7 +99,6 @@ export const PublicSchedule: React.FC = () => {
 
         if (foundSlot) {
             setCurrentSlot(foundSlot);
-            // Play Audio if slot changed
             if (foundSlot.id !== lastSlotId.current) {
                 lastSlotId.current = foundSlot.id;
                 playAlert();
@@ -121,8 +112,7 @@ export const PublicSchedule: React.FC = () => {
     const playAlert = () => {
         if (audioRef.current) {
             audioRef.current.volume = 0.5;
-            audioRef.current.play().catch(e => console.log("Audio autoplay blocked", e));
-            // Stop after 4 seconds logic handled by track duration usually, but ensuring:
+            audioRef.current.play().catch(() => {});
             setTimeout(() => {
                 if (audioRef.current) {
                     audioRef.current.pause();
@@ -135,200 +125,151 @@ export const PublicSchedule: React.FC = () => {
     const getEntry = (classId: string) => {
         if (!currentSlot) return null;
         const day = currentTime.getDay();
-        return schedule.find(s => 
-            s.classId === classId && 
-            s.dayOfWeek === day && 
-            s.slotId === currentSlot.id
-        );
+        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === currentSlot.id);
     };
 
     const getFullEntry = (classId: string, slotId: string, day: number) => {
-        return schedule.find(s => 
-            s.classId === classId && 
-            s.dayOfWeek === day && 
-            s.slotId === slotId
-        );
+        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === slotId);
     };
 
-    const renderGrid = () => {
-        const isMorning = currentShift === 'morning';
-        const classes = isMorning ? MORNING_CLASSES : AFTERNOON_CLASSES;
+    // Format Date: SEXTA-FEIRA, 28 DE NOVEMBRO DE 2025
+    const dateString = currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
 
-        if (currentShift === 'night' || currentShift === 'weekend') {
-            return (
-                <div className="flex flex-col items-center justify-center h-[50vh] text-center">
-                    <Clock size={80} className="text-white/20 mb-4 animate-pulse" />
-                    <h2 className="text-4xl font-bold text-white mb-2">Turno Encerrado</h2>
-                    <p className="text-xl text-gray-400">Não há aulas acontecendo neste momento.</p>
-                </div>
-            );
-        }
+    const classes = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
 
-        // Show Break
-        if (currentSlot?.type === 'break') {
-            return (
-                <div className="flex flex-col items-center justify-center h-[50vh] animate-in zoom-in duration-500">
-                    <div className="bg-yellow-500 text-black px-12 py-6 rounded-3xl shadow-[0_0_50px_rgba(234,179,8,0.5)]">
-                        <h2 className="text-6xl font-black uppercase tracking-widest">INTERVALO</h2>
-                        <p className="text-center text-xl font-bold mt-2">{currentSlot.start} - {currentSlot.end}</p>
-                    </div>
-                </div>
-            );
-        }
-
-        return (
-            <div className={`grid gap-6 ${isMorning ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 md:grid-cols-3'} h-full`}>
-                {classes.map(cls => {
-                    const entry = getEntry(cls.id);
-                    return (
-                        <div key={cls.id} className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6 flex flex-col justify-between shadow-xl relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-2 h-full bg-brand-600"></div>
-                            <div className="mb-4">
-                                <h3 className="text-4xl font-black text-white mb-1">{cls.name}</h3>
-                                <div className="h-1 w-12 bg-white/20 rounded-full"></div>
-                            </div>
-                            
-                            <div className="flex-1 flex flex-col justify-center">
-                                {entry ? (
-                                    <>
-                                        <p className="text-sm font-bold text-brand-400 uppercase tracking-wider mb-2">Disciplina</p>
-                                        <p className="text-3xl font-bold text-white mb-6 leading-tight">{entry.subject}</p>
-                                        
-                                        <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Professor(a)</p>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-white">
-                                                {entry.professor.charAt(0)}
-                                            </div>
-                                            <p className="text-xl font-medium text-gray-200">{entry.professor}</p>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="text-center opacity-50">
-                                        <p className="text-2xl font-bold text-gray-500">Aula Vaga</p>
-                                        <p className="text-sm text-gray-600">ou não cadastrada</p>
-                                    </div>
-                                )}
-                            </div>
-                            
-                            <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
-                                <span className="px-3 py-1 bg-white/10 rounded-lg text-sm font-mono text-white">
-                                    {currentSlot ? `${currentSlot.start} - ${currentSlot.end}` : '--:--'}
-                                </span>
-                                <span className="text-xs font-bold text-green-400 uppercase flex items-center gap-1">
-                                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                                    Em andamento
-                                </span>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        );
-    };
-
+    // --- RENDER ---
     return (
-        <div className="min-h-screen bg-transparent p-6 flex flex-col text-white font-sans overflow-hidden">
+        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-red-950 to-black text-white overflow-hidden flex relative selection:bg-red-500/30">
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
 
-            {/* HEADER */}
-            <header className="flex justify-between items-center mb-10 bg-black/60 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-2xl">
-                <div className="flex items-center gap-6">
-                    <a href="/" className="bg-white/10 p-3 rounded-full hover:bg-white/20 transition-all">
-                        <ArrowLeft />
-                    </a>
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 w-auto" alt="Logo" />
-                    <div className="h-12 w-px bg-white/10"></div>
-                    <div>
-                        <h1 className="text-2xl font-bold uppercase tracking-wide">Quadro de Horários</h1>
-                        <p className="text-brand-400 font-medium">{currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Escola Fechada'}</p>
-                    </div>
+            {/* LEFT SIDE: CARDS GRID */}
+            <div className="flex-1 p-6 flex flex-col justify-center h-screen relative z-10">
+                {/* Button Floating within left area like image */}
+                <div className="absolute top-1/2 -translate-y-1/2 -right-6 z-20">
+                     <button 
+                        onClick={() => setShowModal(true)}
+                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-8 rounded-full shadow-lg shadow-red-900/50 flex flex-col items-center gap-1 transition-transform hover:scale-105"
+                    >
+                        <Maximize2 size={24} />
+                        <span className="text-[10px] uppercase tracking-widest">Visualizar</span>
+                        <span className="text-sm">Quadro Geral</span>
+                    </button>
                 </div>
 
-                <div className="flex items-center gap-8">
-                    <div className="text-right">
-                        <p className="text-6xl font-black font-mono tracking-tighter leading-none">
+                <div className={`grid gap-4 w-full max-w-4xl ${classes.length > 3 ? 'grid-cols-2' : 'grid-cols-1'} h-full max-h-[90vh]`}>
+                    {classes.map(cls => {
+                        const entry = getEntry(cls.id);
+                        return (
+                            <div key={cls.id} className="group relative bg-blue-900/20 backdrop-blur-md border border-blue-500/30 rounded-3xl overflow-hidden shadow-2xl flex transition-all hover:bg-blue-900/30">
+                                {/* Vertical Label */}
+                                <div className="w-16 bg-blue-600/20 border-r border-blue-500/30 flex items-center justify-center relative">
+                                    <span className="transform -rotate-90 whitespace-nowrap font-bold tracking-widest text-blue-100 text-sm absolute">
+                                        {cls.name}
+                                    </span>
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+                                    {currentSlot?.type === 'break' ? (
+                                        <div className="text-yellow-400 animate-pulse">
+                                            <p className="text-2xl font-black uppercase">Intervalo</p>
+                                        </div>
+                                    ) : entry ? (
+                                        <>
+                                            <div className="mb-2">
+                                                <Clock size={24} className="text-blue-400 mx-auto mb-1 opacity-50"/>
+                                                <p className="text-xs text-blue-300 font-bold uppercase tracking-wider">{currentSlot?.start} - {currentSlot?.end}</p>
+                                            </div>
+                                            <h3 className="text-2xl md:text-3xl font-black text-white mb-1 leading-tight">{entry.subject}</h3>
+                                            <p className="text-lg text-gray-300 font-medium">{entry.professor}</p>
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col items-center opacity-40">
+                                            <div className="w-12 h-12 rounded-full border-2 border-gray-500 flex items-center justify-center mb-2">
+                                                <Clock size={24} />
+                                            </div>
+                                            <span className="text-xl font-bold tracking-widest uppercase">Sem Aula</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+
+            {/* RIGHT SIDE: INFO & CLOCK */}
+            <div className="w-[35%] relative flex flex-col items-center justify-center p-8 border-l border-white/5 bg-black/20">
+                {/* Vertical Date Line */}
+                <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-red-600/50 to-transparent"></div>
+                <div className="absolute left-6 h-full flex items-center">
+                    <p className="transform -rotate-180 text-gray-500 font-mono text-sm tracking-[0.3em] font-bold whitespace-nowrap" style={{ writingMode: 'vertical-rl' }}>
+                        {dateString}
+                    </p>
+                </div>
+
+                <div className="flex flex-col items-center text-center z-10 pl-12">
+                     {/* Shift Badge */}
+                    <div className="mb-12">
+                        <span className="px-6 py-2 rounded-full bg-blue-900/50 border border-blue-500/50 text-blue-200 font-bold uppercase tracking-widest text-sm shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                            {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno da Tarde' : 'Sem Turno Ativo'}
+                        </span>
+                    </div>
+
+                    {/* Clock */}
+                    <div className="relative mb-12">
+                        <h1 className="text-[10rem] leading-none font-bold font-sans tracking-tighter text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.2)]">
                             {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                        <p className="text-lg text-gray-400 font-medium uppercase mt-1 flex items-center justify-end gap-2">
-                            <Calendar size={18} />
-                            {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+                        </h1>
+                        <p className="text-right text-4xl font-light text-gray-400 -mt-4 mr-4">
+                            {currentTime.getSeconds().toString().padStart(2, '0')}
                         </p>
                     </div>
+
+                    {/* Logo */}
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="w-64 opacity-90 drop-shadow-lg" alt="Logo" />
                 </div>
-            </header>
-
-            {/* CURRENT STATUS BAR */}
-            <div className="mb-8 flex justify-center">
-                {currentSlot ? (
-                    <div className="bg-brand-600 text-white px-8 py-2 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)] flex items-center gap-3 animate-pulse">
-                        <Clock size={20} />
-                        <span className="font-bold text-lg uppercase">{currentSlot.label} ({currentSlot.start} - {currentSlot.end})</span>
-                    </div>
-                ) : (
-                    <div className="bg-gray-800 text-gray-400 px-8 py-2 rounded-full">
-                        Aguardando início das aulas
-                    </div>
-                )}
             </div>
 
-            {/* MAIN GRID */}
-            <main className="flex-1">
-                {renderGrid()}
-            </main>
-            
-            {/* FOOTER ACTIONS */}
-            <div className="mt-8 flex justify-center">
-                <button 
-                    onClick={() => setShowModal(true)}
-                    className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl border border-white/20 transition-all font-bold uppercase tracking-wider shadow-lg"
-                >
-                    <Maximize2 size={20} />
-                    Visão Geral do Quadro
-                </button>
-            </div>
-
-            {/* FULL SCHEDULE MODAL */}
+            {/* MODAL FULL VIEW */}
             {showModal && (
-                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-8">
-                    <div className="w-full h-full max-w-7xl bg-[#0f172a] rounded-3xl border border-white/10 flex flex-col overflow-hidden shadow-2xl">
-                        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/40">
+                 <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-lg flex items-center justify-center p-8">
+                    <div className="w-full h-full max-w-7xl bg-gray-900 rounded-3xl border border-gray-700 flex flex-col overflow-hidden shadow-2xl">
+                        <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800">
                             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                                <Calendar /> Grade Completa
+                                <Calendar className="text-red-500"/> Grade Completa
                             </h2>
-                            <button onClick={() => setShowModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-red-600 hover:text-white transition-all">
+                            <button onClick={() => setShowModal(false)} className="bg-gray-700 p-2 rounded-full hover:bg-red-600 hover:text-white text-gray-300 transition-all">
                                 <X size={24} />
                             </button>
                         </div>
-                        <div className="flex-1 overflow-auto p-8 custom-scrollbar">
-                            {/* Simplified Matrix View */}
+                        <div className="flex-1 overflow-auto p-8 custom-scrollbar bg-gray-900">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                                 {/* Morning */}
-                                <div>
-                                    <h3 className="text-xl font-bold text-brand-400 mb-4 border-b border-brand-900 pb-2">Manhã</h3>
+                                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                                    <h3 className="text-xl font-bold text-blue-400 mb-4 border-b border-gray-700 pb-2 uppercase">Manhã</h3>
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
+                                        <table className="w-full text-sm text-gray-300">
                                             <thead>
-                                                <tr className="text-left text-gray-500 border-b border-white/10">
-                                                    <th className="py-2">Horário</th>
-                                                    {MORNING_CLASSES.map(c => <th key={c.id} className="py-2 px-2 text-white">{c.name}</th>)}
+                                                <tr className="text-left border-b border-gray-700">
+                                                    <th className="py-2 font-bold text-white">Horário</th>
+                                                    {MORNING_CLASSES.map(c => <th key={c.id} className="py-2 px-2 font-bold text-white">{c.name}</th>)}
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-white/5">
+                                            <tbody className="divide-y divide-gray-700">
                                                 {MORNING_SLOTS.filter(s => s.type === 'class').map(slot => (
-                                                    <tr key={slot.id} className="hover:bg-white/5">
-                                                        <td className="py-3 font-mono text-gray-400 text-xs">{slot.start}</td>
+                                                    <tr key={slot.id} className="hover:bg-gray-700/50">
+                                                        <td className="py-3 font-mono text-gray-500 text-xs font-bold">{slot.start}</td>
                                                         {MORNING_CLASSES.map(cls => {
-                                                            // Assuming View for TODAY, otherwise we need a Day Selector in modal
-                                                            // For simplicity showing TODAY's full schedule
                                                             const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
                                                             return (
                                                                 <td key={cls.id + slot.id} className="py-3 px-2">
                                                                     {entry ? (
                                                                         <div>
-                                                                            <p className="font-bold text-white">{entry.subject.slice(0, 10)}..</p>
-                                                                            <p className="text-[10px] text-gray-500">{entry.professor.split(' ')[0]}</p>
+                                                                            <p className="font-bold text-white text-xs">{entry.subject.slice(0, 15)}</p>
+                                                                            <p className="text-[10px] text-gray-500 font-medium">{entry.professor.split(' ')[0]}</p>
                                                                         </div>
-                                                                    ) : <span className="text-white/10">-</span>}
+                                                                    ) : <span className="text-gray-600">-</span>}
                                                                 </td>
                                                             )
                                                         })}
@@ -340,30 +281,30 @@ export const PublicSchedule: React.FC = () => {
                                 </div>
 
                                 {/* Afternoon */}
-                                <div>
-                                    <h3 className="text-xl font-bold text-blue-400 mb-4 border-b border-blue-900 pb-2">Tarde</h3>
+                                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700">
+                                    <h3 className="text-xl font-bold text-red-400 mb-4 border-b border-gray-700 pb-2 uppercase">Tarde</h3>
                                     <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
+                                        <table className="w-full text-sm text-gray-300">
                                             <thead>
-                                                <tr className="text-left text-gray-500 border-b border-white/10">
-                                                    <th className="py-2">Horário</th>
-                                                    {AFTERNOON_CLASSES.map(c => <th key={c.id} className="py-2 px-2 text-white">{c.name}</th>)}
+                                                <tr className="text-left border-b border-gray-700">
+                                                    <th className="py-2 font-bold text-white">Horário</th>
+                                                    {AFTERNOON_CLASSES.map(c => <th key={c.id} className="py-2 px-2 font-bold text-white">{c.name}</th>)}
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-white/5">
+                                            <tbody className="divide-y divide-gray-700">
                                                 {AFTERNOON_SLOTS.filter(s => s.type === 'class').map(slot => (
-                                                    <tr key={slot.id} className="hover:bg-white/5">
-                                                        <td className="py-3 font-mono text-gray-400 text-xs">{slot.start}</td>
+                                                    <tr key={slot.id} className="hover:bg-gray-700/50">
+                                                        <td className="py-3 font-mono text-gray-500 text-xs font-bold">{slot.start}</td>
                                                         {AFTERNOON_CLASSES.map(cls => {
                                                             const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
                                                             return (
                                                                 <td key={cls.id + slot.id} className="py-3 px-2">
                                                                     {entry ? (
                                                                         <div>
-                                                                            <p className="font-bold text-white">{entry.subject.slice(0, 10)}..</p>
-                                                                            <p className="text-[10px] text-gray-500">{entry.professor.split(' ')[0]}</p>
+                                                                            <p className="font-bold text-white text-xs">{entry.subject.slice(0, 15)}</p>
+                                                                            <p className="text-[10px] text-gray-500 font-medium">{entry.professor.split(' ')[0]}</p>
                                                                         </div>
-                                                                    ) : <span className="text-white/10">-</span>}
+                                                                    ) : <span className="text-gray-600">-</span>}
                                                                 </td>
                                                             )
                                                         })}
