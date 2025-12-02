@@ -37,7 +37,8 @@ const AFTERNOON_CLASSES = [
     { id: '3em', name: '3ª SÉRIE EM' },
 ];
 
-const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3";
+// Som de Gongo de Aeroporto (Mais grave e longo)
+const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/999/999-preview.mp3";
 
 export const PublicSchedule: React.FC = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -149,13 +150,13 @@ export const PublicSchedule: React.FC = () => {
                 });
             }
 
-            // Toca por 4 segundos conforme solicitado anteriormente, ou deixa o som acabar se for curto
+            // Toca por 6 segundos (para pegar o gongo inteiro)
             setTimeout(() => {
                 if (audioRef.current) {
                     audioRef.current.pause();
                     audioRef.current.currentTime = 0;
                 }
-            }, 4000);
+            }, 6000);
         }
     };
 
@@ -250,7 +251,7 @@ export const PublicSchedule: React.FC = () => {
                                     
                                     {/* Class Name Header */}
                                     <div className="h-[18%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
-                                        <h2 className="text-[2.2vh] font-black text-gray-200 uppercase tracking-widest">
+                                        <h2 className="text-[3vh] font-black text-gray-200 uppercase tracking-widest">
                                             {cls.name}
                                         </h2>
                                     </div>
@@ -266,16 +267,16 @@ export const PublicSchedule: React.FC = () => {
                                             <>
                                                 {/* Subject Section (Top) */}
                                                 <div className="flex-1 flex flex-col items-center justify-center border-b border-white/5 px-2 bg-gradient-to-b from-[#151515] to-[#121212] w-full text-center">
-                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Disciplina</p>
-                                                    <h3 className="text-[3vh] leading-tight font-black text-white uppercase drop-shadow-md break-words w-full px-1 line-clamp-3">
+                                                    <p className="text-[1.5vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Disciplina</p>
+                                                    <h3 className="text-[5vh] leading-[0.9] font-black text-white uppercase drop-shadow-md break-words w-full px-1 line-clamp-3">
                                                         {entry.subject}
                                                     </h3>
                                                 </div>
 
                                                 {/* Professor Section (Bottom) */}
                                                 <div className="h-[30%] flex flex-col items-center justify-center px-2 bg-[#101010] w-full text-center">
-                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Professor</p>
-                                                    <p className="text-[2vh] font-bold text-red-500 uppercase tracking-wide truncate w-full px-1">
+                                                    <p className="text-[1.5vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Professor</p>
+                                                    <p className="text-[2.8vh] font-bold text-red-500 uppercase tracking-wide truncate w-full px-1">
                                                         {entry.professor}
                                                     </p>
                                                 </div>
