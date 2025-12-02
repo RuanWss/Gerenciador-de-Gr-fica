@@ -145,39 +145,41 @@ export const PublicSchedule: React.FC = () => {
 
     const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
 
-    // Definição rígida de grid para alinhamento
+    // Grid Layout Logic
     const gridCols = currentShift === 'morning' ? 4 : 3;
 
     return (
         <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
 
-            {/* --- HEADER SECTION (Fixed Height 20%) --- */}
-            <div className="h-[20%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10">
-                <div className="flex flex-col items-center w-full">
-                    <div className="flex items-center gap-8 justify-center w-full">
-                         <img 
-                            src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
-                            alt="Logo" 
-                            className="h-[10vh] w-auto object-contain drop-shadow-xl"
-                        />
-                        <h1 className="text-[11vh] leading-none font-bold tracking-tighter text-white drop-shadow-2xl font-mono tabular-nums">
-                            {timeString}
-                        </h1>
-                    </div>
-                    <div className="mt-2 bg-white/5 px-8 py-1 rounded-full border border-white/5">
-                        <p className="text-[2vh] text-gray-300 font-bold tracking-[0.3em] uppercase">
-                            {dateString}
-                        </p>
-                    </div>
+            {/* --- HEADER SECTION (Fixed Height 25%) --- */}
+            <div className="h-[25%] w-full flex flex-col items-center justify-center relative shrink-0 border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 p-4">
+                
+                {/* Logo Top Centered */}
+                <img 
+                    src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
+                    alt="Logo" 
+                    className="h-[6vh] w-auto object-contain mb-2 drop-shadow-lg"
+                />
+
+                {/* Clock Centered */}
+                <h1 className="text-[12vh] leading-none font-black tracking-tighter text-white drop-shadow-2xl font-mono tabular-nums">
+                    {timeString}
+                </h1>
+                
+                {/* Date Centered */}
+                <div className="mt-2 bg-white/5 px-6 py-1 rounded-full border border-white/5">
+                    <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
+                        {dateString}
+                    </p>
                 </div>
             </div>
 
-            {/* --- STATUS INDICATOR BAR (Fixed Height 6%) --- */}
-            <div className="h-[6%] flex items-center justify-center shrink-0 z-10 mt-2">
-                 <div className="flex items-center gap-3 px-6 py-1.5 bg-black/40 rounded-full border border-white/10 shadow-lg backdrop-blur-md">
+            {/* --- SHIFT INDICATOR (Fixed Height 5%) --- */}
+            <div className="h-[5%] flex items-center justify-center shrink-0 z-10">
+                 <div className="flex items-center gap-3 px-6 py-1 bg-black/40 rounded-full border border-white/10 shadow-lg backdrop-blur-md">
                     <span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
-                    <span className="text-[1.6vh] font-bold tracking-[0.15em] text-gray-200 uppercase">
+                    <span className="text-[1.4vh] font-bold tracking-[0.15em] text-gray-200 uppercase">
                         {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Fora de Horário'}
                     </span>
                 </div>
@@ -193,7 +195,7 @@ export const PublicSchedule: React.FC = () => {
                      </div>
                 ) : (
                     <div 
-                        className="grid gap-6 w-full h-full" 
+                        className="grid gap-6 w-full h-full max-w-[95vw] mx-auto" 
                         style={{ 
                             gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` 
                         }}
@@ -201,40 +203,40 @@ export const PublicSchedule: React.FC = () => {
                         {activeClasses.map(cls => {
                             const entry = getEntry(cls.id);
                             return (
-                                <div key={cls.id} className="flex flex-col bg-[#121212] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl h-full relative group">
+                                <div key={cls.id} className="flex flex-col bg-[#121212] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl h-full relative group transform transition-transform duration-300 hover:scale-[1.01]">
                                     
-                                    {/* Card Header (Fixed Height 15%) */}
+                                    {/* Class Name Header */}
                                     <div className="h-[15%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
                                         <h2 className="text-[2.5vh] font-black text-gray-200 uppercase tracking-widest">
                                             {cls.name}
                                         </h2>
                                     </div>
                                     
-                                    {/* Card Body (Remaining 85%) */}
-                                    <div className="h-[85%] relative w-full">
+                                    {/* Card Content */}
+                                    <div className="h-[85%] relative w-full flex flex-col">
                                         {currentSlot?.type === 'break' ? (
                                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/10 z-20">
                                                 <Clock size={64} className="text-yellow-500 mb-6 drop-shadow-lg animate-bounce"/>
                                                 <span className="text-[4vh] font-black text-yellow-500 uppercase tracking-[0.2em]">INTERVALO</span>
                                              </div>
                                         ) : entry ? (
-                                            <div className="flex flex-col h-full">
-                                                {/* Subject Section - Fixed 60% Height */}
-                                                <div className="h-[60%] flex flex-col items-center justify-center border-b border-white/5 px-4 bg-gradient-to-b from-[#151515] to-[#121212]">
-                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-3">Disciplina</p>
-                                                    <h3 className="text-[3.2vh] leading-none font-black text-white text-center uppercase drop-shadow-md line-clamp-2">
+                                            <>
+                                                {/* Subject Section (Top) */}
+                                                <div className="flex-1 flex flex-col items-center justify-center border-b border-white/5 px-4 bg-gradient-to-b from-[#151515] to-[#121212] w-full text-center">
+                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-2">Disciplina</p>
+                                                    <h3 className="text-[3.5vh] leading-tight font-black text-white uppercase drop-shadow-md break-words w-full px-2">
                                                         {entry.subject}
                                                     </h3>
                                                 </div>
 
-                                                {/* Professor Section - Fixed 40% Height */}
-                                                <div className="h-[40%] flex flex-col items-center justify-center px-4 bg-[#101010]">
-                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-2">Professor</p>
-                                                    <p className="text-[2.2vh] font-bold text-red-500 text-center uppercase tracking-wide truncate w-full">
+                                                {/* Professor Section (Bottom) */}
+                                                <div className="h-[35%] flex flex-col items-center justify-center px-4 bg-[#101010] w-full text-center">
+                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Professor</p>
+                                                    <p className="text-[2.2vh] font-bold text-red-500 uppercase tracking-wide truncate w-full px-2">
                                                         {entry.professor}
                                                     </p>
                                                 </div>
-                                            </div>
+                                            </>
                                         ) : (
                                             <div className="flex flex-col items-center justify-center h-full opacity-20">
                                                 <span className="text-[3vh] font-bold tracking-widest uppercase text-gray-600">LIVRE</span>
