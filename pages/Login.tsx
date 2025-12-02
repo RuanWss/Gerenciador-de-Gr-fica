@@ -6,8 +6,8 @@ import { SystemConfig } from '../types';
 import { Megaphone, CalendarClock } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const [email, setEmail] = useState('graficacemal@gmail.com');
-  const [password, setPassword] = useState('cemal2016');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const { login } = useAuth();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +47,7 @@ export const Login: React.FC = () => {
       {/* Schedule Button */}
       <a 
         href="/#horarios"
-        className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-full transition-all text-sm font-medium"
+        className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-full transition-all text-sm font-medium shadow-lg"
       >
         <CalendarClock size={18} />
         <span className="hidden sm:inline">Quadro de Horários</span>
@@ -73,6 +73,7 @@ export const Login: React.FC = () => {
                 className="h-32 w-auto object-contain drop-shadow-lg"
                 />
             </div>
+            <h2 className="text-2xl font-bold text-white">Bem-vindo</h2>
             <p className="mt-2 text-sm text-gray-300">
                 Acesse para enviar provas ou gerenciar impressões.
             </p>
@@ -87,7 +88,7 @@ export const Login: React.FC = () => {
                     type="email"
                     autoComplete="email"
                     required
-                    className="appearance-none rounded-t-md relative block w-full px-3 py-3 border border-gray-600 bg-gray-900/50 placeholder-gray-400 text-white focus:outline-none focus:ring-brand-500 focus:border-brand-500 focus:z-10 sm:text-sm"
+                    className="appearance-none rounded-t-md relative block w-full px-3 py-3 border border-gray-300 bg-white placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 focus:z-10 sm:text-sm"
                     placeholder="Endereço de Email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -100,7 +101,7 @@ export const Login: React.FC = () => {
                         name="password"
                         type="password"
                         required
-                        className="appearance-none rounded-b-md relative block w-full px-3 py-3 border border-gray-600 bg-gray-900/50 placeholder-gray-400 text-white focus:outline-none focus:ring-brand-500 focus:border-brand-500 focus:z-10 sm:text-sm"
+                        className="appearance-none rounded-b-md relative block w-full px-3 py-3 border border-gray-300 bg-white placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 focus:z-10 sm:text-sm"
                         placeholder="Senha"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
@@ -109,13 +110,13 @@ export const Login: React.FC = () => {
             </div>
 
             {error && (
-                <div className="text-red-300 text-sm text-center bg-red-900/30 border border-red-800 p-2 rounded">
+                <div className="text-red-200 text-sm text-center bg-red-900/50 border border-red-500/50 p-2 rounded">
                 {error}
                 </div>
             )}
 
             <div>
-                <Button type="submit" isLoading={isLoading} className="w-full h-12 text-lg font-bold tracking-wide shadow-lg shadow-brand-900/50">
+                <Button type="submit" isLoading={isLoading} className="w-full h-12 text-lg font-bold tracking-wide shadow-lg shadow-brand-900/40 hover:shadow-brand-900/60 transform transition-all hover:-translate-y-0.5">
                 Entrar no Sistema
                 </Button>
             </div>
