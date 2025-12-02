@@ -3,11 +3,18 @@ import { useAuth, AuthProvider } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { TeacherDashboard } from './pages/TeacherDashboard';
 import { PrintShopDashboard } from './pages/PrintShopDashboard';
+import { PublicSchedule } from './pages/PublicSchedule';
 import { UserRole } from './types';
 import { LogOut } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
+  
+  // Check for Public Schedule Route (simple router implementation)
+  const path = window.location.pathname;
+  if (path === '/horarios') {
+      return <PublicSchedule />;
+  }
 
   if (!isAuthenticated) {
     return <Login />;
@@ -25,7 +32,7 @@ const AppContent: React.FC = () => {
                 className="h-14 w-auto object-contain"
               />
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-white/10 text-white border border-white/10">
-                {user?.role === UserRole.TEACHER ? 'Portal do Professor' : 'Portal da Gráfica'}
+                {user?.role === UserRole.TEACHER ? 'Portal do Professor' : 'Painel da Escola'}
               </span>
             </div>
             <div className="flex items-center gap-4">

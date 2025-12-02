@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getExams, saveExam } from '../services/firebaseService'; // Changed import
+import { getExams, saveExam, uploadExamFile, listenToSystemConfig } from '../services/firebaseService';
 import { generateExamQuestions, suggestExamInstructions } from '../services/geminiService';
-import { ExamRequest, ExamStatus } from '../types';
+import { ExamRequest, ExamStatus, SystemConfig } from '../types';
 import { Button } from '../components/Button';
-import { Plus, FileText, BrainCircuit, RefreshCw, UploadCloud, AlertTriangle } from 'lucide-react';
+import { Plus, FileText, BrainCircuit, RefreshCw, UploadCloud, AlertTriangle, Megaphone, Info } from 'lucide-react';
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -20,9 +20,11 @@ export const TeacherDashboard: React.FC = () => {
   const [dueDate, setDueDate] = useState('');
   const [instructions, setInstructions] = useState('');
   const [fileName, setFileName] = useState('');
+  const [file, setFile] = useState<File | null>(null);
 
   // UI State
   const [showDateWarning, setShowDateWarning] = useState(false);
+  const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
 
   // AI State
   const [aiTopic, setAiTopic] = useState('');
@@ -41,6 +43,12 @@ export const TeacherDashboard: React.FC = () => {
         }
     };
     fetchExams();
+    
+    // Listen to System Config
+    const unsubscribe = listenToSystemConfig((config) => {
+        setSysConfig(config);
+    });
+    return () => unsubscribe();
   }, [user, activeTab]);
 
   // Pre-fill user data
@@ -55,6 +63,7 @@ export const TeacherDashboard: React.FC = () => {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
       setFileName(e.target.files[0].name);
     }
   };
@@ -82,30 +91,40 @@ export const TeacherDashboard: React.FC = () => {
     if (!user) return;
     setIsSubmitting(true);
 
-    const newExam: ExamRequest = {
-      id: '', // Firestore will generate
-      teacherId: user.id,
-      teacherName: user.name,
-      subject,
-      title,
-      quantity: 0,
-      gradeLevel,
-      instructions,
-      fileName: fileName || 'Sem anexo (apenas instruções)',
-      status: ExamStatus.PENDING,
-      createdAt: Date.now(),
-      dueDate
-    };
-
     try {
+        let uploadedUrl = '';
+        if (file) {
+            uploadedUrl = await uploadExamFile(file);
+        }
+
+        const newExam: ExamRequest = {
+            id: '', // Firestore will generate
+            teacherId: user.id,
+            teacherName: user.name,
+            subject,
+            title,
+            quantity: 0,
+            gradeLevel,
+            instructions,
+            fileName: fileName || 'Sem anexo (apenas instruções)',
+            fileUrl: uploadedUrl,
+            status: ExamStatus.PENDING,
+            createdAt: Date.now(),
+            dueDate
+        };
+
         await saveExam(newExam);
+        
+        // Reset form
         setActiveTab('list');
         setTitle('');
         setFileName('');
+        setFile(null);
         setDueDate('');
         setShowDateWarning(false);
     } catch (error) {
-        alert('Erro ao enviar solicitação.');
+        console.error(error);
+        alert('Erro ao enviar solicitação. Tente novamente.');
     } finally {
         setIsSubmitting(false);
     }
@@ -132,8 +151,29 @@ export const TeacherDashboard: React.FC = () => {
     setInstructionLoading(false);
   };
 
+  const getBannerStyles = (type: string) => {
+      switch(type) {
+          case 'warning': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+          case 'error': return 'bg-red-100 text-red-800 border-red-200';
+          case 'success': return 'bg-green-100 text-green-800 border-green-200';
+          default: return 'bg-blue-100 text-blue-800 border-blue-200';
+      }
+  };
+
   return (
     <div className="space-y-6 relative">
+      
+      {/* System Announcement Banner */}
+      {sysConfig?.isBannerActive && sysConfig.bannerMessage && (
+          <div className={`p-4 rounded-lg border flex items-start gap-3 shadow-sm ${getBannerStyles(sysConfig.bannerType)}`}>
+             <Megaphone className="shrink-0 mt-0.5" size={20} />
+             <div>
+                 <p className="font-bold text-sm uppercase mb-1">Aviso da Escola</p>
+                 <p className="text-sm">{sysConfig.bannerMessage}</p>
+             </div>
+          </div>
+      )}
+
       {/* Date Warning Modal */}
       {showDateWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
