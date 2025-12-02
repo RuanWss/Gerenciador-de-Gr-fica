@@ -60,6 +60,7 @@ export const PublicSchedule: React.FC = () => {
             setSchedule(data || []);
         });
         const unsubscribeConfig = listenToSystemConfig((config) => {
+            console.log("Configuração do Sistema Recebida:", config);
             setSysConfig(config);
         });
         return () => {
@@ -208,24 +209,32 @@ export const PublicSchedule: React.FC = () => {
     // Grid Layout Logic
     const gridCols = currentShift === 'morning' ? 4 : 3;
 
-    // Warning Visibility Logic
+    // Warning Visibility Logic (ROBUSTO)
     const isWarningVisible = () => {
-        if (!sysConfig?.isBannerActive || !sysConfig?.showOnTV || !sysConfig?.bannerMessage) return false;
+        // Checagem básica: Configuração existe, aviso está ativo e tem mensagem
+        if (!sysConfig?.isBannerActive || !sysConfig?.showOnTV || !sysConfig?.bannerMessage) {
+            return false;
+        }
         
         const now = new Date();
         
-        // Check Start Time
-        if (sysConfig.tvStart) {
+        // Validação da Data de Início
+        if (sysConfig.tvStart && sysConfig.tvStart.trim() !== '') {
             const startDate = new Date(sysConfig.tvStart);
-            if (startDate > now) return false;
+            if (!isNaN(startDate.getTime())) {
+                if (now < startDate) return false; // Ainda não chegou a hora
+            }
         }
 
-        // Check End Time
-        if (sysConfig.tvEnd) {
+        // Validação da Data de Fim
+        if (sysConfig.tvEnd && sysConfig.tvEnd.trim() !== '') {
             const endDate = new Date(sysConfig.tvEnd);
-            if (endDate < now) return false;
+            if (!isNaN(endDate.getTime())) {
+                if (now > endDate) return false; // Já passou da hora
+            }
         }
 
+        // Se passou por todas as verificações (ou se as datas estavam vazias), mostra o aviso
         return true;
     };
 
@@ -263,7 +272,7 @@ export const PublicSchedule: React.FC = () => {
                 </h1>
                 
                 {/* Date & Warning Area */}
-                <div className="mt-2 flex items-center justify-center gap-4">
+                <div className="mt-2 flex items-center justify-center gap-4 relative z-50">
                     <div className="bg-white/5 px-6 py-2 rounded-full border border-white/5">
                         <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
                             {dateString}
@@ -272,9 +281,9 @@ export const PublicSchedule: React.FC = () => {
 
                     {/* SYSTEM WARNING */}
                     {isWarningVisible() && (
-                        <div className="bg-black/60 px-6 py-2 rounded-full border border-yellow-400 animate-pulse shadow-[0_0_15px_rgba(250,204,21,0.3)] flex items-center gap-3 backdrop-blur-md">
-                            <Megaphone size={16} className="text-yellow-400" />
-                            <p className="text-[1.6vh] text-yellow-100 font-bold tracking-wide uppercase">
+                        <div className="bg-black/60 px-6 py-2 rounded-full border-2 border-yellow-400 animate-pulse shadow-[0_0_20px_rgba(250,204,21,0.5)] flex items-center gap-3 backdrop-blur-md">
+                            <Megaphone size={18} className="text-yellow-400 animate-bounce" />
+                            <p className="text-[1.8vh] text-yellow-100 font-bold tracking-wide uppercase">
                                 {sysConfig?.bannerMessage}
                             </p>
                         </div>
