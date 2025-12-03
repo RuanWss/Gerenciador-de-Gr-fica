@@ -21,8 +21,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        // VERIFICAÇÃO DE LOGIN DE FREQUÊNCIA (TERMINAL)
+        if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Terminal de Frequência',
+                email: firebaseUser.email,
+                role: UserRole.ATTENDANCE_TERMINAL,
+                subject: '',
+                classes: []
+              });
+              setLoading(false);
+              return;
+        }
+
         // VERIFICAÇÃO DE ADMIN (GRÁFICA)
-        // Força o acesso para a conta específica por UID ou Email
         if (
              firebaseUser.uid === 'QX1GxorHhxU3jPUVXAJVLRndb7E2' || 
              firebaseUser.email === 'graficacemal@gmail.com'
@@ -31,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: firebaseUser.uid,
                 name: 'Central de Cópias',
                 email: firebaseUser.email || 'graficacemal@gmail.com',
-                role: UserRole.PRINTSHOP, // Força o papel de Gráfica
+                role: UserRole.PRINTSHOP,
                 subject: '',
                 classes: []
               });

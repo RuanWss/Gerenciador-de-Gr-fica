@@ -4,6 +4,7 @@ import { Login } from './pages/Login';
 import { TeacherDashboard } from './pages/TeacherDashboard';
 import { PrintShopDashboard } from './pages/PrintShopDashboard';
 import { PublicSchedule } from './pages/PublicSchedule';
+import { AttendanceTerminal } from './pages/AttendanceTerminal';
 import { UserRole } from './types';
 import { LogOut } from 'lucide-react';
 
@@ -26,13 +27,17 @@ const AppContent: React.FC = () => {
     };
   }, []);
   
-  // Rota segura para o Quadro de Horários (aceita /horarios ou /#horarios)
   if (currentPath === '/horarios' || currentHash === '#horarios') {
       return <PublicSchedule />;
   }
 
   if (!isAuthenticated) {
     return <Login />;
+  }
+
+  // Se for o login do terminal, mostra a tela Kiosk
+  if (user?.role === UserRole.ATTENDANCE_TERMINAL) {
+      return <AttendanceTerminal />;
   }
 
   return (

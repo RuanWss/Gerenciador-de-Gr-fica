@@ -9,7 +9,9 @@ import {
   where,
   setDoc,
   getDoc,
-  onSnapshot
+  onSnapshot,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 import { 
   createUserWithEmailAndPassword, 
@@ -23,7 +25,7 @@ import {
 } from 'firebase/storage';
 import { initializeApp } from 'firebase/app';
 import { db, auth, storage } from '../firebaseConfig';
-import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry } from '../types';
+import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog } from '../types';
 
 // Nome das coleções no Firestore
 const EXAMS_COLLECTION = 'exams';
@@ -32,21 +34,32 @@ const CLASSES_COLLECTION = 'classes';
 const STUDENTS_COLLECTION = 'students';
 const ANSWER_KEYS_COLLECTION = 'answer_keys';
 const CORRECTIONS_COLLECTION = 'corrections';
-const CONFIG_COLLECTION = 'config'; // Coleção para configurações globais
+const CONFIG_COLLECTION = 'config';
 const SCHEDULE_COLLECTION = 'schedules';
+const ATTENDANCE_COLLECTION = 'attendance_logs';
 
 // --- STORAGE ---
 
 export const uploadExamFile = async (file: File): Promise<string> => {
   if (!file) return '';
   try {
-    // Cria uma referência única para o arquivo: exams/timestamp_nomearquivo
     const storageRef = ref(storage, `exams/${Date.now()}_${file.name}`);
     const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    return downloadURL;
+    return await getDownloadURL(snapshot.ref);
   } catch (error) {
     console.error("Erro ao fazer upload:", error);
+    throw error;
+  }
+};
+
+export const uploadStudentPhoto = async (file: File): Promise<string> => {
+  if (!file) return '';
+  try {
+    const storageRef = ref(storage, `students/${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+  } catch (error) {
+    console.error("Erro ao fazer upload da foto:", error);
     throw error;
   }
 };
@@ -68,7 +81,6 @@ export const getExams = async (): Promise<ExamRequest[]> => {
 
 export const saveExam = async (exam: ExamRequest): Promise<void> => {
   try {
-    // Removemos o ID se ele for gerado aleatoriamente no client, deixamos o Firestore criar
     const { id, ...examData } = exam;
     await addDoc(collection(db, EXAMS_COLLECTION), examData);
   } catch (error) {
@@ -86,11 +98,10 @@ export const updateExamStatus = async (examId: string, status: ExamStatus): Prom
   }
 };
 
-// --- ANSWER KEYS (GABARITOS) ---
+// --- ANSWER KEYS ---
 
 export const saveAnswerKey = async (key: AnswerKey): Promise<void> => {
   try {
-    // Se tiver ID, atualiza, senão cria
     if (key.id) {
         const docRef = doc(db, ANSWER_KEYS_COLLECTION, key.id);
         const { id, ...data } = key;
@@ -127,7 +138,7 @@ export const deleteAnswerKey = async (id: string): Promise<void> => {
   }
 };
 
-// --- CORRECTIONS (ESTATÍSTICAS) ---
+// --- CORRECTIONS ---
 
 export const saveStudentCorrection = async (correction: StudentCorrection): Promise<void> => {
     try {
@@ -153,7 +164,6 @@ export const getStudentCorrections = async (answerKeyId?: string): Promise<Stude
     }
 };
 
-
 // --- USERS & ADMIN ---
 
 export const getUserProfile = async (uid: string): Promise<User | null> => {
@@ -169,7 +179,6 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
   }
 };
 
-// Função para criar usuário sem deslogar o admin (Gráfica)
 export const createTeacherUser = async (user: User, password: string): Promise<void> => {
   const secondaryApp = initializeApp(auth.app.options, 'Secondary');
   const secondaryAuth = getAuth(secondaryApp);
@@ -249,7 +258,6 @@ export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
     }
 };
 
-// Nova função para ouvir em tempo real
 export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) => {
     const q = query(collection(db, SCHEDULE_COLLECTION));
     return onSnapshot(q, (snapshot) => {
@@ -260,7 +268,6 @@ export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) =
 
 export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
     try {
-        // ID composto para facilitar a sobreposição: "turma_dia_slot"
         const docId = `${entry.classId}_${entry.dayOfWeek}_${entry.slotId}`;
         await setDoc(doc(db, SCHEDULE_COLLECTION, docId), { ...entry, id: docId });
     } catch (error) {
@@ -269,7 +276,7 @@ export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => 
     }
 };
 
-// --- SYSTEM CONFIG (REALTIME) ---
+// --- SYSTEM CONFIG ---
 
 export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
     try {
@@ -280,7 +287,21 @@ export const updateSystemConfig = async (config: SystemConfig): Promise<void> =>
     }
 };
 
-// Hook-like function para ouvir mudanças
+export const clearSystemAnnouncement = async (): Promise<void> => {
+     try {
+        const docRef = doc(db, CONFIG_COLLECTION, 'general');
+        await setDoc(docRef, {
+            bannerMessage: '',
+            isBannerActive: false,
+            showOnTV: false,
+            tvStart: '',
+            tvEnd: ''
+        }, { merge: true });
+    } catch (error) {
+        console.error("Erro ao limpar config:", error);
+    }
+};
+
 export const listenToSystemConfig = (callback: (config: SystemConfig | null) => void) => {
     const docRef = doc(db, CONFIG_COLLECTION, 'general');
     return onSnapshot(docRef, (doc) => {
@@ -290,4 +311,58 @@ export const listenToSystemConfig = (callback: (config: SystemConfig | null) => 
             callback(null);
         }
     });
+};
+
+// --- ATTENDANCE SYSTEM ---
+
+export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
+    try {
+        // Verificar se já existe registro para este aluno HOJE
+        const q = query(
+            collection(db, ATTENDANCE_COLLECTION),
+            where('studentId', '==', log.studentId),
+            where('dateString', '==', log.dateString)
+        );
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+            // Já existe registro
+            console.log("Frequência já registrada para hoje.");
+            return false;
+        }
+
+        const { id, ...data } = log;
+        await addDoc(collection(db, ATTENDANCE_COLLECTION), data);
+        return true;
+    } catch (error) {
+        console.error("Erro ao registrar frequência", error);
+        throw error;
+    }
+};
+
+export const getAttendanceLogs = async (dateString?: string): Promise<AttendanceLog[]> => {
+    try {
+        let q = query(collection(db, ATTENDANCE_COLLECTION), orderBy('timestamp', 'desc'), limit(100));
+        
+        if (dateString) {
+             q = query(collection(db, ATTENDANCE_COLLECTION), where('dateString', '==', dateString), orderBy('timestamp', 'desc'));
+        }
+        
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
+    } catch (error) {
+        console.error("Erro ao buscar logs de frequência", error);
+        return [];
+    }
+};
+
+// Busca todos os logs para relatórios (pode ser pesado em produção, ideal filtrar por range de data)
+export const getAllAttendanceLogs = async (): Promise<AttendanceLog[]> => {
+    try {
+        const querySnapshot = await getDocs(collection(db, ATTENDANCE_COLLECTION));
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
+    } catch (error) {
+        console.error("Erro ao buscar histórico completo", error);
+        return [];
+    }
 };

@@ -1,6 +1,7 @@
 export enum UserRole {
   TEACHER = 'TEACHER',
-  PRINTSHOP = 'PRINTSHOP'
+  PRINTSHOP = 'PRINTSHOP',
+  ATTENDANCE_TERMINAL = 'ATTENDANCE_TERMINAL' // Novo papel para o quiosque
 }
 
 export interface User {
@@ -8,9 +9,9 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  password?: string; // Adicionado para login
-  subject?: string;  // Disciplina do professor
-  classes?: string[]; // Turmas associadas
+  password?: string;
+  subject?: string;
+  classes?: string[];
 }
 
 export enum ExamStatus {
@@ -29,10 +30,10 @@ export interface ExamRequest {
   gradeLevel: string;
   instructions: string;
   fileName: string;
-  fileUrl?: string; // URL do arquivo no Storage
+  fileUrl?: string;
   status: ExamStatus;
-  createdAt: number; // timestamp
-  dueDate: string; // YYYY-MM-DD
+  createdAt: number;
+  dueDate: string;
 }
 
 export interface AIGeneratedQuestion {
@@ -43,7 +44,7 @@ export interface AIGeneratedQuestion {
 
 export interface SchoolClass {
   id: string;
-  name: string; // Ex: 6º Ano A
+  name: string;
   shift: 'morning' | 'afternoon';
 }
 
@@ -52,13 +53,14 @@ export interface Student {
   name: string;
   classId: string;
   className: string;
+  photoUrl?: string; // Foto para reconhecimento facial
 }
 
 export interface AnswerKey {
   id: string;
-  title: string; // Nome da prova
+  title: string;
   numQuestions: number;
-  correctAnswers: Record<number, string>; // { 1: 'A', 2: 'B', ... }
+  correctAnswers: Record<number, string>;
   createdAt: number;
 }
 
@@ -67,8 +69,8 @@ export interface StudentCorrection {
   answerKeyId: string;
   studentName: string;
   score: number;
-  answers: Record<number, string>; // Respostas do aluno
-  hits: number[]; // Array com numeros das questoes que acertou
+  answers: Record<number, string>;
+  hits: number[];
   date: number;
 }
 
@@ -76,29 +78,37 @@ export interface SystemConfig {
   bannerMessage: string;
   bannerType: 'info' | 'warning' | 'error' | 'success';
   isBannerActive: boolean;
-  // TV Control
   showOnTV?: boolean;
-  tvStart?: string; // ISO Date String
-  tvEnd?: string;   // ISO Date String
+  tvStart?: string;
+  tvEnd?: string;
 }
-
-// --- SCHEDULE TYPES ---
 
 export interface TimeSlot {
   id: string;
-  start: string; // "07:20"
-  end: string;   // "08:10"
+  start: string;
+  end: string;
   type: 'class' | 'break';
-  label: string; // "1º Horário" or "Intervalo"
+  label: string;
   shift: 'morning' | 'afternoon';
 }
 
 export interface ScheduleEntry {
-  id: string; // composite: classId_dayOfWeek_slotId
-  classId: string; // "6ano", "1em", etc. (Using fixed IDs for simplicity based on prompt)
+  id: string;
+  classId: string;
   className: string;
-  dayOfWeek: number; // 1 = Monday, 5 = Friday
+  dayOfWeek: number;
   slotId: string;
   subject: string;
   professor: string;
+}
+
+export interface AttendanceLog {
+  id: string;
+  studentId: string;
+  studentName: string;
+  className: string;
+  studentPhotoUrl?: string;
+  timestamp: number;
+  type: 'entry' | 'exit';
+  dateString: string;
 }

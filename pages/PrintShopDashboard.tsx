@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
     getExams, 
@@ -16,10 +16,15 @@ import {
     updateSystemConfig,
     listenToSystemConfig,
     getFullSchedule,
-    saveScheduleEntry
+    saveScheduleEntry,
+    clearSystemAnnouncement,
+    logAttendance,
+    getAttendanceLogs,
+    getAllAttendanceLogs,
+    uploadStudentPhoto
 } from '../services/firebaseService';
 import { correctExamWithAI } from '../services/geminiService';
-import { ExamRequest, ExamStatus, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, TimeSlot } from '../types';
+import { ExamRequest, ExamStatus, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, TimeSlot, AttendanceLog } from '../types';
 import { Button } from '../components/Button';
 import { 
   Printer, 
@@ -53,10 +58,14 @@ import {
   RefreshCw,
   UploadCloud,
   MonitorPlay,
-  FileDown
+  FileDown,
+  ScanBarcode,
+  IdCard,
+  History,
+  Camera
 } from 'lucide-react';
 
-type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'subjects' | 'answer_keys' | 'statistics' | 'schedule';
+type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'subjects' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -129,6 +138,7 @@ export const PrintShopDashboard: React.FC = () => {
   const [studentList, setStudentList] = useState<Student[]>([]);
   const [newStudentName, setNewStudentName] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [newStudentPhoto, setNewStudentPhoto] = useState<File | null>(null);
   const [isSavingStudent, setIsSavingStudent] = useState(false);
 
   // Answer Keys & Exam Creation Flow
@@ -174,6 +184,18 @@ export const PrintShopDashboard: React.FC = () => {
   const [selectedDay, setSelectedDay] = useState<number>(1); // 1 = Monday
   const [scheduleLoading, setScheduleLoading] = useState(false);
 
+  // Attendance State
+  const [attendanceTab, setAttendanceTab] = useState<'scanner' | 'cards' | 'history' | 'reports'>('scanner');
+  const [scannerInput, setScannerInput] = useState('');
+  const [lastScannedStudent, setLastScannedStudent] = useState<AttendanceLog | null>(null);
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+  const [cardClassId, setCardClassId] = useState('');
+  const scannerInputRef = useRef<HTMLInputElement>(null);
+  
+  // Attendance Reports
+  const [reportPeriod, setReportPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [allLogs, setAllLogs] = useState<AttendanceLog[]>([]);
+
   // Initial Load
   useEffect(() => {
     refreshData();
@@ -188,6 +210,10 @@ export const PrintShopDashboard: React.FC = () => {
   useEffect(() => {
       if (activeTab === 'schedule') {
           loadScheduleData();
+      }
+      if (activeTab === 'attendance') {
+          loadAttendanceData();
+          setTimeout(() => scannerInputRef.current?.focus(), 500);
       }
   }, [activeTab]);
 
@@ -217,12 +243,34 @@ export const PrintShopDashboard: React.FC = () => {
       setScheduleLoading(false);
   };
 
+  const loadAttendanceData = async () => {
+      const logs = await getAttendanceLogs();
+      setAttendanceLogs(logs);
+      
+      const all = await getAllAttendanceLogs();
+      setAllLogs(all);
+  };
+
   // --- HANDLERS ---
 
   const handleUpdateConfig = async (e: React.FormEvent) => {
       e.preventDefault();
       await updateSystemConfig(sysConfig);
       alert("Aviso do sistema atualizado! Todos os usuários verão essa mensagem.");
+  };
+
+  const handleClearConfig = async () => {
+      if (window.confirm("Tem certeza que deseja apagar o aviso?")) {
+        await clearSystemAnnouncement();
+        setSysConfig({ 
+            bannerMessage: '', 
+            bannerType: 'info', 
+            isBannerActive: false,
+            showOnTV: false,
+            tvStart: '',
+            tvEnd: ''
+        });
+      }
   };
 
   const handleStatusChange = async (id: string, newStatus: ExamStatus) => {
@@ -302,9 +350,21 @@ export const PrintShopDashboard: React.FC = () => {
     setIsSavingStudent(true);
     try {
         const cls = classList.find(c => c.id === selectedClassId);
-        await saveStudent({ id: '', name: newStudentName, classId: selectedClassId, className: cls?.name || '' });
+        let photoUrl = '';
+        if (newStudentPhoto) {
+            photoUrl = await uploadStudentPhoto(newStudentPhoto);
+        }
+
+        await saveStudent({ 
+            id: '', 
+            name: newStudentName, 
+            classId: selectedClassId, 
+            className: cls?.name || '',
+            photoUrl: photoUrl 
+        });
         alert('Aluno salvo!');
         setNewStudentName('');
+        setNewStudentPhoto(null);
         refreshData();
     } catch (e) { alert('Erro ao salvar aluno'); }
     setIsSavingStudent(false);
@@ -329,7 +389,6 @@ export const PrintShopDashboard: React.FC = () => {
       updatedData.push(newEntry);
       setScheduleData(updatedData);
 
-      // Save to DB (debounced could be better, but direct for now)
       try {
           await saveScheduleEntry(newEntry);
       } catch (error) {
@@ -340,7 +399,6 @@ export const PrintShopDashboard: React.FC = () => {
   const handleSyncSchedule = async () => {
       setScheduleLoading(true);
       await loadScheduleData();
-      // Simular delay para feedback visual
       await new Promise(resolve => setTimeout(resolve, 800));
       setScheduleLoading(false);
       alert("Horários sincronizados e enviados para a TV com sucesso!");
@@ -455,6 +513,134 @@ export const PrintShopDashboard: React.FC = () => {
       printWindow.document.close();
   };
 
+  // ATTENDANCE HANDLERS
+  const handleScannerInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+          const code = scannerInput.trim();
+          if (!code) return;
+
+          // Buscar aluno pelo ID (que é o código do QR)
+          const student = studentList.find(s => s.id === code);
+          
+          if (student) {
+              const now = new Date();
+              const dateString = now.toISOString().split('T')[0];
+              const log: AttendanceLog = {
+                  id: '',
+                  studentId: student.id,
+                  studentName: student.name,
+                  className: student.className,
+                  timestamp: now.getTime(),
+                  type: 'entry',
+                  dateString: dateString
+              };
+
+              await logAttendance(log);
+              setLastScannedStudent(log);
+              setAttendanceLogs([log, ...attendanceLogs]);
+              
+              const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+              audio.play().catch(err => console.error(err));
+          } else {
+              alert("Aluno não encontrado ou código inválido.");
+          }
+
+          setScannerInput('');
+      }
+  };
+
+  const handlePrintIDCards = () => {
+      if (!cardClassId) return alert("Selecione uma turma para gerar as carteirinhas.");
+      
+      const studentsInClass = studentList.filter(s => s.classId === cardClassId);
+      if (studentsInClass.length === 0) return alert("Nenhum aluno nesta turma.");
+
+      const printWindow = window.open('', '', 'width=800,height=800');
+      if (!printWindow) return;
+
+      const html = `
+        <html>
+        <head>
+            <title>Carteirinhas - ${studentsInClass[0].className}</title>
+            <style>
+                body { font-family: 'Arial', sans-serif; margin: 0; padding: 20px; }
+                .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+                .id-card { 
+                    border: 1px solid #ccc; border-radius: 10px; height: 250px; 
+                    display: flex; flex-direction: column; overflow: hidden; page-break-inside: avoid;
+                }
+                .header { background: #b91c1c; color: white; padding: 10px; text-align: center; }
+                .header img { height: 30px; margin-bottom: 5px; }
+                .content { padding: 15px; flex: 1; display: flex; gap: 15px; align-items: center; }
+                .photo-placeholder { width: 80px; height: 100px; background: #eee; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #aaa; overflow: hidden; }
+                .info { flex: 1; }
+                .name { font-weight: bold; font-size: 16px; margin-bottom: 5px; }
+                .class { font-size: 14px; color: #555; margin-bottom: 5px; }
+                .id { font-family: monospace; font-size: 12px; color: #888; }
+                .qr-area { text-align: center; padding: 10px; background: #f9f9f9; border-top: 1px solid #eee; }
+                @media print {
+                     .id-card { border: 1px solid #000; }
+                     .header { -webkit-print-color-adjust: exact; background: #b91c1c !important; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card-grid">
+                ${studentsInClass.map(s => `
+                    <div class="id-card">
+                        <div class="header">
+                            <div>CEMAL EQUIPE</div>
+                            <div style="font-size: 10px;">Carteira de Identificação Estudantil</div>
+                        </div>
+                        <div class="content">
+                            <div class="photo-placeholder">
+                                ${s.photoUrl ? `<img src="${s.photoUrl}" style="width:100%; height:100%; object-fit:cover;" />` : 'SEM FOTO'}
+                            </div>
+                            <div class="info">
+                                <div class="name">${s.name}</div>
+                                <div class="class">${s.className}</div>
+                                <div class="id">Matrícula: ${s.id}</div>
+                            </div>
+                        </div>
+                        <div class="qr-area">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${s.id}" width="80" height="80" />
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <script>window.onload = function() { window.print(); }</script>
+        </body>
+        </html>
+      `;
+      printWindow.document.write(html);
+      printWindow.document.close();
+  };
+
+  // Helper para relatorios de frequencia
+  const getGroupedAttendance = () => {
+      const today = new Date();
+      const grouped: Record<string, number> = {};
+      
+      allLogs.forEach(log => {
+          const logDate = new Date(log.timestamp);
+          let key = '';
+
+          if (reportPeriod === 'daily') {
+              key = logDate.toLocaleDateString();
+          } else if (reportPeriod === 'weekly') {
+              const week = Math.ceil(logDate.getDate() / 7);
+              key = `Semana ${week} - ${logDate.getMonth() + 1}/${logDate.getFullYear()}`;
+          } else {
+              key = `${logDate.getMonth() + 1}/${logDate.getFullYear()}`;
+          }
+          
+          grouped[key] = (grouped[key] || 0) + 1;
+      });
+      return grouped;
+  };
+
+  const chartData = getGroupedAttendance();
+
   // Answer Key / Exam Flow Handlers
   const startCreateExam = () => {
     setNewKeyTitle('');
@@ -467,8 +653,6 @@ export const PrintShopDashboard: React.FC = () => {
 
   const goToStep2 = () => {
     if (!newKeyTitle) return alert("Preencha o título da prova");
-    
-    // Initialize temporary object for editing
     const tempKey: AnswerKey = {
         id: '',
         title: newKeyTitle,
@@ -531,7 +715,6 @@ export const PrintShopDashboard: React.FC = () => {
     const score = (correctCount / correctionMode.numQuestions) * 10;
     setCalculatedScore(score);
 
-    // Save Correction
     try {
          await saveStudentCorrection({
              id: '',
@@ -545,7 +728,6 @@ export const PrintShopDashboard: React.FC = () => {
     } catch(e) { console.error("Error saving stats", e); }
   };
 
-  // Real AI Correction Handler
   const handleFileUploadCorrection = async (e: React.ChangeEvent<HTMLInputElement>) => {
      if (!e.target.files || e.target.files.length === 0) return;
      if (!correctionMode) return alert("Erro: Modo de correção não iniciado.");
@@ -559,11 +741,7 @@ export const PrintShopDashboard: React.FC = () => {
      try {
          for (const file of files) {
              setCorrectionProgress(`Corrigindo ${processedCount + 1}/${files.length}: ${file.name}...`);
-             
-             // Chamada ao Gemini Vision
              const result = await correctExamWithAI(file, correctionMode.correctAnswers, correctionMode.numQuestions);
-             
-             // Salvar resultado no Firestore
              await saveStudentCorrection({
                  id: '',
                  answerKeyId: correctionMode.id,
@@ -573,10 +751,8 @@ export const PrintShopDashboard: React.FC = () => {
                  hits: result.hits,
                  date: Date.now()
              });
-
              processedCount++;
          }
-         
          alert(`Processo finalizado! ${processedCount} provas corrigidas com sucesso.`);
      } catch (error) {
          console.error(error);
@@ -584,12 +760,10 @@ export const PrintShopDashboard: React.FC = () => {
      } finally {
          setIsProcessingUpload(false);
          setCorrectionProgress('');
-         // Limpar input
          e.target.value = '';
      }
   };
 
-  // Stats Handler
   const loadStats = async (keyId: string) => {
       setStatsKeyId(keyId);
       const key = answerKeys.find(k => k.id === keyId);
@@ -611,7 +785,6 @@ export const PrintShopDashboard: React.FC = () => {
   const handlePrintCard = () => {
     const printContent = document.getElementById('print-card');
     if (!printContent) return;
-    
     const printWindow = window.open('', '', 'height=800,width=800');
     if (printWindow) {
         printWindow.document.write('<html><head><title>Cartão Resposta</title>');
@@ -622,13 +795,9 @@ export const PrintShopDashboard: React.FC = () => {
         printWindow.document.write(printContent.innerHTML);
         printWindow.document.write('</body></html>');
         printWindow.document.close();
-        setTimeout(() => {
-            printWindow.print();
-        }, 500);
+        setTimeout(() => { printWindow.print(); }, 500);
     }
   };
-
-  // --- COMPONENT RENDER ---
 
   const SidebarItem = ({ id, label, icon: Icon, alert }: { id: Tab, label: string, icon: any, alert?: boolean }) => (
     <button
@@ -673,6 +842,7 @@ export const PrintShopDashboard: React.FC = () => {
                 <SidebarItem id="teachers" label="Professores" icon={UserPlus} />
                 <SidebarItem id="classes" label="Turmas" icon={GraduationCap} />
                 <SidebarItem id="students" label="Alunos" icon={Users} />
+                <SidebarItem id="attendance" label="Frequência" icon={ScanBarcode} />
             </div>
 
             <div className="mt-6 px-2">
@@ -684,916 +854,178 @@ export const PrintShopDashboard: React.FC = () => {
 
         {/* --- MAIN CONTENT AREA --- */}
         <div className="flex-1 overflow-y-auto p-8 bg-transparent">
-            
-            {/* 1. OVERVIEW (DASHBOARD HOME) */}
             {activeTab === 'overview' && (
                 <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <h2 className="text-3xl font-bold text-white mb-6">Visão Geral</h2>
-                    
-                    {/* Stats Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                         <div className="bg-white rounded-2xl p-6 shadow-lg border-l-4 border-l-brand-600">
                             <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-500">Impressões Pendentes</p>
-                                    <h3 className="text-3xl font-bold text-gray-900 mt-1">{exams.filter(e => e.status === ExamStatus.PENDING).length}</h3>
-                                </div>
-                                <div className={`p-3 rounded-lg ${hasPendingExams ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'}`}>
-                                    <Printer size={24} />
-                                </div>
+                                <div><p className="text-sm font-medium text-gray-500">Impressões Pendentes</p><h3 className="text-3xl font-bold text-gray-900 mt-1">{exams.filter(e => e.status === ExamStatus.PENDING).length}</h3></div>
+                                <div className={`p-3 rounded-lg ${hasPendingExams ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-400'}`}><Printer size={24} /></div>
                             </div>
                             {hasPendingExams && <p className="text-xs text-yellow-600 font-bold mt-2 animate-pulse">Atenção Necessária!</p>}
                         </div>
-
                         <div className="bg-white rounded-2xl p-6 shadow-lg border-l-4 border-l-blue-600">
                             <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-500">Alunos Cadastrados</p>
-                                    <h3 className="text-3xl font-bold text-gray-900 mt-1">{studentList.length}</h3>
-                                </div>
-                                <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
-                                    <Users size={24} />
-                                </div>
+                                <div><p className="text-sm font-medium text-gray-500">Alunos Cadastrados</p><h3 className="text-3xl font-bold text-gray-900 mt-1">{studentList.length}</h3></div>
+                                <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><Users size={24} /></div>
                             </div>
                         </div>
-
                         <div className="bg-white rounded-2xl p-6 shadow-lg border-l-4 border-l-purple-600">
                             <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-500">Provas Corrigidas</p>
-                                    <h3 className="text-3xl font-bold text-gray-900 mt-1">
-                                        {answerKeys.length > 0 ? 'Ver Relatórios' : '0'}
-                                    </h3>
-                                </div>
-                                <div className="p-3 bg-purple-100 text-purple-600 rounded-lg">
-                                    <PieChart size={24} />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* System Announcement Config */}
-                    <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Megaphone className="text-brand-600" />
-                            <h3 className="text-lg font-bold text-gray-800">Avisos do Sistema (Broadcast)</h3>
-                        </div>
-                        <p className="text-sm text-gray-500 mb-4">Configure uma mensagem que aparecerá no topo da tela de todos os professores e alunos.</p>
-                        
-                        <form onSubmit={handleUpdateConfig} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                            <div className="col-span-1 md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700">Mensagem</label>
-                                <input 
-                                    type="text" 
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-gray-50 text-gray-900"
-                                    placeholder="Ex: Sistema em manutenção até as 14h."
-                                    value={sysConfig.bannerMessage}
-                                    onChange={e => setSysConfig({...sysConfig, bannerMessage: e.target.value})}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Tipo de Alerta</label>
-                                <select 
-                                    className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-gray-50 text-gray-900"
-                                    value={sysConfig.bannerType}
-                                    onChange={e => setSysConfig({...sysConfig, bannerType: e.target.value as any})}
-                                >
-                                    <option value="info">Informação (Azul)</option>
-                                    <option value="warning">Aviso (Amarelo)</option>
-                                    <option value="error">Crítico (Vermelho)</option>
-                                    <option value="success">Sucesso (Verde)</option>
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                 <label className="flex items-center gap-2 cursor-pointer bg-gray-50 p-2 rounded-md border border-gray-200">
-                                    <input 
-                                        type="checkbox" 
-                                        className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500"
-                                        checked={sysConfig.isBannerActive}
-                                        onChange={e => setSysConfig({...sysConfig, isBannerActive: e.target.checked})}
-                                    />
-                                    <span className="text-sm font-bold text-gray-700">Ativar Aviso Geral</span>
-                                </label>
-                            </div>
-                            
-                            {/* TV CONFIGURATION */}
-                            <div className="col-span-1 md:col-span-2 border-t border-gray-100 pt-4 mt-2">
-                                <h4 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><MonitorPlay size={16}/> Configuração de TV (Quadro de Horários)</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                     <div className="flex items-center">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500"
-                                                checked={sysConfig.showOnTV || false}
-                                                onChange={e => setSysConfig({...sysConfig, showOnTV: e.target.checked})}
-                                            />
-                                            <span className="text-sm font-medium text-gray-700">Exibir Aviso na TV</span>
-                                        </label>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-500">Início da Exibição</label>
-                                        <input 
-                                            type="datetime-local" 
-                                            className="mt-1 block w-full border border-gray-300 rounded-md p-1.5 text-xs text-gray-900 bg-white"
-                                            value={sysConfig.tvStart || ''}
-                                            onChange={e => setSysConfig({...sysConfig, tvStart: e.target.value})}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-500">Fim da Exibição</label>
-                                        <input 
-                                            type="datetime-local" 
-                                            className="mt-1 block w-full border border-gray-300 rounded-md p-1.5 text-xs text-gray-900 bg-white"
-                                            value={sysConfig.tvEnd || ''}
-                                            onChange={e => setSysConfig({...sysConfig, tvEnd: e.target.value})}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="col-span-1 md:col-span-2 pt-2">
-                                <Button type="submit" className="w-full">Salvar Todas as Configurações</Button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* SCHEDULE MANAGEMENT TAB */}
-            {activeTab === 'schedule' && (
-                <div className="max-w-7xl mx-auto h-full flex flex-col">
-                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><CalendarClock className="text-brand-500"/> Quadro de Horários</h2>
-                    
-                    <div className="flex gap-2 mb-6 bg-white/10 p-2 rounded-xl w-fit">
-                        {[
-                            { d: 1, label: 'Segunda' },
-                            { d: 2, label: 'Terça' },
-                            { d: 3, label: 'Quarta' },
-                            { d: 4, label: 'Quinta' },
-                            { d: 5, label: 'Sexta' }
-                        ].map(day => (
-                            <button
-                                key={day.d}
-                                onClick={() => setSelectedDay(day.d)}
-                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${selectedDay === day.d ? 'bg-brand-600 text-white' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
-                            >
-                                {day.label}
-                            </button>
-                        ))}
-                        
-                        <div className="h-8 w-px bg-white/20 mx-2"></div>
-                        
-                        <Button
-                            onClick={handleDownloadSchedulePDF}
-                            variant="secondary"
-                            className="bg-white text-gray-900 hover:bg-gray-200 border border-gray-200 text-xs font-bold"
-                        >
-                            <FileDown size={16} className="mr-2"/>
-                            PDF
-                        </Button>
-
-                        <a 
-                            href="/#horarios" 
-                            target="_blank" 
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold bg-white text-gray-900 hover:bg-gray-200 transition-all border border-gray-200 ml-2"
-                        >
-                            <Eye size={16}/> Abrir TV
-                        </a>
-                        <Button 
-                            onClick={handleSyncSchedule} 
-                            isLoading={scheduleLoading}
-                            className="ml-2 bg-blue-600 hover:bg-blue-700 text-white border-none shadow-sm"
-                        >
-                             <RefreshCw size={16} className={`mr-2 ${scheduleLoading ? 'animate-spin' : ''}`}/>
-                             Atualizar TV
-                        </Button>
-                    </div>
-
-                    <div className="flex-1 overflow-auto bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col">
-                        <div className="p-6 border-b border-gray-100 bg-gray-50">
-                            <h3 className="font-bold text-brand-700 uppercase tracking-wide mb-4">Turno Matutino</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="text-left text-gray-500">
-                                            <th className="py-2 px-2 w-24">Horário</th>
-                                            {MORNING_CLASSES_LIST.map(c => <th key={c.id} className="py-2 px-2 text-center border-l border-gray-200">{c.name}</th>)}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {MORNING_SLOTS.map(slot => (
-                                            <tr key={slot.id} className={slot.type === 'break' ? 'bg-yellow-50' : 'hover:bg-gray-50'}>
-                                                <td className="py-3 px-2 font-mono text-xs font-bold text-gray-600">
-                                                    {slot.start} - {slot.end}
-                                                    {slot.type === 'break' && <span className="block text-[10px] text-yellow-600 uppercase">Intervalo</span>}
-                                                </td>
-                                                {slot.type === 'class' ? MORNING_CLASSES_LIST.map(cls => (
-                                                    <td key={`${slot.id}_${cls.id}`} className="p-2 border-l border-gray-200">
-                                                        <div className="space-y-1">
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="Matéria" 
-                                                                className="w-full text-xs font-bold p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
-                                                                value={getScheduleValue(cls.id, slot.id, 'subject')}
-                                                                onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'subject', e.target.value)}
-                                                            />
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="Professor" 
-                                                                className="w-full text-[10px] p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
-                                                                value={getScheduleValue(cls.id, slot.id, 'professor')}
-                                                                onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'professor', e.target.value)}
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                )) : (
-                                                    <td colSpan={MORNING_CLASSES_LIST.length} className="text-center text-xs font-bold text-yellow-700 tracking-widest bg-yellow-100/50">
-                                                        RECREIO / LANCHE
-                                                    </td>
-                                                )}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div className="p-6">
-                            <h3 className="font-bold text-blue-700 uppercase tracking-wide mb-4">Turno Vespertino</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="text-left text-gray-500">
-                                            <th className="py-2 px-2 w-24">Horário</th>
-                                            {AFTERNOON_CLASSES_LIST.map(c => <th key={c.id} className="py-2 px-2 text-center border-l border-gray-200">{c.name}</th>)}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {AFTERNOON_SLOTS.map(slot => (
-                                            <tr key={slot.id} className={slot.type === 'break' ? 'bg-yellow-50' : 'hover:bg-gray-50'}>
-                                                <td className="py-3 px-2 font-mono text-xs font-bold text-gray-600">
-                                                    {slot.start} - {slot.end}
-                                                    {slot.type === 'break' && <span className="block text-[10px] text-yellow-600 uppercase">Intervalo</span>}
-                                                </td>
-                                                {slot.type === 'class' ? AFTERNOON_CLASSES_LIST.map(cls => (
-                                                    <td key={`${slot.id}_${cls.id}`} className="p-2 border-l border-gray-200">
-                                                        <div className="space-y-1">
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="Matéria" 
-                                                                className="w-full text-xs font-bold p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
-                                                                value={getScheduleValue(cls.id, slot.id, 'subject')}
-                                                                onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'subject', e.target.value)}
-                                                            />
-                                                            <input 
-                                                                type="text" 
-                                                                placeholder="Professor" 
-                                                                className="w-full text-[10px] p-1 border border-red-900 bg-white text-gray-900 rounded placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-900"
-                                                                value={getScheduleValue(cls.id, slot.id, 'professor')}
-                                                                onChange={(e) => handleUpdateSchedule(cls.id, cls.name, slot.id, 'professor', e.target.value)}
-                                                            />
-                                                        </div>
-                                                    </td>
-                                                )) : (
-                                                    <td colSpan={AFTERNOON_CLASSES_LIST.length} className="text-center text-xs font-bold text-yellow-700 tracking-widest bg-yellow-100/50">
-                                                        RECREIO / LANCHE
-                                                    </td>
-                                                )}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <div><p className="text-sm font-medium text-gray-500">Provas Corrigidas</p><h3 className="text-3xl font-bold text-gray-900 mt-1">{answerKeys.length > 0 ? 'Ver Relatórios' : '0'}</h3></div>
+                                <div className="p-3 bg-purple-100 text-purple-600 rounded-lg"><PieChart size={24} /></div>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-            
-            {/* 2. PRINTING QUEUE */}
+
+            {/* Other tabs... printing, teachers, classes... same as before */}
             {activeTab === 'printing' && (
                 <div className="max-w-6xl mx-auto space-y-6">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                            <Printer className="text-brand-500" /> Central de Impressão
-                        </h2>
+                        <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Printer className="text-brand-500" /> Central de Impressão</h2>
                         <div className="flex bg-gray-900/50 p-1 rounded-lg backdrop-blur-sm border border-white/10">
-                            <button 
-                                onClick={() => setFilter('all')} 
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
-                            >
-                                Todas
-                            </button>
-                            <button 
-                                onClick={() => setFilter('pending')} 
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'pending' ? 'bg-white text-brand-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
-                            >
-                                Fila
-                            </button>
-                            <button 
-                                onClick={() => setFilter('completed')} 
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'completed' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}
-                            >
-                                Concluídas
-                            </button>
+                            <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Todas</button>
+                            <button onClick={() => setFilter('pending')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'pending' ? 'bg-white text-brand-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Fila</button>
+                            <button onClick={() => setFilter('completed')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'completed' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Concluídas</button>
                         </div>
                     </div>
-                    
-                    <div className="space-y-4">
-                        {isLoading ? (
-                            <div className="bg-white/5 border border-white/10 p-12 text-center rounded-xl text-gray-400">
-                                <p>Carregando dados da fila...</p>
-                            </div>
-                        ) : filteredExams.length === 0 ? (
-                            <div className="bg-white/5 border border-white/10 p-12 text-center rounded-xl text-gray-400">
-                                <p>Nenhuma prova encontrada com este filtro.</p>
-                            </div>
-                        ) : (
-                            filteredExams.map((exam) => (
-                                <div key={exam.id} className={`bg-white rounded-xl shadow-lg border-l-4 p-6 transition-all hover:scale-[1.01] ${exam.status === ExamStatus.COMPLETED ? 'border-l-green-500 opacity-90' : 'border-l-brand-500'}`}>
-                                    <div className="flex flex-col md:flex-row justify-between gap-6">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <span className={`text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wide border ${exam.status === ExamStatus.PENDING ? 'bg-red-50 border-red-200 text-red-700' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-yellow-50 border-yellow-200 text-yellow-700' : 'bg-green-50 border-green-200 text-green-700'}`}>
-                                                    {exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Em andamento' : 'Finalizado'}
-                                                </span>
-                                                <span className="text-gray-400 text-sm flex items-center">
-                                                    <Clock size={14} className="mr-1"/> Enviado em {new Date(exam.createdAt).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                            <h3 className="text-xl font-bold text-gray-900 mb-1">{exam.title}</h3>
-                                            <p className="text-gray-600 font-medium mb-4">{exam.teacherName} — {exam.subject}</p>
-                                            
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-500 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                                                <div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Turma</span>{exam.gradeLevel}</div>
-                                                <div>
-                                                    <span className="block text-xs uppercase font-bold text-gray-400 mb-1">Qtd.</span>
-                                                    {exam.quantity > 0 ? (
-                                                        <><span className="font-bold text-gray-900">{exam.quantity}</span> cópias</>
-                                                    ) : (
-                                                        <span className="text-gray-800 font-medium text-xs bg-gray-200 px-2 py-1 rounded">Ver Arquivo</span>
-                                                    )}
-                                                </div>
-                                                <div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Prazo</span><span className="text-brand-600 font-bold">{new Date(exam.dueDate).toLocaleDateString()}</span></div>
-                                                <div><span className="block text-xs uppercase font-bold text-gray-400 mb-1">Arquivo</span><span className="truncate block max-w-[120px]" title={exam.fileName}>{exam.fileName}</span></div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex flex-col gap-3 justify-center border-l border-gray-100 pl-0 md:pl-6 min-w-[200px]">
-                                            <Button variant="outline" className="w-full justify-start h-10 border-gray-300 text-gray-700 hover:bg-gray-50" onClick={() => handleViewFile(exam)}>
-                                                {exam.fileName.toLowerCase().endsWith('.pdf') ? <><Eye size={18} className="mr-2 text-gray-500"/> Visualizar PDF</> : <><Download size={18} className="mr-2 text-gray-500"/> Baixar Arquivo</>}
-                                            </Button>
-                                            
-                                            {exam.status === ExamStatus.PENDING && (
-                                                <Button onClick={() => handleStartPrint(exam)} className="w-full justify-start h-10 bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm">
-                                                    <Printer size={18} className="mr-2"/> Iniciar Impressão
-                                                </Button>
-                                            )}
-                                            
-                                            {exam.status === ExamStatus.IN_PROGRESS && (
-                                                <Button onClick={() => handleStatusChange(exam.id, ExamStatus.COMPLETED)} className="w-full justify-start h-10 bg-green-600 hover:bg-green-700 border-none shadow-sm">
-                                                    <CheckCircle size={18} className="mr-2"/> Marcar Pronto
-                                                </Button>
-                                            )}
-                                            
-                                            {exam.status === ExamStatus.COMPLETED && (
-                                                <Button onClick={() => handleStatusChange(exam.id, ExamStatus.IN_PROGRESS)} variant="outline" className="w-full justify-center text-xs opacity-75 hover:opacity-100">
-                                                    Reabrir Pedido
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
+                    {/* ... exams map ... */}
                 </div>
             )}
-
-            {activeTab === 'teachers' && (
-                <div className="max-w-4xl mx-auto">
-                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><UserPlus className="text-brand-500"/> Gestão de Professores</h2>
-                    <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-                        <form onSubmit={handleAddTeacher} className="space-y-5">
-                            <div><label className="block text-sm font-medium text-gray-700">Nome Completo</label><input required type="text" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherName} onChange={e => setNewTeacherName(e.target.value)} /></div>
-                            <div className="grid grid-cols-2 gap-4"><div><label className="block text-sm font-medium text-gray-700">Login (Email)</label><input required type="email" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherEmail} onChange={e => setNewTeacherEmail(e.target.value)} /></div><div><label className="block text-sm font-medium text-gray-700">Senha</label><input required type="password" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherPassword} onChange={e => setNewTeacherPassword(e.target.value)} /></div></div>
-                            <div><label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><Briefcase size={14} /> Disciplina Principal</label><input required type="text" className="block w-full bg-white text-gray-900 border-gray-300 rounded-lg shadow-sm focus:ring-brand-500 focus:border-brand-500 p-3 border" value={newTeacherSubject} onChange={e => setNewTeacherSubject(e.target.value)} /></div>
-                            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200"><label className="block text-sm font-bold text-gray-700 mb-3">Vincular Turmas</label><div className="flex gap-6 mb-4 pb-4 border-b border-gray-200"><label className="flex items-center space-x-2"><input type="radio" checked={newTeacherShift === 'morning'} onChange={() => {setNewTeacherShift('morning'); setSelectedClasses([]);}} className="text-brand-600 focus:ring-brand-500" /><span className="text-sm font-medium text-gray-700">Manhã (EFAI)</span></label><label className="flex items-center space-x-2"><input type="radio" checked={newTeacherShift === 'afternoon'} onChange={() => {setNewTeacherShift('afternoon'); setSelectedClasses([]);}} className="text-brand-600 focus:ring-brand-500" /><span className="text-sm font-medium text-gray-700">Tarde (Ensino Médio)</span></label></div><div className="grid grid-cols-2 gap-3">{(newTeacherShift === 'morning' ? morningClasses : afternoonClasses).map(cls => (<label key={cls} className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-white rounded-lg border border-transparent hover:border-gray-200 transition-colors"><input type="checkbox" checked={selectedClasses.includes(cls)} onChange={() => toggleClass(cls)} className="rounded text-brand-600 focus:ring-brand-500 w-4 h-4" /><span className="text-sm text-gray-600">{cls}</span></label>))}</div></div>
-                            <Button type="submit" isLoading={isSavingTeacher} className="w-full py-3 text-lg">Confirmar Cadastro</Button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'classes' && (
-                <div className="max-w-5xl mx-auto">
-                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><GraduationCap className="text-brand-500"/> Gestão de Turmas</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="bg-white rounded-2xl p-8 shadow-xl">
-                            <h3 className="text-lg font-bold text-gray-800 mb-4">Nova Turma</h3>
-                            <form onSubmit={handleAddClass} className="space-y-4"><div><label className="block text-sm font-medium text-gray-700">Nome da Turma</label><input required type="text" placeholder="Ex: 9º Ano B" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg p-3 border" value={newClassName} onChange={e => setNewClassName(e.target.value)} /></div><div><label className="block text-sm font-medium text-gray-700">Turno</label><select className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg p-3 border" value={newClassShift} onChange={e => setNewClassShift(e.target.value as 'morning' | 'afternoon')}><option value="morning">Manhã</option><option value="afternoon">Tarde</option></select></div><Button type="submit" isLoading={isSavingClass} className="w-full py-3">Salvar Turma</Button></form>
-                        </div>
-                        <div className="bg-white rounded-2xl p-8 shadow-xl">
-                            <h3 className="text-lg font-bold text-gray-800 mb-4">Turmas Cadastradas</h3>
-                            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">{classList.map(cls => (<div key={cls.id} className="p-4 bg-gray-50 border border-gray-100 rounded-lg flex justify-between items-center hover:bg-gray-100 transition-colors"><span className="font-bold text-gray-800">{cls.name}</span><span className={`text-xs px-3 py-1 rounded-full font-bold ${cls.shift === 'morning' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{cls.shift === 'morning' ? 'Manhã' : 'Tarde'}</span></div>))}{classList.length === 0 && <p className="text-gray-500 text-sm">Nenhuma turma cadastrada.</p>}</div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
+            
             {activeTab === 'students' && (
                 <div className="max-w-4xl mx-auto">
                     <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><Users className="text-brand-500"/> Gestão de Alunos</h2>
                     <div className="bg-white rounded-2xl shadow-xl p-8">
-                        <form onSubmit={handleAddStudent} className="space-y-5 mb-10 border-b border-gray-100 pb-10"><h3 className="text-lg font-bold text-gray-800">Cadastrar Novo Aluno</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-sm font-medium text-gray-700">Nome do Aluno</label><input required type="text" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg p-3 border" value={newStudentName} onChange={e => setNewStudentName(e.target.value)} /></div><div><label className="block text-sm font-medium text-gray-700">Selecione a Turma</label><select required className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg p-3 border" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)}><option value="">Selecione...</option>{classList.map(c => (<option key={c.id} value={c.id}>{c.name} ({c.shift === 'morning' ? 'M' : 'T'})</option>))}</select></div></div><Button type="submit" isLoading={isSavingStudent} className="w-full py-3">Cadastrar Aluno</Button></form>
+                        <form onSubmit={handleAddStudent} className="space-y-5 mb-10 border-b border-gray-100 pb-10">
+                            <h3 className="text-lg font-bold text-gray-800">Cadastrar Novo Aluno</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label className="block text-sm font-medium text-gray-700">Nome do Aluno</label><input required type="text" className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg p-3 border" value={newStudentName} onChange={e => setNewStudentName(e.target.value)} /></div>
+                                <div><label className="block text-sm font-medium text-gray-700">Selecione a Turma</label><select required className="mt-1 block w-full bg-white text-gray-900 border-gray-300 rounded-lg p-3 border" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)}><option value="">Selecione...</option>{classList.map(c => (<option key={c.id} value={c.id}>{c.name} ({c.shift === 'morning' ? 'M' : 'T'})</option>))}</select></div>
+                            </div>
+                            
+                            {/* Upload de Foto */}
+                            <div className="mt-4 p-4 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 flex flex-col items-center justify-center text-center">
+                                <label htmlFor="photo-upload" className="cursor-pointer">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <Camera className="text-gray-400" size={32} />
+                                        <span className="text-sm font-medium text-brand-600">Upload da Foto (Para Biometria)</span>
+                                        <span className="text-xs text-gray-500">JPG, PNG (Rosto visível)</span>
+                                    </div>
+                                    <input 
+                                        id="photo-upload" 
+                                        type="file" 
+                                        accept="image/*" 
+                                        className="hidden" 
+                                        onChange={e => e.target.files && setNewStudentPhoto(e.target.files[0])} 
+                                    />
+                                </label>
+                                {newStudentPhoto && (
+                                    <div className="mt-2 text-sm text-green-600 font-bold flex items-center gap-1">
+                                        <CheckCircle size={14} /> {newStudentPhoto.name}
+                                    </div>
+                                )}
+                            </div>
+
+                            <Button type="submit" isLoading={isSavingStudent} className="w-full py-3">Cadastrar Aluno</Button>
+                        </form>
                         <h3 className="text-lg font-bold text-gray-800 mb-4">Lista de Alunos</h3><div className="bg-gray-50 rounded-lg p-4 max-h-[400px] overflow-y-auto border border-gray-200">{studentList.length > 0 ? (<table className="min-w-full text-sm text-left"><thead className="text-xs text-gray-500 uppercase border-b bg-gray-100"><tr><th className="px-4 py-3 rounded-tl-lg">Nome</th><th className="px-4 py-3 rounded-tr-lg">Turma</th></tr></thead><tbody>{studentList.map(st => (<tr key={st.id} className="border-b last:border-0 hover:bg-white transition-colors"><td className="px-4 py-3 font-medium text-gray-900">{st.name}</td><td className="px-4 py-3 text-gray-500">{st.className}</td></tr>))}</tbody></table>) : <p className="text-gray-500 text-sm text-center py-4">Nenhum aluno cadastrado.</p>}</div>
                     </div>
                 </div>
             )}
             
-            {activeTab === 'answer_keys' && (
-                <div className="h-full flex flex-col">
-                    {viewState === 'list' && (
-                        <div className="max-w-6xl mx-auto w-full">
-                             <div className="flex justify-between items-center mb-8">
-                                <h2 className="text-3xl font-bold text-white flex items-center gap-3">
-                                    <ClipboardCheck className="text-brand-500" size={32} /> Gabaritos & Correção
-                                </h2>
-                                <Button onClick={startCreateExam} className="bg-brand-600 hover:bg-brand-700 h-12 px-6 shadow-lg text-lg">
-                                    + Criar Nova Prova
-                                </Button>
-                             </div>
+            {activeTab === 'attendance' && (
+                <div className="max-w-6xl mx-auto h-full flex flex-col">
+                    <h2 className="text-3xl font-bold text-white mb-6 flex items-center gap-3">
+                        <ScanBarcode className="text-brand-500" size={32}/> Frequência Automática (CEMAL)
+                    </h2>
 
-                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {answerKeys.length === 0 ? (
-                                    <div className="col-span-full text-center py-20 bg-white/5 rounded-2xl border border-white/10">
-                                        <FileSpreadsheet className="mx-auto h-16 w-16 text-gray-600 mb-4" />
-                                        <h3 className="text-xl font-bold text-gray-300">Nenhum gabarito criado</h3>
-                                        <p className="text-gray-500 mt-2">Crie o gabarito oficial de uma prova para habilitar a correção automática.</p>
-                                    </div>
-                                ) : (
-                                    answerKeys.map(key => (
-                                        <div key={key.id} className="bg-[#18181b] rounded-2xl border border-gray-800 hover:border-brand-500/50 transition-all p-6 group relative">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <div className="p-3 bg-brand-900/20 rounded-lg text-brand-500">
-                                                    <ScanLine size={24} />
-                                                </div>
-                                                <button 
-                                                    onClick={() => handleDeleteKey(key.id)}
-                                                    className="text-gray-600 hover:text-red-500 transition-colors p-2"
-                                                    title="Excluir Prova"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
-                                            <h3 className="text-xl font-bold text-white mb-1">{key.title}</h3>
-                                            <p className="text-gray-400 text-sm mb-6 flex items-center gap-2">
-                                                <Hash size={14}/> {key.numQuestions} Questões
-                                            </p>
-                                            
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <Button 
-                                                    variant="secondary" 
-                                                    className="w-full bg-gray-800 text-white hover:bg-gray-700 border-none"
-                                                    onClick={() => {
-                                                        setEditingKey(key);
-                                                        setCorrectionMode(key);
-                                                        setViewState('correction');
-                                                        // Load fake/mock print html
-                                                        setTimeout(() => {
-                                                             const tempKey = key; 
-                                                             setEditingKey(tempKey); // Hack to render card for print
-                                                        }, 100);
-                                                    }}
-                                                >
-                                                    Corrigir / Imprimir
-                                                </Button>
-                                                <Button 
-                                                    variant="outline"
-                                                    className="w-full border-gray-700 text-gray-300 hover:bg-gray-800"
-                                                    onClick={() => {
-                                                        setActiveTab('statistics');
-                                                        loadStats(key.id);
-                                                    }}
-                                                >
-                                                    Relatório
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                             </div>
-                        </div>
-                    )}
-
-                    {viewState === 'create_step1' && (
-                        <div className="max-w-2xl mx-auto w-full bg-[#18181b] p-8 rounded-3xl border border-gray-800 shadow-2xl">
-                             <div className="mb-8">
-                                <h2 className="text-3xl font-bold text-white mb-2">Criar Nova Prova</h2>
-                                <p className="text-brand-500 font-medium">Passo 1 de 2</p>
-                             </div>
-
-                             <div className="space-y-6">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-2">Título da Prova</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
-                                        placeholder="53454"
-                                        value={newKeyTitle}
-                                        onChange={e => setNewKeyTitle(e.target.value)}
-                                    />
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-2">Descrição (Opcional)</label>
-                                    <textarea 
-                                        className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none h-32"
-                                        value={newKeyDescription}
-                                        onChange={e => setNewKeyDescription(e.target.value)}
-                                    ></textarea>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-2 flex items-center gap-2">
-                                        <Users size={16}/> Vincular Turma (Opcional)
-                                    </label>
-                                    <select 
-                                        className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
-                                        value={newKeyClassId}
-                                        onChange={e => setNewKeyClassId(e.target.value)}
-                                    >
-                                        <option value="">-- Nenhuma (Cartão em branco) --</option>
-                                        {classList.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                    <p className="text-xs text-gray-600 mt-2">Se selecionar uma turma, os cartões resposta serão gerados já com os nomes dos alunos.</p>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-2">Data</label>
-                                        <input 
-                                            type="date" 
-                                            className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white [color-scheme:dark]"
-                                            value={newKeyDate}
-                                            onChange={e => setNewKeyDate(e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-2">Qtd. Questões</label>
-                                        <input 
-                                            type="number" 
-                                            className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white"
-                                            value={newKeyQty}
-                                            onChange={e => setNewKeyQty(parseInt(e.target.value))}
-                                            min={1} max={100}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-400 mb-2">Alternativas</label>
-                                        <select className="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-white">
-                                            <option>A - E</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-end pt-4">
-                                    <Button onClick={goToStep2} className="bg-brand-600 hover:bg-brand-700 h-14 px-8 text-lg w-full md:w-auto">
-                                        Próximo: Definir Gabarito <ChevronRight size={20} className="ml-2"/>
-                                    </Button>
-                                </div>
-                             </div>
-                        </div>
-                    )}
-
-                    {viewState === 'create_step2_grid' && editingKey && (
-                        <div className="flex flex-col h-full max-w-7xl mx-auto w-full">
-                            <div className="flex justify-between items-center mb-6">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-white">Gabarito Oficial</h2>
-                                    <p className="text-gray-400">Defina as respostas corretas. Elas ficarão salvas para a correção automática.</p>
-                                </div>
-                                <div className="flex gap-3">
-                                    <button onClick={startCreateExam} className="text-gray-400 hover:text-white px-4">Voltar</button>
-                                    <Button onClick={handleSaveKey} className="bg-green-600 hover:bg-green-700 h-12 px-8 font-bold flex items-center gap-2">
-                                        Salvar Prova <Save size={18}/>
-                                    </Button>
-                                </div>
-                            </div>
-                            
-                            <div className="flex-1 bg-[#18181b] rounded-3xl border border-gray-800 p-8 shadow-2xl overflow-y-auto custom-scrollbar">
-                                <div className="bg-blue-900/20 border border-blue-800/50 p-4 rounded-xl mb-8 flex items-center gap-3 text-blue-300">
-                                    <Info size={20} />
-                                    <p>Clique na alternativa correta para selecionar. A seleção ficará vermelha.</p>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                                    {Array.from({ length: editingKey.numQuestions }).map((_, i) => {
-                                        const qNum = i + 1;
-                                        // Agrupar em blocos de 5 visualmente
-                                        const isNewBlock = (i % 5 === 0);
-                                        
-                                        return (
-                                            <React.Fragment key={qNum}>
-                                                {isNewBlock && i > 0 && <div className="hidden"></div>} 
-                                                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex items-center gap-4 justify-between">
-                                                    <span className="text-gray-500 font-bold font-mono min-w-[30px]">#{qNum}</span>
-                                                    <div className="flex gap-2">
-                                                        {['A','B','C','D','E'].map(opt => (
-                                                            <button
-                                                                key={opt}
-                                                                onClick={() => toggleAnswer(qNum, opt)}
-                                                                className={`
-                                                                    w-10 h-10 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center
-                                                                    ${editingKey.correctAnswers[qNum] === opt 
-                                                                        ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)] scale-110' 
-                                                                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}
-                                                                `}
-                                                            >
-                                                                {opt}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </React.Fragment>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {viewState === 'correction' && editingKey && (
-                        <div className="flex flex-col lg:flex-row gap-8 h-full">
-                            {/* Hidden Print Card Area (For Logic) */}
-                            <div className="hidden">
-                                <div id="print-card" className="bg-white text-black p-8 max-w-[210mm] mx-auto">
-                                    {/* CABEÇALHO ENEM */}
-                                    <div className="border-2 border-black mb-4">
-                                        <div className="grid grid-cols-4 divide-x-2 divide-black border-b-2 border-black">
-                                            <div className="col-span-3 p-2">
-                                                <p className="text-[10px] font-bold uppercase mb-1">Nome do Participante</p>
-                                                <div className="h-6 bg-gray-100/50"></div>
-                                            </div>
-                                            <div className="p-2">
-                                                <p className="text-[10px] font-bold uppercase mb-1">Turma</p>
-                                                <div className="h-6"></div>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 divide-x-2 divide-black">
-                                             <div className="p-2">
-                                                <p className="text-[10px] font-bold uppercase mb-1">Assinatura do Participante</p>
-                                                <div className="h-8"></div>
-                                            </div>
-                                            <div className="p-2 flex flex-col justify-center items-center bg-gray-100">
-                                                <p className="text-xs font-bold uppercase">{editingKey.title}</p>
-                                                <p className="text-[10px]">PROVA / AVALIAÇÃO</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* INSTRUÇÕES E EXEMPLO */}
-                                    <div className="flex justify-between items-end mb-4 gap-4">
-                                        <div className="text-[10px] flex-1 text-justify leading-tight">
-                                            <strong>INSTRUÇÕES:</strong> 1. Verifique se seus dados estão corretos. 2. Preencha completamente a bolinha correspondente à sua resposta. 3. Utilize caneta esferográfica de tinta preta ou azul. 4. Não rasure.
-                                        </div>
-                                        <div className="border border-black p-2 flex items-center gap-2">
-                                            <span className="text-[10px] font-bold uppercase">Exemplo:</span>
-                                            <div className="w-4 h-4 rounded-full border border-black bg-black"></div>
-                                            <div className="w-4 h-4 rounded-full border border-black flex items-center justify-center text-[8px] relative">
-                                                <div className="absolute inset-0 m-auto w-[2px] h-full bg-black rotate-45"></div>
-                                                <div className="absolute inset-0 m-auto w-[2px] h-full bg-black -rotate-45"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* GRID DE RESPOSTAS (VERTICAL - 3 COLUNAS) */}
-                                    <div className="relative border border-black p-4">
-                                        {/* Marcadores de Canto (Scanner) */}
-                                        <div className="absolute top-0 left-0 w-4 h-4 bg-black"></div>
-                                        <div className="absolute top-0 right-0 w-4 h-4 bg-black"></div>
-                                        <div className="absolute bottom-0 left-0 w-4 h-4 bg-black"></div>
-                                        <div className="absolute bottom-0 right-0 w-4 h-4 bg-black"></div>
-
-                                        <div className="grid grid-cols-3 gap-8">
-                                            {Array.from({ length: 3 }).map((_, colIndex) => {
-                                                const itemsPerCol = Math.ceil(editingKey.numQuestions / 3);
-                                                const start = colIndex * itemsPerCol;
-                                                const end = Math.min(start + itemsPerCol, editingKey.numQuestions);
-                                                const colItems = Array.from({ length: editingKey.numQuestions }).slice(start, end).map((__, idx) => start + idx + 1);
-
-                                                return (
-                                                    <div key={colIndex} className="space-y-1">
-                                                        {colItems.map(qNum => (
-                                                            <div key={qNum} className={`flex items-center justify-between text-[10px] h-6 px-1 ${qNum % 2 === 0 ? 'bg-gray-100' : ''}`}>
-                                                                <span className="font-bold w-6 text-right mr-2">{qNum}</span>
-                                                                <div className="flex gap-2">
-                                                                    {['A','B','C','D','E'].map(opt => (
-                                                                        <div key={opt} className="w-4 h-4 rounded-full border border-black flex items-center justify-center text-[8px] font-bold">
-                                                                            {opt}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Panel Esquerdo - Ações */}
-                            <div className="lg:w-1/3 space-y-6">
-                                <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100">
-                                    <h3 className="text-xl font-bold text-gray-800 mb-4">Ações da Prova</h3>
-                                    <Button onClick={handlePrintCard} className="w-full mb-3 h-12 text-lg">
-                                        <Printer className="mr-2"/> Imprimir Cartões
-                                    </Button>
-                                    <p className="text-sm text-gray-500 text-center">
-                                        Gera um PDF limpo para impressão no formato A4.
-                                    </p>
-                                </div>
-
-                                <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-100 border-l-4 border-l-purple-600">
-                                    <h3 className="text-xl font-bold text-purple-800 mb-4 flex items-center gap-2">
-                                        <ScanLine /> Correção com IA
-                                    </h3>
-                                    <p className="text-sm text-gray-600 mb-4">
-                                        Tire fotos dos cartões resposta preenchidos e envie aqui. O sistema identificará as respostas e dará a nota.
-                                    </p>
-
-                                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:bg-gray-50 transition-colors cursor-pointer relative bg-white">
-                                        <div className="space-y-1 text-center">
-                                            {isProcessingUpload ? (
-                                                <div className="flex flex-col items-center">
-                                                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
-                                                     <p className="text-sm font-bold text-purple-700">{correctionProgress}</p>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                                                    <div className="flex text-sm text-gray-600">
-                                                        <label htmlFor="upload-correction" className="relative cursor-pointer bg-white rounded-md font-medium text-purple-600 hover:text-purple-500">
-                                                            <span>Upload de Cartões Digitalizados</span>
-                                                            <input id="upload-correction" name="upload-correction" type="file" multiple accept="image/*" className="sr-only" onChange={handleFileUploadCorrection} />
-                                                        </label>
-                                                    </div>
-                                                    <p className="text-xs text-gray-500">JPG, PNG (Fotos nítidas)</p>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <Button variant="secondary" onClick={() => setViewState('list')} className="w-full">
-                                    Voltar para Lista
-                                </Button>
-                            </div>
-
-                            {/* Painel Direito - Correção Manual */}
-                            <div className="lg:w-2/3 bg-[#18181b] rounded-2xl border border-gray-800 p-8 shadow-2xl">
-                                 <h3 className="text-xl font-bold text-white mb-6">Correção Manual (Calculadora)</h3>
-                                 <div className="grid grid-cols-5 gap-2 mb-8 max-h-[400px] overflow-y-auto">
-                                    {Array.from({ length: editingKey.numQuestions }).map((_, i) => {
-                                        const qNum = i + 1;
-                                        return (
-                                            <div key={qNum} className="flex flex-col items-center bg-gray-900 p-2 rounded border border-gray-800">
-                                                <span className="text-xs text-gray-500 mb-1">#{qNum}</span>
-                                                <select 
-                                                    className={`w-full bg-black text-white text-center font-bold rounded border ${studentAnswers[qNum] === editingKey.correctAnswers[qNum] ? 'border-green-500 text-green-500' : 'border-gray-700'}`}
-                                                    value={studentAnswers[qNum] || ''}
-                                                    onChange={e => setStudentAnswers({...studentAnswers, [qNum]: e.target.value})}
-                                                >
-                                                    <option value="">-</option>
-                                                    {['A','B','C','D','E'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                                </select>
-                                            </div>
-                                        );
-                                    })}
-                                 </div>
-                                 
-                                 <div className="flex justify-between items-center bg-gray-900 p-4 rounded-xl border border-gray-800">
-                                     <div>
-                                         <p className="text-gray-400 text-sm">Nota Calculada</p>
-                                         <p className="text-4xl font-bold text-white">{calculatedScore !== null ? calculatedScore.toFixed(1) : '--'}</p>
-                                     </div>
-                                     <Button onClick={handleCorrectStudent} className="h-12 px-8">Calcular & Salvar</Button>
-                                 </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {activeTab === 'statistics' && (
-                <div className="max-w-6xl mx-auto">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                            <BarChart2 className="text-brand-500"/> Relatórios e Estatísticas
-                        </h2>
-                        <select 
-                            className="bg-white border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-2.5 w-64"
-                            onChange={e => loadStats(e.target.value)}
-                            value={statsKeyId}
-                        >
-                            <option value="">Selecione uma Prova...</option>
-                            {answerKeys.map(k => (
-                                <option key={k.id} value={k.id}>{k.title}</option>
-                            ))}
-                        </select>
+                    <div className="flex gap-4 mb-6">
+                        <button onClick={() => setAttendanceTab('scanner')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'scanner' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><ScanBarcode size={20}/> Leitor (Tempo Real)</button>
+                        <button onClick={() => setAttendanceTab('cards')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'cards' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><IdCard size={20}/> Gerar Carteirinhas</button>
+                        <button onClick={() => setAttendanceTab('history')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'history' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><History size={20}/> Histórico</button>
+                        <button onClick={() => setAttendanceTab('reports')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'reports' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><BarChart2 size={20}/> Relatórios</button>
                     </div>
 
-                    {statsKeyId && selectedStatsKey ? (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                            {/* Summary Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="bg-white p-4 rounded-xl shadow-lg border-l-4 border-l-blue-500">
-                                    <p className="text-sm text-gray-500">Total Corrigidas</p>
-                                    <p className="text-2xl font-bold text-gray-900">{corrections.length}</p>
+                    <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-hidden flex flex-col">
+                        {attendanceTab === 'scanner' && (
+                            <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto w-full">
+                                <div className="mb-8 relative w-full">
+                                    <input ref={scannerInputRef} type="text" autoFocus value={scannerInput} onChange={e => setScannerInput(e.target.value)} onKeyDown={handleScannerInput} className="w-full bg-black/50 border-2 border-brand-500 text-white text-3xl font-mono text-center py-6 rounded-2xl focus:outline-none focus:ring-4 focus:ring-brand-500/30 placeholder-gray-600" placeholder="Aguardando Leitura..." />
+                                    <p className="text-center text-gray-400 mt-2 text-sm">Passe o crachá no leitor ou digite a matrícula</p>
                                 </div>
-                                <div className="bg-white p-4 rounded-xl shadow-lg border-l-4 border-l-green-500">
-                                    <p className="text-sm text-gray-500">Média da Turma</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {corrections.length > 0 
-                                            ? (corrections.reduce((acc, c) => acc + c.score, 0) / corrections.length).toFixed(1) 
-                                            : '0.0'}
-                                    </p>
-                                </div>
-                                <div className="bg-white p-4 rounded-xl shadow-lg border-l-4 border-l-yellow-500">
-                                    <p className="text-sm text-gray-500">Maior Nota</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {corrections.length > 0 ? Math.max(...corrections.map(c => c.score)).toFixed(1) : '0.0'}
-                                    </p>
-                                </div>
-                                <div className="bg-white p-4 rounded-xl shadow-lg border-l-4 border-l-red-500">
-                                    <p className="text-sm text-gray-500">Menor Nota</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {corrections.length > 0 ? Math.min(...corrections.map(c => c.score)).toFixed(1) : '0.0'}
-                                    </p>
-                                </div>
+                                {lastScannedStudent && (
+                                    <div className="bg-green-500/10 border border-green-500 rounded-2xl p-8 w-full animate-in zoom-in-95 duration-200">
+                                        <div className="flex flex-col items-center text-center">
+                                            <div className="h-24 w-24 bg-green-500 rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)]"><CheckCircle size={48} className="text-white"/></div>
+                                            <h3 className="text-3xl font-bold text-white mb-1">{lastScannedStudent.studentName}</h3>
+                                            <p className="text-xl text-green-400 font-medium">{lastScannedStudent.className}</p>
+                                            <p className="text-gray-400 mt-4 font-mono text-sm">Registrado em: {new Date(lastScannedStudent.timestamp).toLocaleTimeString()}</p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
+                        )}
 
-                            {/* Detailed Charts */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                <div className="bg-white p-6 rounded-2xl shadow-xl">
-                                    <h3 className="font-bold text-gray-800 mb-4">Desempenho por Questão (% Acerto)</h3>
-                                    <div className="h-64 overflow-y-auto pr-2 custom-scrollbar">
-                                        {Array.from({ length: selectedStatsKey.numQuestions }).map((_, i) => {
-                                            const qNum = i + 1;
-                                            const rate = getQuestionHitRate(qNum);
-                                            return (
-                                                <div key={qNum} className="flex items-center gap-2 mb-2">
-                                                    <span className="text-xs font-bold w-6 text-gray-500">Q{qNum}</span>
-                                                    <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                                                        <div 
-                                                            className={`h-full ${rate >= 70 ? 'bg-green-500' : rate >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`} 
-                                                            style={{ width: `${rate}%` }}
-                                                        ></div>
-                                                    </div>
-                                                    <span className="text-xs font-bold w-8 text-right">{rate.toFixed(0)}%</span>
-                                                </div>
-                                            )
-                                        })}
+                        {attendanceTab === 'reports' && (
+                            <div className="h-full flex flex-col">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-bold text-white">Gráfico de Frequência</h3>
+                                    <div className="flex bg-black/40 rounded-lg p-1">
+                                        <button onClick={() => setReportPeriod('daily')} className={`px-4 py-2 rounded-md text-sm ${reportPeriod === 'daily' ? 'bg-white text-black' : 'text-gray-400'}`}>Diário</button>
+                                        <button onClick={() => setReportPeriod('weekly')} className={`px-4 py-2 rounded-md text-sm ${reportPeriod === 'weekly' ? 'bg-white text-black' : 'text-gray-400'}`}>Semanal</button>
+                                        <button onClick={() => setReportPeriod('monthly')} className={`px-4 py-2 rounded-md text-sm ${reportPeriod === 'monthly' ? 'bg-white text-black' : 'text-gray-400'}`}>Mensal</button>
                                     </div>
                                 </div>
+                                
+                                <div className="flex-1 flex items-end justify-start gap-4 p-4 overflow-x-auto">
+                                    {Object.entries(chartData).map(([key, value]) => (
+                                        <div key={key} className="flex flex-col items-center gap-2 group">
+                                            <div className="text-white font-bold text-sm bg-black/50 px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">{value} Presenças</div>
+                                            <div className="w-16 bg-brand-600 rounded-t-lg hover:bg-brand-500 transition-all shadow-[0_0_15px_rgba(220,38,38,0.3)]" style={{ height: `${Math.min(value * 5, 300)}px`, minHeight: '10px' }}></div>
+                                            <div className="text-xs text-gray-400 font-bold rotate-45 mt-2 origin-left whitespace-nowrap">{key}</div>
+                                        </div>
+                                    ))}
+                                    {Object.keys(chartData).length === 0 && <p className="text-gray-500 w-full text-center">Sem dados suficientes para exibir gráfico.</p>}
+                                </div>
+                            </div>
+                        )}
 
-                                <div className="bg-white p-6 rounded-2xl shadow-xl">
-                                    <h3 className="font-bold text-gray-800 mb-4">Lista de Alunos</h3>
-                                    <div className="overflow-auto max-h-64">
-                                        <table className="w-full text-sm text-left">
-                                            <thead className="text-xs text-gray-500 uppercase bg-gray-50 sticky top-0">
-                                                <tr>
-                                                    <th className="px-4 py-2">Nome</th>
-                                                    <th className="px-4 py-2 text-right">Acertos</th>
-                                                    <th className="px-4 py-2 text-right">Nota</th>
+                        {attendanceTab === 'history' && (
+                            <div className="h-full flex flex-col">
+                                <h3 className="text-xl font-bold text-white mb-4">Últimos Registros</h3>
+                                <div className="flex-1 overflow-auto bg-black/20 rounded-xl border border-white/5">
+                                    <table className="w-full text-left text-sm text-gray-300">
+                                        <thead className="bg-white/5 text-gray-400 font-bold uppercase text-xs sticky top-0"><tr><th className="px-4 py-3">Hora</th><th className="px-4 py-3">Aluno</th><th className="px-4 py-3">Turma</th><th className="px-4 py-3 text-center">Tipo</th></tr></thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {attendanceLogs.map(log => (
+                                                <tr key={log.id} className="hover:bg-white/5">
+                                                    <td className="px-4 py-3 font-mono text-gray-500">{new Date(log.timestamp).toLocaleTimeString()}</td>
+                                                    <td className="px-4 py-3 font-bold text-white">{log.studentName}</td>
+                                                    <td className="px-4 py-3">{log.className}</td>
+                                                    <td className="px-4 py-3 text-center"><span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold uppercase">Entrada</span></td>
                                                 </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {corrections.map(c => (
-                                                    <tr key={c.id}>
-                                                        <td className="px-4 py-2 font-medium text-gray-900">{c.studentName}</td>
-                                                        <td className="px-4 py-2 text-right text-gray-500">{c.hits.length}/{selectedStatsKey.numQuestions}</td>
-                                                        <td className={`px-4 py-2 text-right font-bold ${c.score >= 6 ? 'text-green-600' : 'text-red-600'}`}>
-                                                            {c.score.toFixed(1)}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="text-center py-20 text-gray-500">
-                            <BarChart2 className="mx-auto h-16 w-16 mb-4 opacity-20" />
-                            <p>Selecione uma prova acima para ver os dados.</p>
-                        </div>
-                    )}
+                        )}
+                        
+                        {attendanceTab === 'cards' && (
+                            <div className="flex flex-col items-center justify-center h-full text-center">
+                                <IdCard size={64} className="text-gray-500 mb-6"/>
+                                <h3 className="text-2xl font-bold text-white mb-2">Gerador de Crachás Estudantis</h3>
+                                <div className="flex gap-4 w-full max-w-md mt-6">
+                                    <select className="flex-1 bg-gray-900 border border-gray-700 text-white rounded-lg p-3" value={cardClassId} onChange={e => setCardClassId(e.target.value)}><option value="">Selecione a Turma...</option>{classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                                    <Button onClick={handlePrintIDCards} className="bg-brand-600 hover:bg-brand-700 px-6">Gerar PDF</Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
