@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { auth } from '../firebaseConfig';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getUserProfile } from '../services/firebaseService';
 
 interface AuthContextType {
@@ -81,8 +81,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!password) return false;
       await signInWithEmailAndPassword(auth, email, password);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro no login:", error);
+
+      // AUTO-HEALING (CORREÇÃO AUTOMÁTICA):
+      // Se for um dos emails de sistema (Gráfica ou Frequência) e der erro de conta não encontrada/credencial inválida,
+      // tentamos criar a conta automaticamente para inicializar o sistema no Firebase.
+      if (
+        (email === 'frequencia.cemal@ceprofmal.com' || email === 'graficacemal@gmail.com') &&
+        (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials')
+      ) {
+         try {
+           console.log("Conta de sistema não encontrada. Tentando criar automaticamente...");
+           await createUserWithEmailAndPassword(auth, email, password);
+           // O createUser já loga automaticamente, então o onAuthStateChanged vai capturar
+           return true; 
+         } catch (createError) {
+           console.error("Erro ao tentar criar conta de sistema automaticamente:", createError);
+           return false;
+         }
+      }
+
       return false;
     }
   };
