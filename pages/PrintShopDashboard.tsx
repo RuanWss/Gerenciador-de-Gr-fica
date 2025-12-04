@@ -66,8 +66,11 @@ import {
   FileText,
   User,
   Plus,
-  X
+  X,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
+import * as faceapi from 'face-api.js';
 
 type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'subjects' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance';
 
@@ -148,6 +151,11 @@ export const PrintShopDashboard: React.FC = () => {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [newStudentPhoto, setNewStudentPhoto] = useState<File | null>(null);
   const [isSavingStudent, setIsSavingStudent] = useState(false);
+  
+  // Student Photo Validation State
+  const [photoAnalysisStatus, setPhotoAnalysisStatus] = useState<'idle' | 'analyzing' | 'valid' | 'invalid'>('idle');
+  const [photoAnalysisMessage, setPhotoAnalysisMessage] = useState('');
+  const [modelsLoaded, setModelsLoaded] = useState(false);
 
   // Answer Keys & Exam Creation Flow
   const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
@@ -193,12 +201,11 @@ export const PrintShopDashboard: React.FC = () => {
   const [scheduleLoading, setScheduleLoading] = useState(false);
 
   // Attendance State
-  const [attendanceTab, setAttendanceTab] = useState<'scanner' | 'cards' | 'history' | 'reports'>('scanner');
-  const [scannerInput, setScannerInput] = useState('');
-  const [lastScannedStudent, setLastScannedStudent] = useState<AttendanceLog | null>(null);
+  const [attendanceTab, setAttendanceTab] = useState<'frequency' | 'history' | 'reports'>('frequency');
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
-  const [cardClassId, setCardClassId] = useState('');
-  const scannerInputRef = useRef<HTMLInputElement>(null);
+  
+  // Frequency View State
+  const [selectedFreqClassId, setSelectedFreqClassId] = useState('');
   
   // Attendance Reports State
   const [allLogs, setAllLogs] = useState<AttendanceLog[]>([]);
@@ -222,9 +229,71 @@ export const PrintShopDashboard: React.FC = () => {
       }
       if (activeTab === 'attendance') {
           loadAttendanceData();
-          setTimeout(() => scannerInputRef.current?.focus(), 500);
+      }
+      if (activeTab === 'students' && !modelsLoaded) {
+          loadFaceApiModels();
       }
   }, [activeTab]);
+
+  const loadFaceApiModels = async () => {
+    try {
+        const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+        await Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+        ]);
+        setModelsLoaded(true);
+        console.log("Modelos FaceAPI carregados no Dashboard");
+    } catch (error) {
+        console.error("Erro ao carregar modelos FaceAPI", error);
+    }
+  };
+
+  const validateStudentPhoto = async (file: File) => {
+      setPhotoAnalysisStatus('analyzing');
+      setPhotoAnalysisMessage('Analisando qualidade biométrica...');
+      
+      try {
+          if (!modelsLoaded) {
+              await loadFaceApiModels();
+          }
+
+          // Create an image element from file
+          const imgUrl = URL.createObjectURL(file);
+          const img = await faceapi.fetchImage(imgUrl);
+          
+          // Detect faces
+          const detections = await faceapi.detectAllFaces(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }));
+          
+          if (detections.length === 0) {
+              setPhotoAnalysisStatus('invalid');
+              setPhotoAnalysisMessage('Nenhum rosto detectado. Use uma foto clara e frontal.');
+          } else if (detections.length > 1) {
+              setPhotoAnalysisStatus('invalid');
+              setPhotoAnalysisMessage('Múltiplos rostos detectados. A foto deve conter apenas o aluno.');
+          } else {
+              setPhotoAnalysisStatus('valid');
+              setPhotoAnalysisMessage('Foto válida para reconhecimento facial!');
+          }
+          
+          URL.revokeObjectURL(imgUrl); // Clean up
+      } catch (error) {
+          console.error(error);
+          setPhotoAnalysisStatus('invalid');
+          setPhotoAnalysisMessage('Erro ao analisar imagem. Tente outro arquivo.');
+      }
+  };
+
+  const handleStudentPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          setNewStudentPhoto(file);
+          validateStudentPhoto(file);
+      } else {
+          setNewStudentPhoto(null);
+          setPhotoAnalysisStatus('idle');
+          setPhotoAnalysisMessage('');
+      }
+  };
 
   const refreshData = async () => {
     setIsLoading(true);
@@ -374,6 +443,8 @@ export const PrintShopDashboard: React.FC = () => {
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClassId) return alert('Selecione uma turma');
+    if (newStudentPhoto && photoAnalysisStatus !== 'valid') return alert('Por favor, envie uma foto válida para biometria.');
+
     setIsSavingStudent(true);
     try {
         const cls = classList.find(c => c.id === selectedClassId);
@@ -392,6 +463,8 @@ export const PrintShopDashboard: React.FC = () => {
         alert('Aluno salvo!');
         setNewStudentName('');
         setNewStudentPhoto(null);
+        setPhotoAnalysisStatus('idle');
+        setPhotoAnalysisMessage('');
         refreshData();
     } catch (e) { alert('Erro ao salvar aluno'); }
     setIsSavingStudent(false);
@@ -536,110 +609,6 @@ export const PrintShopDashboard: React.FC = () => {
         </html>
       `;
 
-      printWindow.document.write(html);
-      printWindow.document.close();
-  };
-
-  // ATTENDANCE HANDLERS
-  const handleScannerInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') {
-          const code = scannerInput.trim();
-          if (!code) return;
-
-          // Buscar aluno pelo ID (que é o código do QR)
-          const student = studentList.find(s => s.id === code);
-          
-          if (student) {
-              const now = new Date();
-              const dateString = now.toISOString().split('T')[0];
-              const log: AttendanceLog = {
-                  id: '',
-                  studentId: student.id,
-                  studentName: student.name,
-                  className: student.className,
-                  studentPhotoUrl: student.photoUrl,
-                  timestamp: now.getTime(),
-                  type: 'entry',
-                  dateString: dateString
-              };
-
-              await logAttendance(log);
-              setLastScannedStudent(log);
-              setAttendanceLogs([log, ...attendanceLogs]);
-              
-              const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
-              audio.play().catch(err => console.error(err));
-          } else {
-              alert("Aluno não encontrado ou código inválido.");
-          }
-
-          setScannerInput('');
-      }
-  };
-
-  const handlePrintIDCards = () => {
-      if (!cardClassId) return alert("Selecione uma turma para gerar as carteirinhas.");
-      
-      const studentsInClass = studentList.filter(s => s.classId === cardClassId);
-      if (studentsInClass.length === 0) return alert("Nenhum aluno nesta turma.");
-
-      const printWindow = window.open('', '', 'width=800,height=800');
-      if (!printWindow) return;
-
-      const html = `
-        <html>
-        <head>
-            <title>Carteirinhas - ${studentsInClass[0].className}</title>
-            <style>
-                body { font-family: 'Arial', sans-serif; margin: 0; padding: 20px; }
-                .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-                .id-card { 
-                    border: 1px solid #ccc; border-radius: 10px; height: 250px; 
-                    display: flex; flex-direction: column; overflow: hidden; page-break-inside: avoid;
-                }
-                .header { background: #b91c1c; color: white; padding: 10px; text-align: center; }
-                .header img { height: 30px; margin-bottom: 5px; }
-                .content { padding: 15px; flex: 1; display: flex; gap: 15px; align-items: center; }
-                .photo-placeholder { width: 80px; height: 100px; background: #eee; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #aaa; overflow: hidden; }
-                .info { flex: 1; }
-                .name { font-weight: bold; font-size: 16px; margin-bottom: 5px; }
-                .class { font-size: 14px; color: #555; margin-bottom: 5px; }
-                .id { font-family: monospace; font-size: 12px; color: #888; }
-                .qr-area { text-align: center; padding: 10px; background: #f9f9f9; border-top: 1px solid #eee; }
-                @media print {
-                     .id-card { border: 1px solid #000; }
-                     .header { -webkit-print-color-adjust: exact; background: #b91c1c !important; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="card-grid">
-                ${studentsInClass.map(s => `
-                    <div class="id-card">
-                        <div class="header">
-                            <div>CEMAL EQUIPE</div>
-                            <div style="font-size: 10px;">Carteira de Identificação Estudantil</div>
-                        </div>
-                        <div class="content">
-                            <div class="photo-placeholder">
-                                ${s.photoUrl ? `<img src="${s.photoUrl}" style="width:100%; height:100%; object-fit:cover;" />` : 'SEM FOTO'}
-                            </div>
-                            <div class="info">
-                                <div class="name">${s.name}</div>
-                                <div class="class">${s.className}</div>
-                                <div class="id">Matrícula: ${s.id}</div>
-                            </div>
-                        </div>
-                        <div class="qr-area">
-                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${s.id}" width="80" height="80" />
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-            <script>window.onload = function() { window.print(); }</script>
-        </body>
-        </html>
-      `;
       printWindow.document.write(html);
       printWindow.document.close();
   };
@@ -1243,10 +1212,10 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                             
                             {/* Upload de Foto */}
-                            <div className="mt-4 p-4 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 flex flex-col items-center justify-center text-center">
+                            <div className={`mt-4 p-4 border-2 border-dashed rounded-xl bg-gray-50 flex flex-col items-center justify-center text-center transition-colors ${photoAnalysisStatus === 'valid' ? 'border-green-500 bg-green-50' : photoAnalysisStatus === 'invalid' ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}>
                                 <label htmlFor="photo-upload" className="cursor-pointer">
                                     <div className="flex flex-col items-center gap-2">
-                                        <Camera className="text-gray-400" size={32} />
+                                        <Camera className={`${photoAnalysisStatus === 'valid' ? 'text-green-500' : photoAnalysisStatus === 'invalid' ? 'text-red-500' : 'text-gray-400'}`} size={32} />
                                         <span className="text-sm font-medium text-brand-600">Upload da Foto (Para Biometria)</span>
                                         <span className="text-xs text-gray-500">JPG, PNG (Rosto visível)</span>
                                     </div>
@@ -1255,17 +1224,35 @@ export const PrintShopDashboard: React.FC = () => {
                                         type="file" 
                                         accept="image/*" 
                                         className="hidden" 
-                                        onChange={e => e.target.files && setNewStudentPhoto(e.target.files[0])} 
+                                        onChange={handleStudentPhotoChange} 
                                     />
                                 </label>
+                                
                                 {newStudentPhoto && (
-                                    <div className="mt-2 text-sm text-green-600 font-bold flex items-center gap-1">
-                                        <CheckCircle size={14} /> {newStudentPhoto.name}
+                                    <div className="mt-4 flex items-center gap-2">
+                                         {photoAnalysisStatus === 'analyzing' && (
+                                             <div className="flex items-center gap-2 text-gray-600 text-sm">
+                                                 <Loader2 className="animate-spin" size={16} /> Analisando foto...
+                                             </div>
+                                         )}
+                                         {photoAnalysisStatus === 'valid' && (
+                                             <div className="flex items-center gap-2 text-green-700 text-sm font-bold bg-green-200 px-3 py-1 rounded-full">
+                                                 <CheckCircle size={16} /> Foto Aprovada
+                                             </div>
+                                         )}
+                                         {photoAnalysisStatus === 'invalid' && (
+                                             <div className="flex flex-col items-center gap-1">
+                                                 <div className="flex items-center gap-2 text-red-700 text-sm font-bold bg-red-200 px-3 py-1 rounded-full">
+                                                     <AlertCircle size={16} /> Foto Inválida
+                                                 </div>
+                                                 <span className="text-xs text-red-600">{photoAnalysisMessage}</span>
+                                             </div>
+                                         )}
                                     </div>
                                 )}
                             </div>
 
-                            <Button type="submit" isLoading={isSavingStudent} className="w-full py-3">Cadastrar Aluno</Button>
+                            <Button type="submit" isLoading={isSavingStudent} disabled={photoAnalysisStatus === 'analyzing' || (newStudentPhoto !== null && photoAnalysisStatus === 'invalid')} className="w-full py-3">Cadastrar Aluno</Button>
                         </form>
                         <h3 className="text-lg font-bold text-gray-800 mb-4">Lista de Alunos</h3><div className="bg-gray-50 rounded-lg p-4 max-h-[400px] overflow-y-auto border border-gray-200">{studentList.length > 0 ? (<table className="min-w-full text-sm text-left"><thead className="text-xs text-gray-500 uppercase border-b bg-gray-100"><tr><th className="px-4 py-3 rounded-tl-lg">Nome</th><th className="px-4 py-3 rounded-tr-lg">Turma</th></tr></thead><tbody>{studentList.map(st => (<tr key={st.id} className="border-b last:border-0 hover:bg-white transition-colors"><td className="px-4 py-3 font-medium text-gray-900">{st.name}</td><td className="px-4 py-3 text-gray-500">{st.className}</td></tr>))}</tbody></table>) : <p className="text-gray-500 text-sm text-center py-4">Nenhum aluno cadastrado.</p>}</div>
                     </div>
@@ -1279,29 +1266,71 @@ export const PrintShopDashboard: React.FC = () => {
                     </h2>
 
                     <div className="flex gap-4 mb-6">
-                        <button onClick={() => setAttendanceTab('scanner')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'scanner' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><ScanBarcode size={20}/> Leitor (Tempo Real)</button>
-                        <button onClick={() => setAttendanceTab('cards')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'cards' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><IdCard size={20}/> Gerar Carteirinhas</button>
-                        <button onClick={() => setAttendanceTab('history')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'history' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><History size={20}/> Histórico</button>
-                        <button onClick={() => setAttendanceTab('reports')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'reports' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}><BarChart2 size={20}/> Relatórios</button>
+                        <button onClick={() => setAttendanceTab('frequency')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'frequency' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+                            <Users size={20}/> Frequência
+                        </button>
+                        <button onClick={() => setAttendanceTab('history')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'history' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+                            <History size={20}/> Histórico
+                        </button>
+                        <button onClick={() => setAttendanceTab('reports')} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${attendanceTab === 'reports' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+                            <BarChart2 size={20}/> Relatórios
+                        </button>
                     </div>
 
                     <div className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-hidden flex flex-col">
-                        {attendanceTab === 'scanner' && (
-                            <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto w-full">
-                                <div className="mb-8 relative w-full">
-                                    <input ref={scannerInputRef} type="text" autoFocus value={scannerInput} onChange={e => setScannerInput(e.target.value)} onKeyDown={handleScannerInput} className="w-full bg-black/50 border-2 border-brand-500 text-white text-3xl font-mono text-center py-6 rounded-2xl focus:outline-none focus:ring-4 focus:ring-brand-500/30 placeholder-gray-600" placeholder="Aguardando Leitura..." />
-                                    <p className="text-center text-gray-400 mt-2 text-sm">Passe o crachá no leitor ou digite a matrícula</p>
+                        {attendanceTab === 'frequency' && (
+                            <div className="flex flex-col h-full">
+                                <div className="mb-6">
+                                    <label className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2 block">Selecione a Turma</label>
+                                    <select 
+                                        className="w-full md:w-1/2 bg-gray-900 border border-gray-700 text-white rounded-xl p-4 text-lg focus:ring-2 focus:ring-brand-600 focus:outline-none shadow-xl"
+                                        value={selectedFreqClassId} 
+                                        onChange={e => setSelectedFreqClassId(e.target.value)}
+                                    >
+                                        <option value="">-- Selecione uma Turma --</option>
+                                        {classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
                                 </div>
-                                {lastScannedStudent && (
-                                    <div className="bg-green-500/10 border border-green-500 rounded-2xl p-8 w-full animate-in zoom-in-95 duration-200">
-                                        <div className="flex flex-col items-center text-center">
-                                            <div className="h-24 w-24 bg-green-500 rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)]"><CheckCircle size={48} className="text-white"/></div>
-                                            <h3 className="text-3xl font-bold text-white mb-1">{lastScannedStudent.studentName}</h3>
-                                            <p className="text-xl text-green-400 font-medium">{lastScannedStudent.className}</p>
-                                            <p className="text-gray-400 mt-4 font-mono text-sm">Registrado em: {new Date(lastScannedStudent.timestamp).toLocaleTimeString()}</p>
+
+                                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                                    {selectedFreqClassId ? (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                            {studentList.filter(s => s.classId === selectedFreqClassId).map(student => {
+                                                const log = attendanceLogs.find(l => l.studentId === student.id && l.dateString === new Date().toISOString().split('T')[0]);
+                                                const isPresent = !!log;
+                                                
+                                                return (
+                                                    <div key={student.id} className="bg-[#18181b] border border-gray-800 rounded-xl p-4 flex items-center gap-4 hover:border-brand-900 transition-colors shadow-lg">
+                                                        <div className={`h-14 w-14 rounded-full border-2 overflow-hidden shrink-0 ${isPresent ? 'border-green-500' : 'border-red-500'}`}>
+                                                            {student.photoUrl ? (
+                                                                <img src={student.photoUrl} alt={student.name} className="h-full w-full object-cover" />
+                                                            ) : (
+                                                                <div className="h-full w-full bg-gray-800 flex items-center justify-center text-gray-500 text-xs">Sem Foto</div>
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <h4 className="font-bold text-white truncate" title={student.name}>{student.name}</h4>
+                                                            <p className={`text-xs font-bold uppercase tracking-wider mt-1 ${isPresent ? 'text-green-500' : 'text-red-500'}`}>
+                                                                {isPresent ? 'PRESENTE' : 'AUSENTE'}
+                                                            </p>
+                                                            {isPresent && <p className="text-[10px] text-gray-500 mt-0.5">{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {studentList.filter(s => s.classId === selectedFreqClassId).length === 0 && (
+                                                <div className="col-span-full text-center py-10 text-gray-500">
+                                                    Nenhum aluno cadastrado nesta turma.
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                                            <Users size={64} className="mb-4 opacity-20"/>
+                                            <p className="text-xl">Selecione uma turma acima para visualizar a frequência.</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
@@ -1414,17 +1443,6 @@ export const PrintShopDashboard: React.FC = () => {
                                             ))}
                                         </tbody>
                                     </table>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {attendanceTab === 'cards' && (
-                            <div className="flex flex-col items-center justify-center h-full text-center">
-                                <IdCard size={64} className="text-gray-500 mb-6"/>
-                                <h3 className="text-2xl font-bold text-white mb-2">Gerador de Crachás Estudantis</h3>
-                                <div className="flex gap-4 w-full max-w-md mt-6">
-                                    <select className="flex-1 bg-gray-900 border border-gray-700 text-white rounded-lg p-3" value={cardClassId} onChange={e => setCardClassId(e.target.value)}><option value="">Selecione a Turma...</option>{classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                                    <Button onClick={handlePrintIDCards} className="bg-brand-600 hover:bg-brand-700 px-6">Gerar PDF</Button>
                                 </div>
                             </div>
                         )}
