@@ -3,11 +3,12 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { listenToSystemConfig } from '../services/firebaseService';
 import { SystemConfig } from '../types';
-import { Megaphone, CalendarClock } from 'lucide-react';
+import { Megaphone, CalendarClock, Eye, EyeOff } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -94,18 +95,25 @@ export const Login: React.FC = () => {
                     onChange={(e) => setEmail(e.target.value)}
                 />
                 </div>
-                <div>
+                <div className="relative">
                     <label htmlFor="password" className="sr-only">Senha</label>
                     <input 
                         id="password"
                         name="password"
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         required
-                        className="appearance-none rounded-b-md relative block w-full px-3 py-3 border border-gray-300 bg-white placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 focus:z-10 sm:text-sm"
+                        className="appearance-none rounded-b-md relative block w-full px-3 py-3 border border-gray-300 bg-white placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-brand-500 focus:border-brand-500 focus:z-10 sm:text-sm pr-10"
                         placeholder="Senha"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
+                    <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center z-20 text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
                 </div>
             </div>
 
