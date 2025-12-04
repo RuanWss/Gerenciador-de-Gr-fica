@@ -443,14 +443,28 @@ export const PrintShopDashboard: React.FC = () => {
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClassId) return alert('Selecione uma turma');
-    if (newStudentPhoto && photoAnalysisStatus !== 'valid') return alert('Por favor, envie uma foto válida para biometria.');
+    
+    // Check photo status but allow bypass if user confirms
+    if (newStudentPhoto && photoAnalysisStatus === 'invalid') {
+        if (!window.confirm("A foto foi identificada como inválida ou a IA não conseguiu processar. Deseja cadastrar mesmo assim? (O reconhecimento facial pode não funcionar)")) {
+            return;
+        }
+    }
 
     setIsSavingStudent(true);
     try {
         const cls = classList.find(c => c.id === selectedClassId);
         let photoUrl = '';
+        
         if (newStudentPhoto) {
-            photoUrl = await uploadStudentPhoto(newStudentPhoto);
+             try {
+                photoUrl = await uploadStudentPhoto(newStudentPhoto);
+             } catch (err) {
+                 console.error("Upload error", err);
+                 if(!window.confirm("Erro ao enviar foto (Falha de conexão). Deseja cadastrar o aluno SEM foto?")) {
+                     throw new Error("Upload cancelado pelo usuário.");
+                 }
+             }
         }
 
         await saveStudent({ 
@@ -460,14 +474,24 @@ export const PrintShopDashboard: React.FC = () => {
             className: cls?.name || '',
             photoUrl: photoUrl 
         });
-        alert('Aluno salvo!');
+        
+        alert('Aluno salvo com sucesso!');
         setNewStudentName('');
         setNewStudentPhoto(null);
         setPhotoAnalysisStatus('idle');
         setPhotoAnalysisMessage('');
+        
+        // Reset file input
+        const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
+        if(fileInput) fileInput.value = '';
+
         refreshData();
-    } catch (e) { alert('Erro ao salvar aluno'); }
-    setIsSavingStudent(false);
+    } catch (e: any) { 
+        console.error(e);
+        alert('Erro ao salvar aluno: ' + (e.message || e)); 
+    } finally {
+        setIsSavingStudent(false);
+    }
   };
 
   // Schedule Handler
@@ -1252,7 +1276,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 )}
                             </div>
 
-                            <Button type="submit" isLoading={isSavingStudent} disabled={photoAnalysisStatus === 'analyzing' || (newStudentPhoto !== null && photoAnalysisStatus === 'invalid')} className="w-full py-3">Cadastrar Aluno</Button>
+                            <Button type="submit" isLoading={isSavingStudent} className="w-full py-3">Cadastrar Aluno</Button>
                         </form>
                         <h3 className="text-lg font-bold text-gray-800 mb-4">Lista de Alunos</h3><div className="bg-gray-50 rounded-lg p-4 max-h-[400px] overflow-y-auto border border-gray-200">{studentList.length > 0 ? (<table className="min-w-full text-sm text-left"><thead className="text-xs text-gray-500 uppercase border-b bg-gray-100"><tr><th className="px-4 py-3 rounded-tl-lg">Nome</th><th className="px-4 py-3 rounded-tr-lg">Turma</th></tr></thead><tbody>{studentList.map(st => (<tr key={st.id} className="border-b last:border-0 hover:bg-white transition-colors"><td className="px-4 py-3 font-medium text-gray-900">{st.name}</td><td className="px-4 py-3 text-gray-500">{st.className}</td></tr>))}</tbody></table>) : <p className="text-gray-500 text-sm text-center py-4">Nenhum aluno cadastrado.</p>}</div>
                     </div>
