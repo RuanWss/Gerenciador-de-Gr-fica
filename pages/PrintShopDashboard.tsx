@@ -557,6 +557,7 @@ export const PrintShopDashboard: React.FC = () => {
                   studentId: student.id,
                   studentName: student.name,
                   className: student.className,
+                  studentPhotoUrl: student.photoUrl,
                   timestamp: now.getTime(),
                   type: 'entry',
                   dateString: dateString

@@ -50,14 +50,23 @@ export const AttendanceTerminal: React.FC = () => {
         };
     }, []);
 
-    // 3. Load Students
+    // 3. Load Students (Auto-Refresh a cada 30s para pegar fotos novas)
     useEffect(() => {
-        const init = async () => {
-            const list = await getStudents();
-            setStudents(list);
-            studentsRef.current = list; // Update ref
+        const fetchStudents = async () => {
+            try {
+                const list = await getStudents();
+                setStudents(list);
+                studentsRef.current = list; // Update ref
+                console.log("Lista de alunos atualizada para reconhecimento:", list.length);
+            } catch (error) {
+                console.error("Erro ao atualizar lista de alunos:", error);
+            }
         };
-        init();
+
+        fetchStudents(); // Initial load
+
+        const interval = setInterval(fetchStudents, 30000); // Refresh every 30s
+        return () => clearInterval(interval);
     }, []);
 
     // 4. Keyboard Listener
@@ -181,7 +190,11 @@ export const AttendanceTerminal: React.FC = () => {
 
     const simulateBiometricMatch = () => {
         if (students.length > 0) {
-            const randomStudent = students[Math.floor(Math.random() * students.length)];
+            // Prioriza alunos com foto para demonstrar o recurso
+            const studentsWithPhoto = students.filter(s => s.photoUrl);
+            const pool = studentsWithPhoto.length > 0 ? studentsWithPhoto : students;
+            
+            const randomStudent = pool[Math.floor(Math.random() * pool.length)];
             processAttendance(randomStudent.id);
         } else {
             alert("Nenhum aluno cadastrado para testar.");
@@ -189,7 +202,7 @@ export const AttendanceTerminal: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-black via-red-950 to-black flex flex-col items-center justify-start py-6 relative overflow-hidden font-sans text-white">
+        <div className="min-h-screen w-full bg-gradient-to-br from-black via-red-900 to-black flex flex-col items-center justify-start py-6 relative overflow-hidden font-sans text-white">
             
             {/* Background Pattern */}
             <div className="absolute inset-0 opacity-20 pointer-events-none" 
@@ -202,7 +215,7 @@ export const AttendanceTerminal: React.FC = () => {
                 className="absolute top-4 right-4 p-2 text-gray-500 hover:text-white transition-colors z-50 opacity-50 hover:opacity-100"
                 title="Sair do Terminal"
             >
-                <LogOut size={20} />
+                <LogOut size={16} />
             </button>
 
             {/* Logo */}
@@ -215,7 +228,7 @@ export const AttendanceTerminal: React.FC = () => {
                 <h1 className="text-[9rem] leading-none font-black font-['Montserrat'] tracking-tighter text-gray-100 drop-shadow-2xl">
                     {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </h1>
-                <p className="text-xl font-bold uppercase tracking-[0.15em] text-red-100/80 mt-2">
+                <p className="text-lg font-bold uppercase tracking-[0.15em] text-red-100/80 mt-2">
                      {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
             </div>
@@ -269,7 +282,7 @@ export const AttendanceTerminal: React.FC = () => {
                                     <img 
                                         src={lastLog.studentPhotoUrl || "https://ui-avatars.com/api/?name=" + lastLog.studentName} 
                                         alt="Aluno" 
-                                        className="w-full h-full rounded-full object-cover"
+                                        className="w-full h-full rounded-full object-cover bg-gray-800"
                                     />
                                 </div>
 
