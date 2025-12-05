@@ -1190,36 +1190,53 @@ export const PrintShopDashboard: React.FC = () => {
                             <p>Nenhuma prova encontrada com este filtro.</p>
                         </div>
                     ) : (
-                        filteredExams.map((exam) => (
-                        <div key={exam.id} className={`bg-white rounded-xl p-6 shadow-xl border-l-4 transition-all hover:scale-[1.01] ${exam.status === ExamStatus.PENDING ? 'border-l-brand-600 shadow-brand-900/20' : exam.status === ExamStatus.IN_PROGRESS ? 'border-l-yellow-500' : 'border-l-green-500'}`}>
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center gap-3">
-                                    <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full ${exam.status === ExamStatus.PENDING ? 'bg-red-100 text-red-700' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
-                                        {exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Em andamento' : 'Finalizado'}
-                                    </span>
-                                    <span className="text-xs text-gray-400 font-medium">Enviado em {new Date(exam.createdAt).toLocaleDateString()}</span>
-                                </div>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">{exam.title}</h3>
-                            <p className="text-sm text-gray-500 mb-4 font-medium">{exam.teacherName} — {exam.subject}</p>
-                            
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
-                                <div><p className="text-xs text-gray-400 font-bold uppercase">Turma</p><p className="font-semibold text-gray-800">{exam.gradeLevel}</p></div>
-                                <div><p className="text-xs text-gray-400 font-bold uppercase">Qtd.</p><p className="font-semibold text-gray-800">{exam.quantity > 0 ? <>{exam.quantity} cópias</> : <span className="text-blue-600 text-xs cursor-pointer" onClick={() => handleViewFile(exam)}>Ver Arquivo</span>}</p></div>
-                                <div><p className="text-xs text-gray-400 font-bold uppercase">Prazo</p><p className="font-semibold text-gray-800">{new Date(exam.dueDate).toLocaleDateString()}</p></div>
-                                <div><p className="text-xs text-gray-400 font-bold uppercase">Arquivo</p><p className="font-semibold text-gray-800 truncate" title={exam.fileName}>{exam.fileName}</p></div>
-                            </div>
+                        filteredExams.map((exam) => {
+                            // Find the class and count students
+                            const relatedClass = classList.find(c => c.name === exam.gradeLevel);
+                            const studentCount = relatedClass 
+                                ? studentList.filter(s => s.classId === relatedClass.id).length 
+                                : 0;
 
-                            <div className="flex gap-3">
-                                <Button variant="outline" className="w-full justify-start text-xs border-gray-300 text-gray-600 hover:bg-gray-50" onClick={() => handleViewFile(exam)}>
-                                    {exam.fileName.toLowerCase().endsWith('.pdf') ? <><Eye size={14} className="mr-2" /> Visualizar PDF</> : <><Download size={14} className="mr-2" /> Baixar Arquivo</>}
-                                </Button>
-                                {exam.status === ExamStatus.PENDING && <Button onClick={() => handleStartPrint(exam)} className="w-full justify-start h-10 bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm"><Printer size={16} className="mr-2"/> Iniciar Impressão</Button>}
-                                {exam.status === ExamStatus.IN_PROGRESS && <Button onClick={() => handleStatusChange(exam.id, ExamStatus.COMPLETED)} className="w-full justify-start h-10 bg-green-600 hover:bg-green-700 border-none shadow-sm"><CheckCircle size={16} className="mr-2"/> Marcar Pronto</Button>}
-                                {exam.status === ExamStatus.COMPLETED && <Button onClick={() => handleStatusChange(exam.id, ExamStatus.IN_PROGRESS)} variant="outline" className="w-full justify-center text-xs opacity-75 hover:opacity-100">Reabrir Pedido</Button>}
-                            </div>
-                        </div>
-                        ))
+                            return (
+                                <div key={exam.id} className={`bg-white rounded-xl p-6 shadow-xl border-l-4 transition-all hover:scale-[1.01] ${exam.status === ExamStatus.PENDING ? 'border-l-brand-600 shadow-brand-900/20' : exam.status === ExamStatus.IN_PROGRESS ? 'border-l-yellow-500' : 'border-l-green-500'}`}>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <span className={`px-3 py-1 text-xs font-bold uppercase tracking-wider rounded-full ${exam.status === ExamStatus.PENDING ? 'bg-red-100 text-red-700' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                                                {exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Em andamento' : 'Finalizado'}
+                                            </span>
+                                            <span className="text-xs text-gray-400 font-medium">Enviado em {new Date(exam.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-900 mb-1">{exam.title}</h3>
+                                    <p className="text-sm text-gray-500 mb-4 font-medium">{exam.teacherName} — {exam.subject}</p>
+                                    
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                        <div><p className="text-xs text-gray-400 font-bold uppercase">Turma</p><p className="font-semibold text-gray-800">{exam.gradeLevel}</p></div>
+                                        <div>
+                                            <p className="text-xs text-gray-400 font-bold uppercase">Qtd.</p>
+                                            <p className="font-semibold text-gray-800">
+                                                {studentCount > 0 ? (
+                                                    <span className="text-brand-700">{studentCount} alunos (Sugestão)</span>
+                                                ) : (
+                                                    <span className="text-blue-600 text-xs cursor-pointer" onClick={() => handleViewFile(exam)}>Ver Arquivo</span>
+                                                )}
+                                            </p>
+                                        </div>
+                                        <div><p className="text-xs text-gray-400 font-bold uppercase">Prazo</p><p className="font-semibold text-gray-800">{new Date(exam.dueDate).toLocaleDateString()}</p></div>
+                                        <div><p className="text-xs text-gray-400 font-bold uppercase">Arquivo</p><p className="font-semibold text-gray-800 truncate" title={exam.fileName}>{exam.fileName}</p></div>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        <Button variant="outline" className="w-full justify-start text-xs border-gray-300 text-gray-600 hover:bg-gray-50" onClick={() => handleViewFile(exam)}>
+                                            {exam.fileName.toLowerCase().endsWith('.pdf') ? <><Eye size={14} className="mr-2" /> Visualizar PDF</> : <><Download size={14} className="mr-2" /> Baixar Arquivo</>}
+                                        </Button>
+                                        {exam.status === ExamStatus.PENDING && <Button onClick={() => handleStartPrint(exam)} className="w-full justify-start h-10 bg-yellow-500 hover:bg-yellow-600 text-white border-none shadow-sm"><Printer size={16} className="mr-2"/> Iniciar Impressão</Button>}
+                                        {exam.status === ExamStatus.IN_PROGRESS && <Button onClick={() => handleStatusChange(exam.id, ExamStatus.COMPLETED)} className="w-full justify-start h-10 bg-green-600 hover:bg-green-700 border-none shadow-sm"><CheckCircle size={16} className="mr-2"/> Marcar Pronto</Button>}
+                                        {exam.status === ExamStatus.COMPLETED && <Button onClick={() => handleStatusChange(exam.id, ExamStatus.IN_PROGRESS)} variant="outline" className="w-full justify-center text-xs opacity-75 hover:opacity-100">Reabrir Pedido</Button>}
+                                    </div>
+                                </div>
+                            );
+                        })
                     )}
                 </div>
             )}
