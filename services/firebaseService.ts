@@ -246,6 +246,27 @@ export const saveStudent = async (student: Student): Promise<void> => {
   }
 };
 
+export const updateStudent = async (student: Student): Promise<void> => {
+  try {
+    if (!student.id) throw new Error("ID do aluno necessário para atualização");
+    const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
+    const { id, ...data } = student;
+    await updateDoc(studentRef, data);
+  } catch (error) {
+    console.error("Erro ao atualizar aluno", error);
+    throw error;
+  }
+};
+
+export const deleteStudent = async (id: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
+  } catch (error) {
+    console.error("Erro ao excluir aluno", error);
+    throw error;
+  }
+};
+
 // --- SCHEDULE SYSTEM ---
 
 export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
