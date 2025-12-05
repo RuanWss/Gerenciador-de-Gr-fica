@@ -430,14 +430,9 @@ export const PrintShopDashboard: React.FC = () => {
     e.preventDefault();
     if (!selectedClassId) return alert('Selecione uma turma');
     
-    // Check photo status but allow bypass if user confirms
-    if (newStudentPhoto && photoAnalysisStatus === 'invalid') {
-        if (!window.confirm("A foto foi identificada como inválida ou a IA não conseguiu processar. Deseja cadastrar mesmo assim? (O reconhecimento facial pode não funcionar)")) {
-            return;
-        }
-    }
-
+    // 1. Set Loading State
     setIsSavingStudent(true);
+    
     try {
         const cls = classList.find(c => c.id === selectedClassId);
         let photoUrl = '';
@@ -448,13 +443,15 @@ export const PrintShopDashboard: React.FC = () => {
             if (existingStudent) photoUrl = existingStudent.photoUrl || '';
         }
 
+        // 2. Handle Photo Upload with explicit error handling
         if (newStudentPhoto) {
              try {
                 photoUrl = await uploadStudentPhoto(newStudentPhoto);
              } catch (err) {
                  console.error("Upload error", err);
+                 // 3. Fallback: Ask user to proceed without photo
                  if(!window.confirm("Erro ao enviar foto (Falha de conexão). Deseja cadastrar o aluno SEM foto?")) {
-                     setIsSavingStudent(false);
+                     setIsSavingStudent(false); // EXIT
                      return;
                  }
              }
@@ -467,6 +464,7 @@ export const PrintShopDashboard: React.FC = () => {
             photoUrl: photoUrl 
         };
 
+        // 4. Save to Database
         if (editingStudentId) {
             await updateStudent({ ...studentData, id: editingStudentId });
             alert('Aluno atualizado com sucesso!');
@@ -475,7 +473,7 @@ export const PrintShopDashboard: React.FC = () => {
             alert('Aluno salvo com sucesso!');
         }
         
-        // Reset form
+        // 5. Reset form
         setNewStudentName('');
         setNewStudentPhoto(null);
         setPhotoAnalysisStatus('idle');
@@ -491,6 +489,7 @@ export const PrintShopDashboard: React.FC = () => {
         console.error(e);
         alert('Erro ao salvar aluno: ' + (e.message || e)); 
     } finally {
+        // 6. FORCE RESET LOADING STATE
         setIsSavingStudent(false);
     }
   };
@@ -981,10 +980,10 @@ export const PrintShopDashboard: React.FC = () => {
                                     <button type="button" onClick={() => setNewTeacherShift('afternoon')} className={`text-sm font-bold pb-1 ${newTeacherShift === 'afternoon' ? 'text-brand-600 border-b-2 border-brand-600' : 'text-gray-500'}`}>Tarde (Médio)</button>
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                    {(newTeacherShift === 'morning' ? morningClasses : afternoonClasses).map(cls => (
-                                        <label key={cls} className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded border hover:border-brand-300">
-                                            <input type="checkbox" checked={selectedClasses.includes(cls)} onChange={() => toggleClass(cls)} className="rounded text-brand-600 focus:ring-brand-500" />
-                                            <span className="text-sm text-gray-700">{cls}</span>
+                                    {(newTeacherShift === 'morning' ? MORNING_CLASSES_LIST.map(c=>c.name) : AFTERNOON_CLASSES_LIST.map(c=>c.name)).map(clsName => (
+                                        <label key={clsName} className="flex items-center gap-2 cursor-pointer bg-white p-2 rounded border hover:border-brand-300">
+                                            <input type="checkbox" checked={selectedClasses.includes(clsName)} onChange={() => toggleClass(clsName)} className="rounded text-brand-600 focus:ring-brand-500" />
+                                            <span className="text-sm text-gray-700">{clsName}</span>
                                         </label>
                                     ))}
                                 </div>
