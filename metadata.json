@@ -1,5 +1,7 @@
 {
   "name": "CEMAL EQUIPE",
-  "description": "Sistema de gestão de provas escolares. Permite que professores enviem materiais e a gráfica gerencie a fila de impressão. Inclui assistente de IA para criação de questões.",
-  "requestFramePermissions": []
+  "description": "Sistema de gestão escolar CEMAL EQUIPE. Gestão de provas, frequência e horários.",
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

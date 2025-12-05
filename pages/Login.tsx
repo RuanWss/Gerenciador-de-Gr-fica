@@ -70,7 +70,7 @@ export const Login: React.FC = () => {
             <div className="mx-auto flex items-center justify-center mb-6">
                 <img 
                 src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
-                alt="Logo CEMAL" 
+                alt="Logo CEMAL EQUIPE" 
                 className="h-32 w-auto object-contain drop-shadow-lg"
                 />
             </div>
