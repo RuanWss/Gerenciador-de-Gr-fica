@@ -479,6 +479,7 @@ export const PrintShopDashboard: React.FC = () => {
         setPhotoAnalysisStatus('idle');
         setPhotoAnalysisMessage('');
         setEditingStudentId(null);
+        setSelectedClassId('');
         
         // Reset file input
         const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
@@ -655,7 +656,7 @@ export const PrintShopDashboard: React.FC = () => {
                 </tbody>
             </table>
 
-            <div class="footer">Gerado pelo sistema SchoolPrint Manager em ${new Date().toLocaleString()}</div>
+            <div class="footer">Gerado pelo sistema Dashboard CEMAL em ${new Date().toLocaleString()}</div>
             <script>
                 window.onload = function() { window.print(); }
             </script>
