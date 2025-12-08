@@ -1,3 +1,4 @@
+
 export enum UserRole {
   TEACHER = 'TEACHER',
   PRINTSHOP = 'PRINTSHOP',
@@ -20,6 +21,8 @@ export enum ExamStatus {
   COMPLETED = 'COMPLETED'
 }
 
+export type MaterialType = 'exam' | 'handout'; // Prova ou Apostila
+
 export interface ExamRequest {
   id: string;
   teacherId: string;
@@ -28,12 +31,22 @@ export interface ExamRequest {
   title: string;
   quantity: number;
   gradeLevel: string;
-  instructions: string;
+  instructions: string; // Pode ser usado para subtítulo
   fileName: string;
   fileUrl?: string;
   status: ExamStatus;
   createdAt: number;
   dueDate: string;
+  
+  // Novos campos de diagramação
+  materialType?: MaterialType;
+  columns?: 1 | 2;
+  headerData?: {
+    schoolName: string;
+    showStudentName: boolean;
+    showScore: boolean;
+    maxScore?: number;
+  };
 }
 
 export interface AIGeneratedQuestion {

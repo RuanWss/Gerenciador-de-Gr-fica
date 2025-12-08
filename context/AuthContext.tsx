@@ -82,33 +82,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithEmailAndPassword(auth, email, password);
       return true;
     } catch (error: any) {
-      console.error("Erro no login:", error);
+      console.warn("Falha no login inicial:", error.code);
 
       // AUTO-HEALING (CORREÇÃO AUTOMÁTICA):
-      // Se der erro de credencial inválida, tentamos criar a conta automaticamente.
-      // Isso facilita o acesso para novos usuários ou testes (como ruan.wss@gmail.com).
-      if (
-        error.code === 'auth/user-not-found' || 
-        error.code === 'auth/invalid-credential' || 
-        error.code === 'auth/invalid-login-credentials' ||
-        error.code === 'auth/wrong-password'
-      ) {
+      // Apenas tenta criar a conta se o erro for EXPLICITAMENTE de usuário não encontrado.
+      // Erros de senha (invalid-credential, wrong-password) não devem tentar criar conta.
+      if (error.code === 'auth/user-not-found') {
          try {
-           console.log("Conta não encontrada ou senha incorreta. Tentando criar/registrar automaticamente para acesso...");
-           // Tenta criar. Se o email já existir (mas senha errada), vai dar erro aqui.
-           // Se não existir, cria e loga.
+           console.log("Conta não encontrada. Tentando registrar automaticamente...");
            await createUserWithEmailAndPassword(auth, email, password);
            return true; 
          } catch (createError: any) {
-           console.error("Erro ao tentar criar conta automaticamente:", createError);
-           // Se o erro for email-already-in-use, significa que a senha estava errada no login original.
-           if (createError.code === 'auth/email-already-in-use') {
-               console.warn("O e-mail já existe, mas a senha estava incorreta.");
-           }
+           console.error("Erro ao tentar criar conta automaticamente:", createError.code);
            return false;
          }
       }
 
+      // Se for senha errada ou credencial inválida, apenas retorna falso
       return false;
     }
   };

@@ -89,6 +89,18 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
   }
 };
 
+export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
+    try {
+        if (!exam.id) throw new Error("ID da prova necessário para atualização");
+        const examRef = doc(db, EXAMS_COLLECTION, exam.id);
+        const { id, ...examData } = exam;
+        await updateDoc(examRef, examData);
+    } catch (error) {
+        console.error("Erro ao atualizar prova:", error);
+        throw error;
+    }
+};
+
 export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
   try {
     const examRef = doc(db, EXAMS_COLLECTION, examId);

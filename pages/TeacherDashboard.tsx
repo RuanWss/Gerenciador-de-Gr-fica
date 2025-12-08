@@ -1,102 +1,90 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getExams, saveExam, uploadExamFile, listenToSystemConfig } from '../services/firebaseService';
-import { generateExamQuestions, suggestExamInstructions } from '../services/geminiService';
-import { ExamRequest, ExamStatus, SystemConfig } from '../types';
+import { getExams, saveExam, updateExamRequest, uploadExamFile } from '../services/firebaseService';
+import { digitizeMaterial } from '../services/geminiService';
+import { ExamRequest, ExamStatus, MaterialType } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, 
-  FileText, 
-  BrainCircuit, 
-  RefreshCw, 
   UploadCloud, 
-  AlertTriangle, 
-  Megaphone, 
-  LayoutTemplate,
-  Type,
-  Image as ImageIcon,
   Trash2,
-  ArrowUp,
-  ArrowDown,
   Printer,
   Columns,
+  ZoomIn,
+  ZoomOut,
+  Save,
+  Edit3,
+  Archive,
+  Lock,
+  FileText,
   BookOpen,
-  GripVertical
+  CheckCircle,
+  AlertCircle,
+  Wand2,
+  Loader2,
+  Sparkles,
+  List,
+  PlusCircle,
+  Layout
 } from 'lucide-react';
 
-// Interfaces locais para o Criador de Provas
-interface DocBlock {
-    id: string;
-    type: 'question' | 'text' | 'image';
-    content: string; // Texto da questão ou URL da imagem
-    options?: string[]; // Para questões de múltipla escolha
-    lines?: number; // Para questões discursivas
-    imageFile?: File; // Para upload
-}
+// --- CONSTANTES DE IMAGEM ---
+const HEADER_EXAM_URL = "https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png";
+const HEADER_HANDOUT_URL = "https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png";
+
+// --- COMPONENTES UI AUXILIARES ---
+
+const SectionHeader = ({ title, subtitle }: { title: string, subtitle?: string }) => (
+    <div className="mb-4">
+        <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+    </div>
+);
+
+const Card = ({ children, className = "" }: { children?: React.ReactNode, className?: string }) => (
+    <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 ${className}`}>
+        {children}
+    </div>
+);
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [exams, setExams] = useState<ExamRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<'list' | 'new' | 'ai' | 'creator'>('list');
-  const [isLoadingExams, setIsLoadingExams] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Form State
-  const [subject, setSubject] = useState('');
-  const [title, setTitle] = useState('');
-  const [gradeLevel, setGradeLevel] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [instructions, setInstructions] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-
-  // UI State
-  const [showDateWarning, setShowDateWarning] = useState(false);
-  const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
-
-  // AI State
-  const [aiTopic, setAiTopic] = useState('');
-  const [aiResult, setAiResult] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [instructionLoading, setInstructionLoading] = useState(false);
-
-  // --- STATES DO CRIADOR DE PROVAS ---
-  const [docTitle, setDocTitle] = useState('');
-  const [docColumns, setDocColumns] = useState<1 | 2>(1);
-  const [docHeaderType, setDocHeaderType] = useState<'work' | 'exam'>('work');
-  const [blocks, setBlocks] = useState<DocBlock[]>([]);
-  const [isLoadingEnem, setIsLoadingEnem] = useState(false);
   
-  // Mock Data for ENEM Questions to replace broken API
-  const MOCK_ENEM_QUESTIONS = [
-      {
-          context: "A democratização do acesso ao cinema no Brasil é um tema recorrente em debates sociais.",
-          question: "Considerando o contexto histórico e social brasileiro, a principal barreira para a universalização do cinema é:",
-          alternatives: ["A) A falta de produção nacional de qualidade.", "B) A concentração das salas em grandes centros urbanos.", "C) O desinteresse do público jovem pela cultura.", "D) A censura imposta pelos órgãos governamentais.", "E) A barreira linguística dos filmes estrangeiros."]
-      },
-      {
-          context: "O ciclo da água é fundamental para a manutenção da vida no planeta Terra. Ele envolve processos de evaporação, condensação e precipitação.",
-          question: "Qual etapa do ciclo hidrológico é responsável pelo retorno da água à superfície terrestre na forma líquida ou sólida?",
-          alternatives: ["A) Transpiração", "B) Condensação", "C) Precipitação", "D) Infiltração", "E) Evaporação"]
-      },
-      {
-          context: "Texto base: 'Ser ou não ser, eis a questão'. A famosa frase de Shakespeare reflete um dilema existencial profundo.",
-          question: "A obra 'Hamlet', de William Shakespeare, pertence a qual gênero literário?",
-          alternatives: ["A) Épico", "B) Lírico", "C) Dramático", "D) Satírico", "E) Narrativo"]
-      },
-      {
-          context: "A Primeira Revolução Industrial marcou uma transformação profunda nos modos de produção.",
-          question: "Qual foi a principal fonte de energia utilizada nas máquinas térmicas durante a Primeira Revolução Industrial?",
-          alternatives: ["A) Petróleo", "B) Eletricidade", "C) Carvão Mineral", "D) Energia Nuclear", "E) Energia Solar"]
-      },
-      {
-          context: "Em uma progressão aritmética (PA), a razão é constante.",
-          question: "Se o primeiro termo de uma PA é 2 e a razão é 3, qual é o quinto termo?",
-          alternatives: ["A) 11", "B) 12", "C) 14", "D) 15", "E) 17"]
-      }
-  ];
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<'requests' | 'create'>('requests');
+  const [editorSubTab, setEditorSubTab] = useState<'document' | 'details'>('document');
 
-  // Fetch Exams from Firebase
+  // Exam Data List
+  const [exams, setExams] = useState<ExamRequest[]>([]);
+  const [isLoadingExams, setIsLoadingExams] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Editor / Form State
+  const [editingExamId, setEditingExamId] = useState<string | null>(null);
+  const [docTitle, setDocTitle] = useState('Avaliação multidisciplinar II');
+  const [docSubtitle, setDocSubtitle] = useState('Avaliação semestral multidisciplinar');
+  const [materialType, setMaterialType] = useState<MaterialType>('exam');
+  const [docColumns, setDocColumns] = useState<1 | 2>(2);
+  const [selectedClassForExam, setSelectedClassForExam] = useState<string>(''); 
+  
+  // Header Config
+  const [maxScore, setMaxScore] = useState(10);
+  const [showStudentName, setShowStudentName] = useState(true);
+  
+  // File State
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null); // For local preview (blob)
+  const [existingFileUrl, setExistingFileUrl] = useState<string | null>(null); // For editing existing exams
+
+  // AI Diagramming State
+  const [isDiagramming, setIsDiagramming] = useState(false);
+  const [aiGeneratedContent, setAiGeneratedContent] = useState<string>('');
+
+  // Preview State
+  const [zoomLevel, setZoomLevel] = useState(0.8);
+
+  // Fetch Exams
   useEffect(() => {
     const fetchExams = async () => {
         if (user) {
@@ -107,873 +95,557 @@ export const TeacherDashboard: React.FC = () => {
         }
     };
     fetchExams();
-    
-    // Listen to System Config
-    const unsubscribe = listenToSystemConfig((config) => {
-        setSysConfig(config);
-    });
-    return () => unsubscribe();
   }, [user, activeTab]);
 
-  // Pre-fill user data
+  // Clean up object URL on unmount
   useEffect(() => {
-    if (user) {
-        if (user.subject) setSubject(user.subject);
-        if (user.classes && user.classes.length > 0) {
-            setGradeLevel(user.classes[0]);
-        }
-    }
-  }, [user]);
+    return () => {
+        if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+    };
+  }, [filePreviewUrl]);
+
+  // --- HANDLERS ---
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-      setFileName(e.target.files[0].name);
-    }
-  };
-
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedDateStr = e.target.value;
-    setDueDate(selectedDateStr);
-
-    if (selectedDateStr) {
-      const selectedDate = new Date(selectedDateStr);
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      
-      const diffTime = selectedDate.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDays < 2) {
-        setShowDateWarning(true);
-      }
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    setIsSubmitting(true);
-
-    try {
-        let uploadedUrl = '';
-        if (file) {
-            uploadedUrl = await uploadExamFile(file);
-        }
-
-        const newExam: ExamRequest = {
-            id: '', // Firestore will generate
-            teacherId: user.id,
-            teacherName: user.name,
-            subject,
-            title,
-            quantity: 0,
-            gradeLevel,
-            instructions,
-            fileName: fileName || 'Sem anexo (apenas instruções)',
-            fileUrl: uploadedUrl,
-            status: ExamStatus.PENDING,
-            createdAt: Date.now(),
-            dueDate
-        };
-
-        await saveExam(newExam);
-        
-        // Reset form
-        setActiveTab('list');
-        setTitle('');
-        setFileName('');
-        setFile(null);
-        setDueDate('');
-        setShowDateWarning(false);
-    } catch (error) {
-        console.error(error);
-        alert('Erro ao enviar solicitação. Tente novamente.');
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
-
-  const handleGenerateQuestions = async () => {
-    if (!aiTopic) return;
-    setAiLoading(true);
-    setAiResult('');
-    try {
-      const result = await generateExamQuestions(aiTopic, gradeLevel);
-      setAiResult(result);
-    } catch (error) {
-        setAiResult("Erro ao gerar. Verifique se a chave de API foi configurada corretamente.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleSuggestInstructions = async () => {
-    setInstructionLoading(true);
-    const suggestion = await suggestExamInstructions('Prova Bimestral');
-    setInstructions(suggestion);
-    setInstructionLoading(false);
-  };
-
-  // --- FUNÇÕES DO CRIADOR DE PROVAS ---
-  
-  const addBlock = (type: 'question' | 'text' | 'image') => {
-      const newBlock: DocBlock = {
-          id: Date.now().toString(),
-          type,
-          content: '',
-          lines: type === 'question' ? 3 : undefined,
-          options: type === 'question' ? [] : undefined
-      };
-      setBlocks([...blocks, newBlock]);
-  };
-
-  const handleAddEnemQuestion = async () => {
-      setIsLoadingEnem(true);
-      try {
-          // Simulação de delay de rede
-          await new Promise(resolve => setTimeout(resolve, 600));
-
-          // Sorteio de uma questão do banco local (Mock)
-          const randomQuestion = MOCK_ENEM_QUESTIONS[Math.floor(Math.random() * MOCK_ENEM_QUESTIONS.length)];
-          
-          let formattedContent = "";
-          if (randomQuestion.context) formattedContent += `${randomQuestion.context}\n\n`;
-          formattedContent += `${randomQuestion.question}\n\n`;
-          
-          randomQuestion.alternatives.forEach((alt) => {
-              formattedContent += `${alt}\n`;
-          });
-
-          const newBlock: DocBlock = {
-              id: Date.now().toString(),
-              type: 'question',
-              content: formattedContent,
-              lines: 0,
-              options: []
-          };
-          
-          setBlocks([...blocks, newBlock]);
-
-      } catch (error) {
-          console.error("Erro ao buscar questão ENEM:", error);
-          alert("Erro interno ao gerar questão.");
-      } finally {
-          setIsLoadingEnem(false);
-      }
-  };
-
-  const updateBlock = (id: string, field: keyof DocBlock, value: any) => {
-      setBlocks(blocks.map(b => b.id === id ? { ...b, [field]: value } : b));
-  };
-
-  const deleteBlock = (id: string) => {
-      setBlocks(blocks.filter(b => b.id !== id));
-  };
-
-  const moveBlock = (index: number, direction: 'up' | 'down') => {
-      if (direction === 'up' && index === 0) return;
-      if (direction === 'down' && index === blocks.length - 1) return;
-      
-      const newBlocks = [...blocks];
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      [newBlocks[index], newBlocks[targetIndex]] = [newBlocks[targetIndex], newBlocks[index]];
-      setBlocks(newBlocks);
-  };
-
-  const handleImageBlockUpload = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
-          const url = URL.createObjectURL(file);
-          setBlocks(blocks.map(b => b.id === id ? { ...b, content: url, imageFile: file } : b));
+          setUploadedFile(file);
+          setAiGeneratedContent(''); // Reset AI content on new file
+          
+          // Generate preview
+          if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+              const url = URL.createObjectURL(file);
+              setFilePreviewUrl(url);
+          } else {
+              setFilePreviewUrl(null);
+          }
       }
   };
 
-  const handlePrintDoc = () => {
-      const printWindow = window.open('', '', 'width=900,height=1000');
-      if (!printWindow) return;
-
-      const htmlContent = document.getElementById('a4-preview')?.innerHTML;
-      if (!htmlContent) return;
-
-      const styles = `
-        <style>
-            /* ENEM Style Formatting - Refined */
-            @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-
-            body { 
-                font-family: 'Poppins', sans-serif; 
-                padding: 0; 
-                margin: 0;
-                font-size: 10pt; 
-                line-height: 1.35;
-                color: black;
-                -webkit-print-color-adjust: exact;
-            }
-            .columns-2 { 
-                column-count: 2; 
-                column-gap: 8mm; 
-                column-rule: 1px solid #eee;
-            }
-            .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
-            img { max-width: 100%; height: auto; }
-            
-            /* Typography */
-            .font-serif { font-family: 'Times New Roman', serif !important; }
-            .font-sans { font-family: 'Poppins', sans-serif !important; }
-            
-            .text-justify { text-align: justify; }
-            
-            /* Question Header */
-            .question-number { 
-                font-family: 'Poppins', sans-serif; 
-                font-weight: 700; 
-                font-size: 10pt;
-                margin-bottom: 4px;
-                display: block;
-                color: #000;
-            }
-            
-            /* Spacing */
-            .mb-2 { margin-bottom: 8px; }
-            .mb-4 { margin-bottom: 16px; }
-            .mb-6 { margin-bottom: 24px; }
-            
-            /* Lines for written answer */
-            .lines { border-bottom: 1px solid #999; width: 100%; height: 20px; margin-top: 2px; }
-            
-            /* Header Images */
-            .header-img-container { position: relative; width: 100%; margin-bottom: 20px; }
-            .header-img { width: 100%; display: block; }
-            
-            /* Overlay Text Positioning (Adjusted for Print) */
-            .overlay-text { 
-                position: absolute; 
-                font-size: 12px; 
-                font-weight: 600; 
-                color: #222; 
-                font-family: 'Poppins', sans-serif; 
-                white-space: nowrap;
-                overflow: hidden;
-            }
-            
-            /* Coordinates for Apostila */
-            .work-student { top: 38px; left: 345px; width: 420px; }
-            .work-prof { top: 72px; left: 345px; width: 420px; }
-            .work-disc { top: 108px; left: 345px; width: 200px; }
-            .work-class { top: 108px; left: 600px; width: 150px; } /* Moved next to discipline */
-            .work-assunto { top: 143px; left: 345px; width: 420px; }
-            .work-date { top: 155px; left: 160px; }
-
-            /* Coordinates for Avaliação */
-            .exam-student { top: 38px; left: 345px; width: 420px; }
-            .exam-prof { top: 72px; left: 345px; width: 420px; }
-            .exam-disc { top: 108px; left: 345px; width: 200px; }
-            .exam-value { top: 108px; left: 600px; width: 150px; } /* Moved next to discipline */
-            .exam-assunto { top: 143px; left: 345px; width: 420px; }
-            .exam-date { top: 155px; left: 160px; }
-
-            h1 { font-size: 14pt; text-transform: uppercase; text-align: center; margin-bottom: 15px; font-weight: 700; }
-
-            @media print {
-                @page { size: A4; margin: 10mm; }
-                body { margin: 0; padding: 0; }
-                .no-print { display: none; }
-            }
-        </style>
-      `;
-
-      printWindow.document.write(`
-        <html>
-            <head><title>${docTitle || 'Documento'}</title>${styles}</head>
-            <body>
-                ${htmlContent}
-                <script>
-                    window.onload = function() { window.print(); }
-                </script>
-            </body>
-        </html>
-      `);
-      printWindow.document.close();
-  };
-
-
-  const getBannerStyles = (type: string) => {
-      switch(type) {
-          case 'warning': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-          case 'error': return 'bg-red-100 text-red-800 border-red-200';
-          case 'success': return 'bg-green-100 text-green-800 border-green-200';
-          default: return 'bg-blue-100 text-blue-800 border-blue-200';
+  const handleAIDiagramming = async () => {
+      if (!uploadedFile) {
+          alert("Por favor, faça o upload de uma imagem ou PDF primeiro.");
+          return;
+      }
+      
+      setIsDiagramming(true);
+      try {
+          const htmlContent = await digitizeMaterial(uploadedFile, materialType);
+          setAiGeneratedContent(htmlContent);
+      } catch (error) {
+          alert("Erro ao diagramar com IA. Tente novamente com uma imagem mais clara.");
+      } finally {
+          setIsDiagramming(false);
       }
   };
+
+  const handleNewExam = () => {
+      setEditingExamId(null);
+      setDocTitle('Nova Avaliação');
+      setDocSubtitle('Instruções gerais');
+      setMaterialType('exam');
+      setDocColumns(2);
+      setSelectedClassForExam('');
+      setUploadedFile(null);
+      setFilePreviewUrl(null);
+      setExistingFileUrl(null);
+      setAiGeneratedContent('');
+      setEditorSubTab('document');
+      setActiveTab('create');
+  };
+
+  const handleEditExam = (exam: ExamRequest) => {
+      if (exam.status !== ExamStatus.PENDING) {
+          alert("Não é possível editar uma prova que já está em processamento ou concluída.");
+          return;
+      }
+
+      setEditingExamId(exam.id);
+      setDocTitle(exam.title);
+      setDocSubtitle(exam.instructions || '');
+      setSelectedClassForExam(exam.gradeLevel);
+      setMaterialType(exam.materialType || 'exam');
+      setDocColumns(exam.columns || 1);
+      setExistingFileUrl(exam.fileUrl || null);
+      setAiGeneratedContent(''); 
+      
+      // Header props
+      if (exam.headerData) {
+          setMaxScore(exam.headerData.maxScore || 10);
+          setShowStudentName(exam.headerData.showStudentName);
+      }
+
+      setUploadedFile(null);
+      setFilePreviewUrl(null);
+      setActiveTab('create');
+  };
+
+  const handleSaveExam = async () => {
+    if (!user) return;
+    if (!uploadedFile && !existingFileUrl) {
+        alert("Por favor, faça o upload do arquivo (PDF ou Imagem) da prova/apostila.");
+        return;
+    }
+
+    setIsSaving(true);
+    try {
+        let finalFileUrl = existingFileUrl;
+        let finalFileName = existingFileUrl ? "Arquivo Existente" : "";
+
+        // Upload new file if exists
+        if (uploadedFile) {
+            finalFileUrl = await uploadExamFile(uploadedFile);
+            finalFileName = uploadedFile.name;
+        }
+
+        const examData: any = {
+            teacherId: user.id,
+            teacherName: user.name,
+            subject: user.subject || 'Geral',
+            title: docTitle,
+            quantity: 30, // Padrão
+            gradeLevel: selectedClassForExam || (user.classes?.[0] || 'Geral'),
+            instructions: docSubtitle,
+            fileName: finalFileName,
+            fileUrl: finalFileUrl,
+            status: ExamStatus.PENDING,
+            createdAt: Date.now(),
+            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            // Novos campos
+            materialType,
+            columns: docColumns,
+            headerData: {
+                schoolName: 'CEMAL EQUIPE',
+                showStudentName,
+                showScore: materialType === 'exam',
+                maxScore
+            }
+        };
+
+        if (editingExamId) {
+            await updateExamRequest({ ...examData, id: editingExamId });
+            alert("Solicitação atualizada com sucesso!");
+        } else {
+            await saveExam({ ...examData, id: '' });
+            alert("Solicitação enviada para a gráfica com sucesso!");
+        }
+        
+        setActiveTab('requests');
+    } catch (error) {
+        console.error(error);
+        alert("Erro ao salvar solicitação.");
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create', label: string, icon: any }) => (
+    <button
+      onClick={id === 'create' ? handleNewExam : () => setActiveTab(id)}
+      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
+      ${activeTab === id 
+        ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' 
+        : 'text-gray-500 hover:bg-gray-100'}`}
+    >
+      <div className="flex items-center gap-3">
+        <Icon size={18} />
+        <span>{label}</span>
+      </div>
+    </button>
+  );
 
   return (
-    <div className="space-y-6 relative h-full">
-      
-      {/* System Announcement Banner */}
-      {sysConfig?.isBannerActive && sysConfig.bannerMessage && (
-          <div className={`p-4 rounded-lg border flex items-start gap-3 shadow-sm ${getBannerStyles(sysConfig.bannerType)}`}>
-             <Megaphone className="shrink-0 mt-0.5" size={20} />
-             <div>
-                 <p className="font-bold text-sm uppercase mb-1">Aviso da Escola</p>
-                 <p className="text-sm">{sysConfig.bannerMessage}</p>
-             </div>
-          </div>
-      )}
-
-      {/* Date Warning Modal */}
-      {showDateWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all animate-in zoom-in-95 duration-200">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-100 mb-5">
-              <AlertTriangle className="h-8 w-8 text-red-600" />
+    <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8">
+        
+        {/* --- SIDEBAR --- */}
+        <div className="w-64 bg-white border-r border-gray-200 p-6 flex flex-col h-full z-20">
+            <div className="mb-6">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Menu do Professor</p>
+                <SidebarItem id="requests" label="Meus Pedidos" icon={List} />
+                <SidebarItem id="create" label="Nova Solicitação" icon={PlusCircle} />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Atenção ao Prazo!</h3>
-            <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-              A data selecionada é muito próxima. <br/>
-              O prazo mínimo recomendado para o envio e impressão é de <strong>48 horas</strong>.
-            </p>
-            <div className="flex flex-col gap-3">
-              <Button 
-                onClick={() => setShowDateWarning(false)} 
-                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl shadow-lg shadow-red-200"
-              >
-                Estou ciente, prosseguir
-              </Button>
-              <button 
-                onClick={() => {
-                   setDueDate('');
-                   setShowDateWarning(false);
-                }}
-                className="text-sm text-gray-400 hover:text-gray-600 font-medium py-2"
-              >
-                Alterar data
-              </button>
+            
+            <div className="mt-auto bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <p className="text-xs font-bold text-blue-800 mb-2">Dica do Sistema</p>
+                <p className="text-xs text-blue-600 leading-relaxed">
+                    Você pode enviar fotos da apostila ou PDFs. A IA ajuda a formatar automaticamente para o padrão da escola.
+                </p>
             </div>
-          </div>
         </div>
-      )}
 
-      <header className="flex justify-between items-center bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Painel do Professor</h1>
-          <p className="text-gray-500">Bem-vindo, {user?.name}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant={activeTab === 'list' ? 'primary' : 'outline'}
-            onClick={() => setActiveTab('list')}
-          >
-            <FileText className="w-4 h-4 mr-2" /> Minhas Solicitações
-          </Button>
-          <Button 
-            variant={activeTab === 'new' ? 'primary' : 'outline'}
-            onClick={() => setActiveTab('new')}
-          >
-            <Plus className="w-4 h-4 mr-2" /> Nova Solicitação
-          </Button>
-          <Button 
-            variant={activeTab === 'creator' ? 'primary' : 'outline'}
-            onClick={() => setActiveTab('creator')}
-          >
-            <LayoutTemplate className="w-4 h-4 mr-2" /> Criar Prova/Apostila
-          </Button>
-          <Button 
-            variant={activeTab === 'ai' ? 'primary' : 'outline'}
-            onClick={() => setActiveTab('ai')}
-            className="bg-purple-600 hover:bg-purple-700 text-white border-transparent focus:ring-purple-500"
-          >
-            <BrainCircuit className="w-4 h-4 mr-2" /> Assistente AI
-          </Button>
-        </div>
-      </header>
+        {/* --- MAIN CONTENT AREA --- */}
+        <div className="flex-1 bg-gray-50 overflow-hidden flex flex-col">
+            
+            {/* VIEW: MY REQUESTS */}
+            {activeTab === 'requests' && (
+                <div className="flex-1 overflow-y-auto p-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <header className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800">Meus Pedidos</h1>
+                        <p className="text-gray-500">Acompanhe o status das suas impressões na gráfica.</p>
+                    </header>
 
-      <main>
-        {activeTab === 'list' && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
-             {isLoadingExams ? (
-                 <div className="p-12 text-center text-gray-500">
-                    <p>Carregando solicitações...</p>
-                 </div>
-             ) : exams.length === 0 ? (
-                <div className="p-12 text-center text-gray-500">
-                    <FileText className="mx-auto h-12 w-12 text-gray-300 mb-3"/>
-                    <p>Nenhuma solicitação de prova encontrada.</p>
-                </div>
-             ) : (
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data Envio</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Título / Matéria</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prazo</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {exams.map((exam) => (
-                        <tr key={exam.id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {new Date(exam.createdAt).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{exam.title}</div>
-                                <div className="text-sm text-gray-500">{exam.subject} - {exam.gradeLevel}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {new Date(exam.dueDate).toLocaleDateString()}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full border 
-                                    ${exam.status === ExamStatus.COMPLETED ? 'bg-white border-green-600 text-green-700' : 
-                                      exam.status === ExamStatus.IN_PROGRESS ? 'bg-white border-yellow-500 text-yellow-600' : 
-                                      'bg-white border-gray-400 text-gray-600'}`}>
-                                    {exam.status === ExamStatus.COMPLETED ? 'Pronto' : 
-                                     exam.status === ExamStatus.IN_PROGRESS ? 'Imprimindo' : 'Pendente'}
-                                </span>
-                            </td>
-                        </tr>
-                        ))}
-                    </tbody>
-                    </table>
-                </div>
-             )}
-          </div>
-        )}
-
-        {/* --- ABA CRIADOR DE PROVAS (REFORMULADA) --- */}
-        {activeTab === 'creator' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-140px)]">
-                
-                {/* 1. EDITOR (ESQUERDA) - OTIMIZADO */}
-                <div className="lg:col-span-4 bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col h-full overflow-hidden">
-                    
-                    {/* TOPO: Configurações Compactas */}
-                    <div className="p-3 border-b border-gray-200 bg-gray-50">
-                        <div className="mb-2">
-                            <input 
-                                type="text" 
-                                className="w-full bg-white border border-gray-300 rounded-md p-2 text-sm font-medium focus:ring-brand-500 focus:border-brand-500"
-                                placeholder="Título do Documento (Ex: Prova 1)"
-                                value={docTitle}
-                                onChange={e => setDocTitle(e.target.value)}
-                            />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {/* Toggle Cabeçalho */}
-                            <div className="flex bg-white rounded-md border border-gray-300 p-1 flex-1">
-                                <button 
-                                    onClick={() => setDocHeaderType('work')}
-                                    className={`flex-1 text-[10px] uppercase font-bold py-1.5 rounded transition-all ${docHeaderType === 'work' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
-                                >
-                                    Apostila
-                                </button>
-                                <button 
-                                    onClick={() => setDocHeaderType('exam')}
-                                    className={`flex-1 text-[10px] uppercase font-bold py-1.5 rounded transition-all ${docHeaderType === 'exam' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-100'}`}
-                                >
-                                    Avaliação
-                                </button>
-                            </div>
-                            
-                            {/* Toggle Colunas */}
-                            <div className="flex bg-white rounded-md border border-gray-300 p-1">
-                                <button 
-                                    onClick={() => setDocColumns(1)}
-                                    className={`px-3 py-1.5 rounded transition-all ${docColumns === 1 ? 'bg-gray-200 text-gray-900' : 'text-gray-400 hover:bg-gray-100'}`}
-                                    title="1 Coluna"
-                                >
-                                    <Columns size={14} className="rotate-90" />
-                                </button>
-                                <button 
-                                    onClick={() => setDocColumns(2)}
-                                    className={`px-3 py-1.5 rounded transition-all ${docColumns === 2 ? 'bg-gray-200 text-gray-900' : 'text-gray-400 hover:bg-gray-100'}`}
-                                    title="2 Colunas"
-                                >
-                                    <Columns size={14} />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* CENTRO: Lista de Blocos */}
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-100 custom-scrollbar">
-                        {blocks.length === 0 && (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                                <Plus size={32} className="mb-2 opacity-50"/>
-                                <p className="text-xs font-medium text-center px-4">Adicione questões ou texto usando os botões abaixo.</p>
-                            </div>
-                        )}
-                        
-                        {blocks.map((block, index) => (
-                            <div key={block.id} className={`bg-white rounded-lg shadow-sm border-l-4 p-3 relative group transition-all ${
-                                block.type === 'question' ? 'border-l-blue-500' : 
-                                block.type === 'text' ? 'border-l-gray-400' : 'border-l-purple-500'
-                            }`}>
-                                {/* Header do Bloco */}
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-[10px] font-bold uppercase text-gray-400 flex items-center gap-1">
-                                        <GripVertical size={12}/> 
-                                        {block.type === 'question' ? `Questão ${index + 1}` : block.type}
-                                    </span>
-                                    <div className="flex gap-1">
-                                        <button onClick={() => moveBlock(index, 'up')} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"><ArrowUp size={14}/></button>
-                                        <button onClick={() => moveBlock(index, 'down')} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"><ArrowDown size={14}/></button>
-                                        <button onClick={() => deleteBlock(block.id)} className="p-1 hover:bg-red-50 rounded text-red-300 hover:text-red-500"><Trash2 size={14}/></button>
-                                    </div>
+                    <Card>
+                        {exams.length === 0 ? (
+                            <div className="text-center py-16">
+                                <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Archive className="text-gray-400" size={32} />
                                 </div>
-
-                                {/* Inputs do Bloco */}
-                                {block.type === 'text' && (
-                                    <textarea 
-                                        className="w-full text-sm border-gray-200 bg-gray-50 rounded p-2 focus:bg-white focus:ring-1 focus:ring-brand-500 transition-colors resize-y min-h-[60px]"
-                                        placeholder="Digite o texto..."
-                                        value={block.content}
-                                        onChange={e => updateBlock(block.id, 'content', e.target.value)}
-                                    />
-                                )}
-
-                                {block.type === 'question' && (
-                                    <div className="space-y-2">
-                                        <textarea 
-                                            className="w-full text-sm border-gray-200 bg-blue-50/30 rounded p-2 focus:bg-white focus:ring-1 focus:ring-brand-500 transition-colors font-medium min-h-[80px]"
-                                            placeholder="Enunciado da questão..."
-                                            value={block.content}
-                                            onChange={e => updateBlock(block.id, 'content', e.target.value)}
-                                        />
-                                        <div className="flex items-center justify-end gap-2">
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase">Linhas:</label>
-                                            <input 
-                                                type="number" 
-                                                min="0"
-                                                max="20"
-                                                className="w-12 text-xs border border-gray-200 rounded p-1 text-center" 
-                                                value={block.lines || 0}
-                                                onChange={e => updateBlock(block.id, 'lines', parseInt(e.target.value))}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-
-                                {block.type === 'image' && (
-                                    <div>
-                                        {block.content ? (
-                                            <div className="relative group/img">
-                                                <img src={block.content} alt="Preview" className="h-24 w-full object-contain bg-gray-50 rounded border border-dashed border-gray-300" />
-                                                <label className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 group-hover/img:opacity-100 cursor-pointer transition-opacity rounded">
-                                                    <span className="text-xs font-bold">Alterar</span>
-                                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageBlockUpload(block.id, e)} />
-                                                </label>
-                                            </div>
-                                        ) : (
-                                            <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-purple-200 bg-purple-50 rounded cursor-pointer hover:bg-purple-100 transition-colors">
-                                                <ImageIcon size={20} className="text-purple-400 mb-1"/>
-                                                <span className="text-xs text-purple-600 font-medium">Upload Imagem</span>
-                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageBlockUpload(block.id, e)} />
-                                            </label>
-                                        )}
-                                    </div>
-                                )}
+                                <h3 className="text-lg font-bold text-gray-700">Nenhum pedido encontrado</h3>
+                                <p className="text-gray-500 mb-6">Você ainda não enviou nenhuma solicitação de impressão.</p>
+                                <Button onClick={handleNewExam} className="shadow-lg shadow-brand-900/20">
+                                    <Plus className="w-4 h-4 mr-2" /> Criar Primeira Solicitação
+                                </Button>
                             </div>
-                        ))}
-                    </div>
-
-                    {/* RODAPÉ: Barra de Ferramentas Fixa */}
-                    <div className="p-3 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
-                        <div className="grid grid-cols-4 gap-2">
-                            <button onClick={() => addBlock('question')} className="flex flex-col items-center justify-center p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 shadow-sm active:scale-95">
-                                <Plus size={18} /> <span className="text-[10px] font-bold mt-1">Questão</span>
-                            </button>
-                            <button onClick={() => addBlock('text')} className="flex flex-col items-center justify-center p-2 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors border border-gray-200 shadow-sm active:scale-95">
-                                <Type size={18} /> <span className="text-[10px] font-bold mt-1">Texto</span>
-                            </button>
-                            <button onClick={() => addBlock('image')} className="flex flex-col items-center justify-center p-2 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors border border-purple-200 shadow-sm active:scale-95">
-                                <ImageIcon size={18} /> <span className="text-[10px] font-bold mt-1">Imagem</span>
-                            </button>
-                            <button onClick={handleAddEnemQuestion} disabled={isLoadingEnem} className="flex flex-col items-center justify-center p-2 rounded-lg bg-yellow-50 text-yellow-700 hover:bg-yellow-100 transition-colors border border-yellow-200 shadow-sm active:scale-95">
-                                {isLoadingEnem ? <RefreshCw className="animate-spin" size={18} /> : <BookOpen size={18} />} 
-                                <span className="text-[10px] font-bold mt-1 text-center leading-tight">ENEM</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. PREVIEW (DIREITA) */}
-                <div className="lg:col-span-8 bg-gray-600 rounded-xl p-8 flex flex-col items-center overflow-y-auto shadow-inner relative">
-                    <div className="absolute top-4 right-4 z-10">
-                        <Button onClick={handlePrintDoc} className="shadow-xl bg-brand-600 hover:bg-brand-700">
-                            <Printer className="mr-2" size={18} /> Imprimir / Salvar PDF
-                        </Button>
-                    </div>
-
-                    {/* FOLHA A4 SIMULADA */}
-                    <div 
-                        id="a4-preview"
-                        className={`bg-white shadow-2xl min-h-[1123px] w-[794px] text-gray-900 origin-top transform scale-[0.6] lg:scale-[0.7] xl:scale-[0.8] transition-transform`}
-                        style={{ fontFamily: 'Poppins, sans-serif', padding: '0px' }}
-                    >
-                        {/* Header da Prova (Imagem + Dados Sobrepostos) */}
-                        <div className="header-img-container relative w-full">
-                            {docHeaderType === 'work' ? (
-                                <>
-                                    <img src="https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png" alt="Cabeçalho Apostila" className="header-img" />
-                                    {/* Overlay Data for Work Header */}
-                                    <div className="overlay-text work-student" style={{ top: '38px', left: '345px', width: '420px' }}></div> {/* Nome Aluno */}
-                                    <div className="overlay-text work-prof" style={{ top: '72px', left: '345px', width: '420px' }}>{user?.name}</div>
-                                    <div className="overlay-text work-disc" style={{ top: '108px', left: '345px', width: '200px' }}>{subject || user?.subject}</div>
-                                    <div className="overlay-text work-class" style={{ top: '108px', left: '600px', width: '150px' }}>{gradeLevel}</div>
-                                    <div className="overlay-text work-assunto" style={{ top: '143px', left: '345px', width: '420px' }}>{docTitle}</div>
-                                    <div className="overlay-text work-date" style={{ top: '155px', left: '160px' }}></div> {/* Data */}
-                                </>
-                            ) : (
-                                <>
-                                    <img src="https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png" alt="Cabeçalho Avaliação" className="header-img" />
-                                    {/* Overlay Data for Exam Header */}
-                                    <div className="overlay-text exam-student" style={{ top: '38px', left: '345px', width: '420px' }}></div>
-                                    <div className="overlay-text exam-prof" style={{ top: '72px', left: '345px', width: '420px' }}>{user?.name}</div>
-                                    <div className="overlay-text exam-disc" style={{ top: '108px', left: '345px', width: '200px' }}>{subject || user?.subject}</div>
-                                    <div className="overlay-text exam-value" style={{ top: '108px', left: '600px', width: '150px' }}></div>
-                                    <div className="overlay-text exam-assunto" style={{ top: '143px', left: '345px', width: '420px' }}>{docTitle}</div>
-                                    <div className="overlay-text exam-date" style={{ top: '155px', left: '160px' }}></div>
-                                </>
-                            )}
-                        </div>
-
-                        {/* Conteúdo da Prova com Padding */}
-                        <div className={`p-[40px] ${docColumns === 2 ? 'columns-2 gap-10' : ''}`}>
-                            <h1 className="text-xl font-bold uppercase text-center mb-6 font-sans">{docTitle}</h1>
-                            
-                            {(() => {
-                                let questionCount = 0;
-                                return blocks.map((block, idx) => {
-                                    if (block.type === 'question') questionCount++;
-                                    
-                                    return (
-                                        <div key={block.id} className="mb-6 break-inside-avoid text-gray-900">
-                                            {block.type === 'text' && (
-                                                <div className="text-justify font-serif text-sm leading-relaxed whitespace-pre-line">
-                                                    {block.content}
-                                                </div>
-                                            )}
-                                            
-                                            {block.type === 'image' && block.content && (
-                                                <div className="my-2 flex justify-center">
-                                                    <img src={block.content} alt="Doc img" className="max-w-full h-auto border border-gray-100" />
-                                                </div>
-                                            )}
-
-                                            {block.type === 'question' && (
-                                                <div className="text-sm font-serif text-justify">
-                                                    <div className="mb-2">
-                                                        <span className="font-bold font-sans text-sm block mb-1">QUESTÃO {String(questionCount).padStart(2, '0')}</span>
-                                                        <span className="leading-relaxed block whitespace-pre-line">{block.content}</span>
-                                                    </div>
-                                                    {/* Linhas de resposta */}
-                                                    {block.lines && block.lines > 0 && (
-                                                        <div className="mt-2 space-y-2">
-                                                            {Array.from({ length: block.lines }).map((_, i) => (
-                                                                <div key={i} className="border-b border-gray-400 h-6 w-full"></div>
-                                                            ))}
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm text-left">
+                                    <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
+                                        <tr>
+                                            <th className="px-6 py-4 rounded-tl-lg">Data</th>
+                                            <th className="px-6 py-4">Título</th>
+                                            <th className="px-6 py-4">Tipo</th>
+                                            <th className="px-6 py-4">Status</th>
+                                            <th className="px-6 py-4 rounded-tr-lg text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {exams.map(e => (
+                                            <tr key={e.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-4 text-gray-500 font-mono text-xs">
+                                                    {new Date(e.createdAt).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <p className="font-bold text-gray-900">{e.title}</p>
+                                                    <p className="text-xs text-gray-400">{e.gradeLevel}</p>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {e.materialType === 'handout' ? (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                                                            <BookOpen size={12} className="mr-1"/> Apostila
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800">
+                                                            <FileText size={12} className="mr-1"/> Prova
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${e.status === ExamStatus.PENDING ? 'bg-yellow-100 text-yellow-700' : e.status === ExamStatus.IN_PROGRESS ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                                        {e.status === ExamStatus.PENDING ? 'Pendente' : e.status === ExamStatus.IN_PROGRESS ? 'Imprimindo' : 'Pronto'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    {e.status === ExamStatus.PENDING ? (
+                                                        <button onClick={() => handleEditExam(e)} className="text-blue-600 hover:text-blue-800 font-bold text-xs flex items-center justify-end w-full transition-colors">
+                                                            <Edit3 size={14} className="mr-1"/> Editar
+                                                        </button>
+                                                    ) : (
+                                                        <div className="flex items-center justify-end text-gray-400 text-xs" title="Não é possível editar após o início da impressão">
+                                                            <Lock size={14} className="mr-1"/> Bloqueado
                                                         </div>
                                                     )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </Card>
+                </div>
+            )}
+
+            {/* VIEW: NEW REQUEST (EDITOR) */}
+            {activeTab === 'create' && (
+                <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
+                    
+                    {/* TOOLBAR */}
+                    <div className="bg-white border-b border-gray-200 px-8 py-4 shadow-sm z-30 flex justify-between items-center shrink-0">
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                {editingExamId ? <Edit3 size={20} className="text-blue-500"/> : <PlusCircle size={20} className="text-green-500"/>}
+                                {editingExamId ? 'Editar Solicitação' : 'Nova Solicitação'}
+                            </h2>
+                            <p className="text-xs text-gray-500 mt-1">Configure a impressão e visualize o resultado final.</p>
+                        </div>
+
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => setEditorSubTab('document')}
+                                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${editorSubTab === 'document' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Documento
+                            </button>
+                            <button
+                                onClick={() => setEditorSubTab('details')}
+                                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${editorSubTab === 'details' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Detalhes
+                            </button>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setActiveTab('requests')}>
+                                Cancelar
+                            </Button>
+                            <Button onClick={handleSaveExam} isLoading={isSaving} className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/20">
+                                <Save size={16} className="mr-2"/> {editingExamId ? 'Salvar Alterações' : 'Enviar Pedido'}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* SCROLLABLE CONTENT */}
+                    <div className="flex-1 overflow-auto p-8 custom-scrollbar">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
+                            
+                            {/* --- LEFT COLUMN: CONTROLS --- */}
+                            <div className="lg:col-span-4 space-y-6 flex flex-col h-fit">
+                                {editorSubTab === 'document' ? (
+                                    <>
+                                        {/* CARD 1: TIPO DE MATERIAL */}
+                                        <Card>
+                                            <SectionHeader title="Tipo de Material" />
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <button 
+                                                    onClick={() => setMaterialType('exam')}
+                                                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${materialType === 'exam' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 hover:border-brand-200 text-gray-500'}`}
+                                                >
+                                                    <FileText size={24} className="mb-2"/>
+                                                    <span className="font-bold text-sm">Prova</span>
+                                                </button>
+                                                <button 
+                                                    onClick={() => setMaterialType('handout')}
+                                                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${materialType === 'handout' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 hover:border-brand-200 text-gray-500'}`}
+                                                >
+                                                    <BookOpen size={24} className="mb-2"/>
+                                                    <span className="font-bold text-sm">Apostila</span>
+                                                </button>
+                                            </div>
+                                            
+                                            <label className="block text-sm font-bold text-gray-700 mb-1">Título</label>
+                                            <input 
+                                                value={docTitle} 
+                                                onChange={(e) => setDocTitle(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-shadow"
+                                                placeholder="Ex: Avaliação de História"
+                                            />
+                                        </Card>
+
+                                        {/* CARD 2: DIAGRAMAÇÃO & UPLOAD */}
+                                        <Card>
+                                            <SectionHeader title="Diagramação & Arquivo" subtitle="O sistema adicionará o cabeçalho padrão." />
+                                            
+                                            <div className="mb-6">
+                                                <label className="block text-sm font-bold text-gray-700 mb-2">Colunas</label>
+                                                <div className="flex gap-4 p-1 bg-gray-100 rounded-lg">
+                                                    <button 
+                                                        onClick={() => setDocColumns(1)}
+                                                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${docColumns === 1 ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}
+                                                    >
+                                                        <Layout size={16}/> 1 Coluna
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => setDocColumns(2)}
+                                                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${docColumns === 2 ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}
+                                                    >
+                                                        <Columns size={16}/> 2 Colunas
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <label className="block text-sm font-bold text-gray-700">Upload do Conteúdo</label>
+                                                    {uploadedFile && (
+                                                        <button 
+                                                            onClick={handleAIDiagramming}
+                                                            disabled={isDiagramming}
+                                                            className="text-xs flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full font-bold hover:bg-purple-200 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {isDiagramming ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                                            {isDiagramming ? 'Processando...' : 'Diagramar com IA'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                
+                                                <label className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-8 cursor-pointer transition-all relative overflow-hidden group ${uploadedFile ? 'border-green-500 bg-green-50/50' : 'border-gray-300 hover:border-brand-400 hover:bg-brand-50/30'}`}>
+                                                    {isDiagramming && (
+                                                        <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
+                                                            <Sparkles className="text-purple-600 animate-bounce mb-2" size={32}/>
+                                                            <p className="text-sm font-bold text-purple-800 animate-pulse">A IA está diagramando...</p>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {uploadedFile ? (
+                                                        <>
+                                                            <CheckCircle className="text-green-500 mb-3" size={32}/>
+                                                            <span className="text-sm font-bold text-green-700 text-center break-all">{uploadedFile.name}</span>
+                                                            <span className="text-xs text-green-600 mt-1 bg-green-100 px-2 py-1 rounded">Clique para trocar</span>
+                                                        </>
+                                                    ) : existingFileUrl ? (
+                                                        <>
+                                                            <FileText className="text-blue-500 mb-3" size={32}/>
+                                                            <span className="text-sm font-bold text-blue-700">Arquivo Existente</span>
+                                                            <span className="text-xs text-blue-600 mt-1 bg-blue-100 px-2 py-1 rounded">Clique para substituir</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <UploadCloud className="text-gray-400 mb-3 group-hover:text-brand-500 transition-colors" size={32}/>
+                                                            <span className="text-sm font-bold text-gray-600">Clique para enviar</span>
+                                                            <span className="text-xs text-gray-400 mt-1">PDF ou Imagem (Foto)</span>
+                                                        </>
+                                                    )}
+                                                    <input type="file" className="hidden" accept=".pdf,image/*" onChange={handleFileUpload} />
+                                                </label>
+                                            </div>
+                                        </Card>
+                                    </>
+                                ) : (
+                                    /* SUBTAB: DETAILS */
+                                    <Card>
+                                        <SectionHeader title="Detalhes Adicionais" />
+                                        
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-700 mb-1">Subtítulo / Instruções</label>
+                                                <textarea 
+                                                    value={docSubtitle} 
+                                                    onChange={(e) => setDocSubtitle(e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none h-32"
+                                                    placeholder="Instruções para os alunos..."
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-700 mb-1">Turma (Sugestão no Cabeçalho)</label>
+                                                <select
+                                                    value={selectedClassForExam}
+                                                    onChange={(e) => setSelectedClassForExam(e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                                >
+                                                    <option value="">Deixar em branco (____)</option>
+                                                    {user?.classes?.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+                                                    <option value="6º ANO">6º ANO</option>
+                                                    <option value="7º ANO">7º ANO</option>
+                                                    <option value="8º ANO">8º ANO</option>
+                                                    <option value="9º ANO">9º ANO</option>
+                                                    <option value="1ª SÉRIE EM">1ª SÉRIE EM</option>
+                                                    <option value="2ª SÉRIE EM">2ª SÉRIE EM</option>
+                                                    <option value="3ª SÉRIE EM">3ª SÉRIE EM</option>
+                                                </select>
+                                            </div>
+
+                                            {materialType === 'exam' && (
+                                                <div className="pt-4 border-t border-gray-100">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <label className="text-sm font-medium text-gray-700">Mostrar campo "Nome do Aluno"</label>
+                                                        <input type="checkbox" checked={showStudentName} onChange={e => setShowStudentName(e.target.checked)} className="rounded text-brand-600 focus:ring-brand-500"/>
+                                                    </div>
+                                                    <div className="flex items-center justify-between">
+                                                        <label className="text-sm font-medium text-gray-700">Valor da Prova</label>
+                                                        <input type="number" value={maxScore} onChange={e => setMaxScore(Number(e.target.value))} className="w-16 border rounded p-1 text-center text-sm"/>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                    );
-                                });
-                            })()}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* ... Rest of the tabs (new, ai) ... */}
-        {activeTab === 'new' && (
-          <div className="bg-white p-8 rounded-lg shadow-sm border border-gray-100 max-w-3xl mx-auto">
-            <h2 className="text-xl font-semibold mb-6 text-gray-800">Nova Solicitação de Impressão</h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Título da Avaliação</label>
-                        <input required type="text" className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                            value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Prova Bimestral 1" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Disciplina</label>
-                        {user?.subject ? (
-                            <input 
-                                type="text" 
-                                readOnly 
-                                value={subject} 
-                                className="mt-1 block w-full bg-gray-50 text-gray-500 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm cursor-not-allowed"
-                            />
-                        ) : (
-                            <select className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                                value={subject} onChange={e => setSubject(e.target.value)}>
-                                <option value="">Selecione...</option>
-                                <option value="Matemática">Matemática</option>
-                                <option value="Português">Português</option>
-                                <option value="História">História</option>
-                                <option value="Geografia">Geografia</option>
-                                <option value="Ciências">Ciências</option>
-                            </select>
-                        )}
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Nível / Turma</label>
-                        {user?.classes && user.classes.length > 0 ? (
-                            <select 
-                                required
-                                className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                                value={gradeLevel}
-                                onChange={e => setGradeLevel(e.target.value)}
-                            >
-                                {user.classes.map((cls) => (
-                                    <option key={cls} value={cls}>{cls}</option>
-                                ))}
-                            </select>
-                        ) : (
-                            <input required type="text" className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                                value={gradeLevel} onChange={e => setGradeLevel(e.target.value)} />
-                        )}
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Data de Aplicação</label>
-                        <div className="relative">
-                            <input 
-                                required 
-                                type="date" 
-                                className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm [color-scheme:light]"
-                                value={dueDate} 
-                                onChange={handleDateChange} 
-                            />
-                        </div>
-                        {showDateWarning && <p className="text-xs text-red-500 mt-1 font-bold">Prazo inferior a 48 horas!</p>}
-                    </div>
-                </div>
-
-                <div>
-                    <div className="flex justify-between items-center mb-1">
-                        <label className="block text-sm font-medium text-gray-700">Instruções de Impressão / Cabeçalho</label>
-                        <button type="button" onClick={handleSuggestInstructions} className="text-xs text-brand-600 hover:text-brand-800 flex items-center">
-                            {instructionLoading && <RefreshCw className="animate-spin w-3 h-3 mr-1" />}
-                            Sugerir com IA
-                        </button>
-                    </div>
-                    <textarea rows={3} className="block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-brand-500 focus:border-brand-500 sm:text-sm"
-                        value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Ex: Frente e verso, papel A4, grampear no canto..." />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Arquivo da Prova (PDF/DOCX)</label>
-                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:bg-gray-50 transition-colors cursor-pointer relative bg-white">
-                        <div className="space-y-1 text-center">
-                            <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                            <div className="flex text-sm text-gray-600">
-                                <label htmlFor="file-upload" className="relative cursor-pointer bg-white rounded-md font-medium text-brand-600 hover:text-brand-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-brand-500">
-                                    <span>Upload do arquivo</span>
-                                    <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileUpload} />
-                                </label>
-                                <p className="pl-1">ou arraste e solte</p>
+                                    </Card>
+                                )}
                             </div>
-                            <p className="text-xs text-gray-500">
-                                {fileName ? <span className="text-brand-600 font-bold">{fileName}</span> : "PDF, DOC até 10MB"}
-                            </p>
+
+                            {/* --- RIGHT COLUMN: PREVIEW --- */}
+                            <div className="lg:col-span-8 flex flex-col bg-gray-200/50 rounded-xl border-2 border-dashed border-gray-300 relative overflow-hidden h-[800px] lg:h-auto">
+                                
+                                {/* ZOOM CONTROLS */}
+                                <div className="absolute top-4 right-4 z-20 bg-white rounded-lg shadow-sm p-1 flex items-center gap-1 border border-gray-200">
+                                    <button onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="p-1.5 hover:bg-gray-100 rounded text-gray-600"><ZoomOut size={16}/></button>
+                                    <span className="text-xs font-mono w-10 text-center font-bold text-gray-700">{Math.round(zoomLevel * 100)}%</span>
+                                    <button onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))} className="p-1.5 hover:bg-gray-100 rounded text-gray-600"><ZoomIn size={16}/></button>
+                                </div>
+
+                                <div className="flex-1 overflow-auto flex justify-center p-8 custom-scrollbar bg-slate-100">
+                                    
+                                    {/* A4 PAPER SIMULATION */}
+                                    <div 
+                                        className="bg-white shadow-2xl transition-transform duration-200 origin-top flex flex-col relative"
+                                        style={{ 
+                                            width: '794px', 
+                                            minHeight: '1123px', // Aproximadamente A4 a 96dpi
+                                            height: 'auto', // Permite crescimento infinito para paginação automática na impressão
+                                            transform: `scale(${zoomLevel})`,
+                                            padding: '40px',
+                                            marginBottom: '100px'
+                                        }}
+                                    >
+                                        {/* CABEÇALHO PERSONALIZADO (IMAGEM) */}
+                                        <div className="mb-6">
+                                            <img 
+                                                src={materialType === 'exam' ? HEADER_EXAM_URL : HEADER_HANDOUT_URL} 
+                                                alt="Cabeçalho da Instituição" 
+                                                className="w-full h-auto object-contain mb-4 border-b border-gray-100 pb-2"
+                                            />
+                                            
+                                            <div className="grid grid-cols-2 gap-4 text-sm font-serif pt-2 px-2 text-gray-800">
+                                                <p><span className="font-bold">Professor:</span> {user?.name}</p>
+                                                <p><span className="font-bold">Disciplina:</span> {user?.subject || 'Geral'}</p>
+                                                <p><span className="font-bold">Turma:</span> {selectedClassForExam || '_______'}</p>
+                                                <p><span className="font-bold">Data:</span> ___/___/____</p>
+                                                {materialType === 'exam' && showStudentName && (
+                                                    <p className="col-span-2 mt-2 border-t border-gray-200 pt-2">
+                                                        <span className="font-bold">Aluno(a):</span> ____________________________________________________________________
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* TÍTULO E SUBTÍTULO */}
+                                        <div className="text-center mb-8">
+                                            <h2 className="text-lg font-bold uppercase font-serif text-gray-900 border-b-2 border-gray-800 inline-block pb-1 px-4 mb-2">{docTitle}</h2>
+                                            {docSubtitle && <p className="text-sm italic font-serif text-gray-600 whitespace-pre-line">{docSubtitle}</p>}
+                                        </div>
+
+                                        {/* CONTEÚDO (DIAGRAMAÇÃO AUTOMÁTICA) */}
+                                        <div className={`flex-1 ${docColumns === 2 ? 'columns-2 gap-8 [column-rule:1px_solid_#eee]' : ''}`}>
+                                            
+                                            {aiGeneratedContent ? (
+                                                // Renderização do HTML gerado pela IA
+                                                <div 
+                                                    className="prose prose-sm max-w-none prose-p:text-justify prose-p:text-sm prose-headings:font-bold prose-headings:uppercase prose-li:text-sm text-gray-900 font-serif"
+                                                    dangerouslySetInnerHTML={{ __html: aiGeneratedContent }}
+                                                />
+                                            ) : filePreviewUrl ? (
+                                                filePreviewUrl.startsWith('blob:') && uploadedFile?.type === 'application/pdf' ? (
+                                                    // PDF Placeholder
+                                                    <div className="w-full h-[600px] bg-gray-50 border border-gray-200 rounded flex flex-col items-center justify-center text-gray-400 break-inside-avoid">
+                                                        <FileText size={48} className="mb-4 text-red-400"/>
+                                                        <p className="font-bold text-gray-600">Visualização de PDF</p>
+                                                        <p className="text-xs max-w-xs text-center mt-2">O arquivo PDF será mesclado abaixo deste cabeçalho na impressão final.</p>
+                                                    </div>
+                                                ) : (
+                                                    // Image Preview (Raw)
+                                                    <img src={filePreviewUrl} alt="Preview" className="w-full h-auto object-contain rounded mb-4 break-inside-avoid" />
+                                                )
+                                            ) : existingFileUrl ? (
+                                                <div className="w-full h-[600px] bg-gray-50 border border-gray-200 rounded flex flex-col items-center justify-center text-gray-400 break-inside-avoid">
+                                                    <FileText size={48} className="mb-4 text-blue-400"/>
+                                                    <p className="font-bold text-gray-600">Arquivo Existente Anexado</p>
+                                                    <p className="text-xs max-w-xs text-center mt-2">O conteúdo original será mantido e formatado com o novo cabeçalho.</p>
+                                                </div>
+                                            ) : (
+                                                // Empty State
+                                                <div className="w-full h-96 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-300 select-none break-inside-avoid bg-gray-50/50">
+                                                    <p className="text-sm font-bold text-gray-400">Área de Conteúdo</p>
+                                                    <p className="text-xs mt-1">Faça o upload e use a IA para diagramar aqui.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-
-                <div className="flex justify-end pt-4">
-                    <Button type="button" variant="secondary" className="mr-3" onClick={() => setActiveTab('list')}>Cancelar</Button>
-                    <Button type="submit" isLoading={isSubmitting}>Enviar para Gráfica</Button>
-                </div>
-            </form>
-          </div>
-        )}
-
-        {activeTab === 'ai' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 h-fit">
-                <div className="flex items-center gap-2 mb-4 text-purple-700">
-                    <BrainCircuit size={24} />
-                    <h2 className="text-xl font-bold">Gerador de Questões AI</h2>
-                </div>
-                <p className="text-gray-600 text-sm mb-6">
-                    Utilize o Google Gemini para criar rascunhos de questões para suas provas. Digite o tópico e deixe a IA trabalhar.
-                </p>
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Tópico da Matéria</label>
-                        <input 
-                            type="text" 
-                            className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-purple-500 focus:border-purple-500"
-                            placeholder="Ex: Revolução Industrial, Equações de 2º Grau..."
-                            value={aiTopic}
-                            onChange={(e) => setAiTopic(e.target.value)}
-                        />
-                    </div>
-                    <div>
-                         <label className="block text-sm font-medium text-gray-700">Nível Escolar</label>
-                         {user?.classes && user.classes.length > 0 ? (
-                            <select 
-                                className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-purple-500 focus:border-purple-500"
-                                value={gradeLevel}
-                                onChange={(e) => setGradeLevel(e.target.value)}
-                            >
-                                {user.classes.map(cls => (
-                                    <option key={cls} value={cls}>{cls}</option>
-                                ))}
-                            </select>
-                         ) : (
-                             <input 
-                                type="text" 
-                                className="mt-1 block w-full bg-white text-gray-900 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:ring-purple-500 focus:border-purple-500"
-                                value={gradeLevel}
-                                onChange={(e) => setGradeLevel(e.target.value)}
-                            />
-                         )}
-                    </div>
-                    <Button 
-                        onClick={handleGenerateQuestions} 
-                        disabled={!aiTopic || aiLoading}
-                        className="w-full bg-purple-600 hover:bg-purple-700 focus:ring-purple-500"
-                        isLoading={aiLoading}
-                    >
-                        Gerar Questões
-                    </Button>
-                </div>
-             </div>
-
-             <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 min-h-[400px]">
-                <h3 className="text-lg font-medium text-slate-800 mb-2">Resultado da IA</h3>
-                {aiResult ? (
-                    <div className="bg-white p-4 rounded border border-slate-200 text-sm whitespace-pre-wrap font-mono h-96 overflow-y-auto shadow-inner">
-                        {aiResult}
-                    </div>
-                ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                        <BrainCircuit size={48} className="mb-2 opacity-20" />
-                        <p>O resultado aparecerá aqui.</p>
-                    </div>
-                )}
-                {aiResult && (
-                    <Button 
-                        variant="secondary" 
-                        className="mt-4 w-full"
-                        onClick={() => {navigator.clipboard.writeText(aiResult)}}
-                    >
-                        Copiar para Área de Transferência
-                    </Button>
-                )}
-             </div>
-          </div>
-        )}
-      </main>
+            )}
+        </div>
     </div>
   );
 };
