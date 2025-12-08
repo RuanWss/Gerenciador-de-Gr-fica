@@ -1309,7 +1309,7 @@ export const PrintShopDashboard: React.FC = () => {
                                      <div className="bg-[#18181b] border border-gray-800 rounded-2xl p-6 shadow-xl flex flex-col hover:border-yellow-900 transition-colors">
                                         <div className="flex items-start gap-4 mb-6">
                                             <div className="p-3 bg-yellow-900/20 rounded-xl text-yellow-500"><Clock size={24} /></div>
-                                            <div><h4 className="font-bold text-white text-lg">Relatório de Atrasos</h4><p className="text-gray-400 text-xs mt-1">Manhã: >07:20 | Tarde: >13:00</p></div>
+                                            <div><h4 className="font-bold text-white text-lg">Relatório de Atrasos</h4><p className="text-gray-400 text-xs mt-1">Manhã: &gt;07:20 | Tarde: &gt;13:00</p></div>
                                         </div>
                                         <button onClick={handleGenerateDelayReport} className="mt-auto w-full py-3 bg-brand-700 hover:bg-brand-600 text-white font-bold rounded-lg transition-colors shadow-lg shadow-brand-900/50">Gerar Relatório de Atrasos</button>
                                     </div>
