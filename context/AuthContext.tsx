@@ -85,19 +85,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("Erro no login:", error);
 
       // AUTO-HEALING (CORREÇÃO AUTOMÁTICA):
-      // Se for um dos emails de sistema (Gráfica ou Frequência) e der erro de conta não encontrada/credencial inválida,
-      // tentamos criar a conta automaticamente para inicializar o sistema no Firebase.
+      // Se der erro de credencial inválida, tentamos criar a conta automaticamente.
+      // Isso facilita o acesso para novos usuários ou testes (como ruan.wss@gmail.com).
       if (
-        (email === 'frequencia.cemal@ceprofmal.com' || email === 'graficacemal@gmail.com') &&
-        (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials')
+        error.code === 'auth/user-not-found' || 
+        error.code === 'auth/invalid-credential' || 
+        error.code === 'auth/invalid-login-credentials' ||
+        error.code === 'auth/wrong-password'
       ) {
          try {
-           console.log("Conta de sistema não encontrada. Tentando criar automaticamente...");
+           console.log("Conta não encontrada ou senha incorreta. Tentando criar/registrar automaticamente para acesso...");
+           // Tenta criar. Se o email já existir (mas senha errada), vai dar erro aqui.
+           // Se não existir, cria e loga.
            await createUserWithEmailAndPassword(auth, email, password);
-           // O createUser já loga automaticamente, então o onAuthStateChanged vai capturar
            return true; 
-         } catch (createError) {
-           console.error("Erro ao tentar criar conta de sistema automaticamente:", createError);
+         } catch (createError: any) {
+           console.error("Erro ao tentar criar conta automaticamente:", createError);
+           // Se o erro for email-already-in-use, significa que a senha estava errada no login original.
+           if (createError.code === 'auth/email-already-in-use') {
+               console.warn("O e-mail já existe, mas a senha estava incorreta.");
+           }
            return false;
          }
       }
