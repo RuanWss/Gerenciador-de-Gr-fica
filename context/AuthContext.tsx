@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { auth } from '../firebaseConfig';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getUserProfile } from '../services/firebaseService';
 
 interface AuthContextType {
@@ -82,23 +82,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithEmailAndPassword(auth, email, password);
       return true;
     } catch (error: any) {
-      console.warn("Falha no login inicial:", error.code);
-
-      // AUTO-HEALING (CORREÇÃO AUTOMÁTICA):
-      // Apenas tenta criar a conta se o erro for EXPLICITAMENTE de usuário não encontrado.
-      // Erros de senha (invalid-credential, wrong-password) não devem tentar criar conta.
-      if (error.code === 'auth/user-not-found') {
-         try {
-           console.log("Conta não encontrada. Tentando registrar automaticamente...");
-           await createUserWithEmailAndPassword(auth, email, password);
-           return true; 
-         } catch (createError: any) {
-           console.error("Erro ao tentar criar conta automaticamente:", createError.code);
-           return false;
-         }
-      }
-
-      // Se for senha errada ou credencial inválida, apenas retorna falso
+      console.warn("Falha no login:", error.code);
+      // Removida tentativa automática de criação para evitar erros de "email-already-in-use"
+      // e loops de autenticação.
       return false;
     }
   };

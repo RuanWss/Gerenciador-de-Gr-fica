@@ -32,7 +32,10 @@ export const AttendanceTerminal: React.FC = () => {
     // 2. Load Students & AI Models
     useEffect(() => {
         const loadModels = async () => {
-            if (!faceapi || !faceapi.nets) {
+            // Handle FaceAPI import (ESM wrapper check)
+            const faceApi = (faceapi as any).default || faceapi;
+
+            if (!faceApi || !faceApi.nets) {
                 console.error("Biblioteca FaceAPI não inicializada corretamente.");
                 setLoadingMessage("Erro Fatal: FaceAPI não carregada");
                 return;
@@ -40,9 +43,9 @@ export const AttendanceTerminal: React.FC = () => {
 
             // Otimização: Verificar se os modelos já estão carregados na memória global do face-api
             if (
-                faceapi.nets.ssdMobilenetv1.isLoaded && 
-                faceapi.nets.faceLandmark68Net.isLoaded && 
-                faceapi.nets.faceRecognitionNet.isLoaded
+                faceApi.nets.ssdMobilenetv1.isLoaded && 
+                faceApi.nets.faceLandmark68Net.isLoaded && 
+                faceApi.nets.faceRecognitionNet.isLoaded
             ) {
                 console.log("Modelos FaceAPI já carregados. Pulando download.");
                 setModelsLoaded(true);
@@ -54,9 +57,9 @@ export const AttendanceTerminal: React.FC = () => {
             try {
                 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
                 await Promise.all([
-                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                    faceApi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceApi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
                 setModelsLoaded(true);
                 setLoadingMessage('Sincronizando Banco de Dados...');
@@ -93,6 +96,8 @@ export const AttendanceTerminal: React.FC = () => {
     // 3. Process Student Photos (Create Descriptors)
     const processStudentFaces = async (studentList: Student[]) => {
         setLoadingMessage('Indexando Biometria...');
+        
+        const faceApi = (faceapi as any).default || faceapi;
         const labeledDescriptorsTemp: faceapi.LabeledFaceDescriptors[] = [];
         
         const studentsWithPhoto = studentList.filter(s => s.photoUrl);
@@ -103,15 +108,15 @@ export const AttendanceTerminal: React.FC = () => {
             if (!student.photoUrl) continue;
             try {
                 // Check if fetchImage exists (it should in ESM build)
-                if (typeof faceapi.fetchImage !== 'function') {
+                if (typeof faceApi.fetchImage !== 'function') {
                     throw new Error("faceapi.fetchImage não disponível");
                 }
 
-                const img = await faceapi.fetchImage(student.photoUrl);
-                const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                const img = await faceApi.fetchImage(student.photoUrl);
+                const detection = await faceApi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
                 
                 if (detection) {
-                    labeledDescriptorsTemp.push(new faceapi.LabeledFaceDescriptors(student.id, [detection.descriptor]));
+                    labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(student.id, [detection.descriptor]));
                 }
                 processedCount++;
                 if (processedCount % 5 === 0) {
@@ -160,22 +165,24 @@ export const AttendanceTerminal: React.FC = () => {
     const handleVideoPlay = () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (!video || !canvas || labeledDescriptors.length === 0) return;
+        const faceApi = (faceapi as any).default || faceapi;
 
-        const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55); // Adjusted threshold
+        if (!video || !canvas || labeledDescriptors.length === 0 || !faceApi) return;
+
+        const faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55); // Adjusted threshold
         const displaySize = { width: video.videoWidth, height: video.videoHeight };
-        faceapi.matchDimensions(canvas, displaySize);
+        faceApi.matchDimensions(canvas, displaySize);
 
         const detect = async () => {
             if (processingRef.current) return; // Prevent overlapping calls
             if (lastLog) return; // Pause detection while showing result
 
             try {
-                const detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+                const detections = await faceApi.detectAllFaces(video, new faceApi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
                     .withFaceLandmarks()
                     .withFaceDescriptors();
 
-                const resizedDetections = faceapi.resizeResults(detections, displaySize);
+                const resizedDetections = faceApi.resizeResults(detections, displaySize);
                 
                 // Clear canvas
                 const ctx = canvas.getContext('2d');
@@ -184,7 +191,7 @@ export const AttendanceTerminal: React.FC = () => {
                 if (resizedDetections.length > 0) {
                     // Draw visual box for detected face
                     const box = resizedDetections[0].detection.box;
-                    const drawBox = new faceapi.draw.DrawBox(box, { 
+                    const drawBox = new faceApi.draw.DrawBox(box, { 
                         label: 'Identificando...', 
                         boxColor: '#3b82f6',
                         lineWidth: 2
