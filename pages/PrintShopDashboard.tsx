@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
     getExams, 
@@ -8,22 +8,16 @@ import {
     updateStudent,
     deleteStudent,
     getStudents,
-    saveAnswerKey,
     getAnswerKeys,
-    deleteAnswerKey,
-    saveStudentCorrection,
-    getStudentCorrections,
     updateSystemConfig,
     listenToSystemConfig,
     getFullSchedule,
     saveScheduleEntry,
     clearSystemAnnouncement,
-    logAttendance,
     getAttendanceLogs,
     getAllAttendanceLogs,
     uploadStudentPhoto
 } from '../services/firebaseService';
-import { correctExamWithAI } from '../services/geminiService';
 import { ExamRequest, ExamStatus, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, TimeSlot, AttendanceLog } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -140,31 +134,9 @@ export const PrintShopDashboard: React.FC = () => {
 
   // Answer Keys & Exam Creation Flow
   const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
-  const [viewState, setViewState] = useState<'list' | 'create_step1' | 'create_step2_grid' | 'correction'>('list');
-  
-  // Create Step 1 Data
-  const [newKeyTitle, setNewKeyTitle] = useState('');
-  const [newKeyDescription, setNewKeyDescription] = useState('');
-  const [newKeyClassId, setNewKeyClassId] = useState('');
-  const [newKeyDate, setNewKeyDate] = useState('');
-  const [newKeyQty, setNewKeyQty] = useState<number>(10);
-  
-  // Create Step 2 / Edit Data
-  const [editingKey, setEditingKey] = useState<AnswerKey | null>(null);
-
-  // Correction Mode
-  const [correctionMode, setCorrectionMode] = useState<AnswerKey | null>(null);
-  const [studentAnswers, setStudentAnswers] = useState<Record<number, string>>({});
-  const [calculatedScore, setCalculatedScore] = useState<number | null>(null);
-  
-  // Correction Upload
-  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
-  const [correctionProgress, setCorrectionProgress] = useState('');
 
   // Statistics
-  const [statsKeyId, setStatsKeyId] = useState('');
   const [corrections, setCorrections] = useState<StudentCorrection[]>([]);
-  const [selectedStatsKey, setSelectedStatsKey] = useState<AnswerKey | null>(null);
 
   // System Config (Banner)
   const [sysConfig, setSysConfig] = useState<SystemConfig>({ 
@@ -652,85 +624,10 @@ export const PrintShopDashboard: React.FC = () => {
       printWindow.document.close();
   };
 
-  // ... report generators omitted for brevity (same as previous) ...
   const handleGenerateClassReport = () => { /* ... */ };
   const handleGenerateStudentReport = () => { /* ... */ };
   const handleGenerateDelayReport = () => { /* ... */ };
 
-
-  // Answer Key / Exam Flow Handlers
-  const startCreateExam = () => {
-    setNewKeyTitle('');
-    setNewKeyDescription('');
-    setNewKeyClassId('');
-    setNewKeyDate(new Date().toISOString().split('T')[0]);
-    setNewKeyQty(20);
-    setViewState('create_step1');
-  };
-  const goToStep2 = () => {
-    if (!newKeyTitle) return alert("Preencha o título da prova");
-    const tempKey: AnswerKey = {
-        id: '',
-        title: newKeyTitle,
-        numQuestions: newKeyQty,
-        correctAnswers: {},
-        createdAt: Date.now()
-    };
-    setEditingKey(tempKey);
-    setViewState('create_step2_grid');
-  };
-  const toggleAnswer = (question: number, option: string) => {
-    if (!editingKey) return;
-    setEditingKey({
-        ...editingKey,
-        correctAnswers: {
-            ...editingKey.correctAnswers,
-            [question]: option
-        }
-    });
-  };
-  const handleSaveKey = async () => {
-    if (!editingKey) return;
-    try {
-        await saveAnswerKey(editingKey);
-        setEditingKey(null);
-        setViewState('list');
-        refreshData();
-        alert('Gabarito salvo com sucesso!');
-    } catch (e) {
-        alert('Erro ao salvar gabarito');
-    }
-  };
-  const handleDeleteKey = async (id: string) => {
-      if (window.confirm("Tem certeza que deseja excluir esta prova? Esta ação não pode ser desfeita.")) {
-          try {
-              await deleteAnswerKey(id);
-              refreshData();
-          } catch (error) {
-              alert("Erro ao excluir prova.");
-          }
-      }
-  };
-  const handleCorrectStudent = async () => { /* ... */ };
-  const handleFileUploadCorrection = async (e: React.ChangeEvent<HTMLInputElement>) => { /* ... */ };
-  const loadStats = async (keyId: string) => { /* ... */ };
-  const getQuestionHitRate = (qNum: number) => { return 0; /* Mock */ };
-  const handlePrintCard = () => {
-    const printContent = document.getElementById('print-card');
-    if (!printContent) return;
-    const printWindow = window.open('', '', 'height=800,width=800');
-    if (printWindow) {
-        printWindow.document.write('<html><head><title>Cartão Resposta</title>');
-        printWindow.document.write('<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">');
-        printWindow.document.write('<script src="https://cdn.tailwindcss.com"></script>');
-        printWindow.document.write('<style>body { font-family: "Poppins", sans-serif; -webkit-print-color-adjust: exact; } @page { margin: 0; }</style>');
-        printWindow.document.write('</head><body>');
-        printWindow.document.write(printContent.innerHTML);
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        setTimeout(() => { printWindow.print(); }, 500);
-    }
-  };
 
   const SidebarItem = ({ id, label, icon: Icon, alert }: { id: Tab, label: string, icon: any, alert?: boolean }) => (
     <button
@@ -1445,7 +1342,11 @@ export const PrintShopDashboard: React.FC = () => {
             {activeTab === 'answer_keys' && (
                 <div className="max-w-6xl mx-auto space-y-6">
                     {/* ... answer key implementation omitted for brevity, keeping existing structure ... */}
-                    {/* Assuming this part remains as is or is updated elsewhere if needed */}
+                    <div className="text-center py-20 text-gray-500">
+                        <ClipboardCheck size={64} className="mx-auto mb-4 opacity-50" />
+                        <h3 className="text-xl font-bold text-white mb-2">Módulo de Correção</h3>
+                        <p>Funcionalidade em desenvolvimento.</p>
+                    </div>
                 </div>
             )}
 
