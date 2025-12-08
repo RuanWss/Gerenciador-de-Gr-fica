@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStudents, logAttendance } from '../services/firebaseService';
 import { Student, AttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, RefreshCw } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2 } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 
 export const AttendanceTerminal: React.FC = () => {

@@ -12,7 +12,6 @@ import {
   UploadCloud, 
   AlertTriangle, 
   Megaphone, 
-  Info,
   LayoutTemplate,
   Type,
   Image as ImageIcon,
@@ -21,9 +20,7 @@ import {
   ArrowDown,
   Printer,
   Columns,
-  Check,
   BookOpen,
-  Settings,
   GripVertical
 } from 'lucide-react';
 

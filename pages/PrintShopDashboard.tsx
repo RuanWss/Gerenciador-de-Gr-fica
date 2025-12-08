@@ -33,39 +33,23 @@ import {
   Download, 
   Eye, 
   UserPlus, 
-  Briefcase, 
   Users, 
   GraduationCap, 
-  BookOpen,
   ClipboardCheck,
   FileSpreadsheet,
   BarChart2,
-  Upload,
   PieChart,
   Home,
-  ScanLine,
-  Info,
-  Save,
-  ArrowLeft,
-  ChevronRight,
-  Calendar,
-  Hash,
-  Type,
   Trash2,
   Megaphone,
-  AlertTriangle,
   CalendarClock,
   RefreshCw,
-  UploadCloud,
   MonitorPlay,
   FileDown,
   ScanBarcode,
-  IdCard,
   History,
   Camera,
-  FileText,
   User,
-  Plus,
   X,
   Loader2,
   AlertCircle,
@@ -73,7 +57,7 @@ import {
 } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 
-type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'subjects' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance';
+type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
