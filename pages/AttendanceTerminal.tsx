@@ -31,6 +31,18 @@ export const AttendanceTerminal: React.FC = () => {
     // 2. Load Students & AI Models
     useEffect(() => {
         const loadModels = async () => {
+            // Otimização: Verificar se os modelos já estão carregados na memória global do face-api
+            if (
+                faceapi.nets.ssdMobilenetv1.isLoaded && 
+                faceapi.nets.faceLandmark68Net.isLoaded && 
+                faceapi.nets.faceRecognitionNet.isLoaded
+            ) {
+                console.log("Modelos FaceAPI já carregados. Pulando download.");
+                setModelsLoaded(true);
+                setLoadingMessage('Modelos verificados.');
+                return;
+            }
+
             setLoadingMessage('Carregando Modelos de IA...');
             try {
                 // Load models from a public CDN
