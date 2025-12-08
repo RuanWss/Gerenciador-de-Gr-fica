@@ -43,7 +43,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-transparent relative">
+    <div className="min-h-screen flex flex-col bg-transparent relative items-center justify-center">
       
       {/* Schedule Button */}
       <a 
@@ -56,7 +56,7 @@ export const Login: React.FC = () => {
 
       {/* System Banner */}
       {sysConfig?.isBannerActive && sysConfig.bannerMessage && (
-          <div className={`w-full p-3 flex items-center justify-center gap-3 shadow-lg z-40 ${getBannerStyles(sysConfig.bannerType)}`}>
+          <div className={`w-full p-3 flex items-center justify-center gap-3 shadow-lg z-40 fixed top-0 ${getBannerStyles(sysConfig.bannerType)}`}>
               <Megaphone size={20} className="shrink-0 animate-pulse" />
               <p className="font-bold text-sm md:text-base text-center shadow-black drop-shadow-sm">
                   AVISO: {sysConfig.bannerMessage}
@@ -64,13 +64,12 @@ export const Login: React.FC = () => {
           </div>
       )}
 
-      <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8 bg-black/60 backdrop-blur-md p-10 rounded-xl shadow-2xl border border-white/10">
+      <div className="w-full max-w-md space-y-8 bg-black/60 backdrop-blur-md p-10 rounded-xl shadow-2xl border border-white/10">
             <div className="text-center">
             <div className="mx-auto flex items-center justify-center mb-6">
                 <img 
                 src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
-                alt="Logo CEMAL EQUIPE" 
+                alt="CEMAL EQUIPE" 
                 className="h-32 w-auto object-contain drop-shadow-lg"
                 />
             </div>
@@ -130,7 +129,6 @@ export const Login: React.FC = () => {
             </div>
             </form>
         </div>
-      </div>
     </div>
   );
 };
