@@ -49,6 +49,19 @@ export interface ExamRequest {
   };
 }
 
+export interface ClassMaterial {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  className: string;
+  title: string;
+  description?: string;
+  fileUrl: string;
+  fileName: string;
+  fileType: string;
+  createdAt: number;
+}
+
 export interface AIGeneratedQuestion {
   question: string;
   options: string[];

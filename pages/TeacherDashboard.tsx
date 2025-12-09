@@ -1,9 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getExams, saveExam, updateExamRequest, uploadExamFile } from '../services/firebaseService';
+import { 
+    getExams, 
+    saveExam, 
+    updateExamRequest, 
+    uploadExamFile, 
+    uploadClassMaterialFile, 
+    saveClassMaterial,
+    getClassMaterials
+} from '../services/firebaseService';
 import { digitizeMaterial } from '../services/geminiService';
-import { ExamRequest, ExamStatus, MaterialType } from '../types';
+import { ExamRequest, ExamStatus, MaterialType, ClassMaterial } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, 
@@ -26,7 +34,9 @@ import {
   Sparkles,
   List,
   PlusCircle,
-  Layout
+  Layout,
+  FolderUp,
+  Folder
 } from 'lucide-react';
 
 // --- CONSTANTES DE IMAGEM ---
@@ -52,7 +62,7 @@ export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'requests' | 'create'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials'>('requests');
   const [editorSubTab, setEditorSubTab] = useState<'document' | 'details'>('document');
 
   // Exam Data List
@@ -84,17 +94,29 @@ export const TeacherDashboard: React.FC = () => {
   // Preview State
   const [zoomLevel, setZoomLevel] = useState(0.8);
 
-  // Fetch Exams
+  // Materials State
+  const [materials, setMaterials] = useState<ClassMaterial[]>([]);
+  const [materialTitle, setMaterialTitle] = useState('');
+  const [materialClass, setMaterialClass] = useState('');
+  const [materialFile, setMaterialFile] = useState<File | null>(null);
+  const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
+
+  // Fetch Data
   useEffect(() => {
-    const fetchExams = async () => {
+    const fetchData = async () => {
         if (user) {
             setIsLoadingExams(true);
             const allExams = await getExams();
             setExams(allExams.filter(e => e.teacherId === user.id).sort((a,b) => b.createdAt - a.createdAt));
+            
+            // Fetch materials
+            const userMaterials = await getClassMaterials(user.id);
+            setMaterials(userMaterials.sort((a,b) => b.createdAt - a.createdAt));
+
             setIsLoadingExams(false);
         }
     };
-    fetchExams();
+    fetchData();
   }, [user, activeTab]);
 
   // Clean up object URL on unmount
@@ -119,6 +141,12 @@ export const TeacherDashboard: React.FC = () => {
           } else {
               setFilePreviewUrl(null);
           }
+      }
+  };
+
+  const handleMaterialFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          setMaterialFile(e.target.files[0]);
       }
   };
 
@@ -239,7 +267,46 @@ export const TeacherDashboard: React.FC = () => {
     }
   };
 
-  const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create', label: string, icon: any }) => (
+  const handleUploadMaterial = async () => {
+      if (!user) return;
+      if (!materialFile || !materialClass || !materialTitle) {
+          alert("Preencha todos os campos e selecione um arquivo.");
+          return;
+      }
+
+      setIsUploadingMaterial(true);
+      try {
+          // Upload to storage organized by class name
+          const fileUrl = await uploadClassMaterialFile(materialFile, materialClass);
+          
+          const newMaterial: ClassMaterial = {
+              id: '',
+              teacherId: user.id,
+              teacherName: user.name,
+              className: materialClass,
+              title: materialTitle,
+              fileUrl,
+              fileName: materialFile.name,
+              fileType: materialFile.type,
+              createdAt: Date.now()
+          };
+
+          await saveClassMaterial(newMaterial);
+          
+          setMaterials([newMaterial, ...materials]);
+          setMaterialFile(null);
+          setMaterialTitle('');
+          setMaterialClass('');
+          alert("Material enviado com sucesso! O arquivo foi organizado na pasta da turma.");
+      } catch (error) {
+          console.error("Erro no upload", error);
+          alert("Falha ao enviar material.");
+      } finally {
+          setIsUploadingMaterial(false);
+      }
+  };
+
+  const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create' | 'materials', label: string, icon: any }) => (
     <button
       onClick={id === 'create' ? handleNewExam : () => setActiveTab(id)}
       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
@@ -263,6 +330,7 @@ export const TeacherDashboard: React.FC = () => {
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Menu do Professor</p>
                 <SidebarItem id="requests" label="Meus Pedidos" icon={List} />
                 <SidebarItem id="create" label="Nova Solicitação" icon={PlusCircle} />
+                <SidebarItem id="materials" label="Materiais de Aula" icon={FolderUp} />
             </div>
             
             <div className="mt-auto bg-blue-50 p-4 rounded-xl border border-blue-100">
@@ -352,6 +420,119 @@ export const TeacherDashboard: React.FC = () => {
                             </div>
                         )}
                     </Card>
+                </div>
+            )}
+
+            {/* VIEW: CLASS MATERIALS */}
+            {activeTab === 'materials' && (
+                <div className="flex-1 overflow-y-auto p-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <header className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800">Materiais de Aula</h1>
+                        <p className="text-gray-500">Envie PDFs, slides e documentos organizados por turma.</p>
+                    </header>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {/* Upload Form */}
+                        <div className="md:col-span-1">
+                            <Card className="sticky top-8">
+                                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <FolderUp className="text-brand-500" size={20}/> Upload de Material
+                                </h3>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Título do Material</label>
+                                        <input 
+                                            value={materialTitle}
+                                            onChange={(e) => setMaterialTitle(e.target.value)}
+                                            className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                            placeholder="Ex: Slides da Aula 01"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Selecione a Turma</label>
+                                        <select
+                                            value={materialClass}
+                                            onChange={(e) => setMaterialClass(e.target.value)}
+                                            className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                        >
+                                            <option value="">-- Selecione --</option>
+                                            {user?.classes?.map(cls => <option key={cls} value={cls}>{cls}</option>)}
+                                            <option value="6º ANO">6º ANO</option>
+                                            <option value="7º ANO">7º ANO</option>
+                                            <option value="8º ANO">8º ANO</option>
+                                            <option value="9º ANO">9º ANO</option>
+                                            <option value="1ª SÉRIE EM">1ª SÉRIE EM</option>
+                                            <option value="2ª SÉRIE EM">2ª SÉRIE EM</option>
+                                            <option value="3ª SÉRIE EM">3ª SÉRIE EM</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Arquivo</label>
+                                        <input 
+                                            type="file" 
+                                            onChange={handleMaterialFileChange}
+                                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
+                                        />
+                                    </div>
+
+                                    <Button 
+                                        onClick={handleUploadMaterial} 
+                                        isLoading={isUploadingMaterial}
+                                        className="w-full mt-4"
+                                    >
+                                        Enviar para a Turma
+                                    </Button>
+                                    
+                                    <p className="text-xs text-gray-400 mt-2 text-center">
+                                        Os arquivos serão organizados automaticamente na pasta da turma selecionada.
+                                    </p>
+                                </div>
+                            </Card>
+                        </div>
+
+                        {/* Recent Files List */}
+                        <div className="md:col-span-2">
+                             <Card>
+                                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <Folder className="text-blue-500" size={20}/> Arquivos Enviados
+                                </h3>
+
+                                {materials.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-500">
+                                        Nenhum material enviado ainda.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {materials.map(mat => (
+                                            <div key={mat.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold shrink-0">
+                                                        {mat.fileType.includes('pdf') ? 'PDF' : 'DOC'}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-bold text-gray-800">{mat.title}</h4>
+                                                        <p className="text-xs text-gray-500 flex items-center gap-2">
+                                                            <span className="bg-gray-200 px-1.5 py-0.5 rounded text-gray-700 font-bold">{mat.className}</span>
+                                                            • {new Date(mat.createdAt).toLocaleDateString()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <a 
+                                                    href={mat.fileUrl} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer"
+                                                    className="text-blue-600 hover:text-blue-800 text-sm font-bold"
+                                                >
+                                                    Baixar
+                                                </a>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                             </Card>
+                        </div>
+                    </div>
                 </div>
             )}
 

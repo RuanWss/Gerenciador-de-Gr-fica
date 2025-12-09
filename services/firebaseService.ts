@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   addDoc, 
@@ -25,7 +26,7 @@ import {
 } from 'firebase/storage';
 import { initializeApp } from 'firebase/app';
 import { db, auth, storage } from '../firebaseConfig';
-import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog } from '../types';
+import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog, ClassMaterial } from '../types';
 
 // Nome das coleções no Firestore
 const EXAMS_COLLECTION = 'exams';
@@ -37,6 +38,7 @@ const CORRECTIONS_COLLECTION = 'corrections';
 const CONFIG_COLLECTION = 'config';
 const SCHEDULE_COLLECTION = 'schedules';
 const ATTENDANCE_COLLECTION = 'attendance_logs';
+const MATERIALS_COLLECTION = 'class_materials';
 
 // --- STORAGE ---
 
@@ -62,6 +64,45 @@ export const uploadStudentPhoto = async (file: File): Promise<string> => {
     console.error("Erro ao fazer upload da foto:", error);
     throw error;
   }
+};
+
+// Faz o upload organizado por pasta: materials/NomeDaTurma/NomeDoArquivo
+export const uploadClassMaterialFile = async (file: File, className: string): Promise<string> => {
+  if (!file) return '';
+  try {
+    // Sanitiza o nome da turma para criar uma pasta válida
+    const safeClassName = className.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const storageRef = ref(storage, `materials/${safeClassName}/${Date.now()}_${file.name}`);
+    
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+  } catch (error) {
+    console.error("Erro ao fazer upload do material:", error);
+    throw error;
+  }
+};
+
+// --- CLASS MATERIALS ---
+
+export const saveClassMaterial = async (material: ClassMaterial): Promise<void> => {
+    try {
+        const { id, ...data } = material;
+        await addDoc(collection(db, MATERIALS_COLLECTION), data);
+    } catch (error) {
+        console.error("Erro ao salvar material:", error);
+        throw error;
+    }
+};
+
+export const getClassMaterials = async (teacherId: string): Promise<ClassMaterial[]> => {
+    try {
+        const q = query(collection(db, MATERIALS_COLLECTION), where("teacherId", "==", teacherId));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassMaterial));
+    } catch (error) {
+        console.error("Erro ao buscar materiais:", error);
+        return [];
+    }
 };
 
 // --- EXAMS ---
@@ -398,4 +439,11 @@ export const getAllAttendanceLogs = async (): Promise<AttendanceLog[]> => {
         console.error("Erro ao buscar histórico completo", error);
         return [];
     }
+};
+
+// Remove undefined fields helper
+export const cleanData = (data: any) => {
+    return Object.fromEntries(
+        Object.entries(data).filter(([_, v]) => v !== undefined)
+    );
 };
