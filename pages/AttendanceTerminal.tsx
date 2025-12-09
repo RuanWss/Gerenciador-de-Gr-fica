@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStudents, logAttendance } from '../services/firebaseService';
 import { Student, AttendanceLog } from '../types';
 import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User } from 'lucide-react';
+// @ts-ignore
 import * as faceapi from 'face-api.js';
 
 export const AttendanceTerminal: React.FC = () => {
@@ -15,7 +17,7 @@ export const AttendanceTerminal: React.FC = () => {
     
     // AI State
     const [modelsLoaded, setModelsLoaded] = useState(false);
-    const [labeledDescriptors, setLabeledDescriptors] = useState<faceapi.LabeledFaceDescriptors[]>([]);
+    const [labeledDescriptors, setLabeledDescriptors] = useState<any[]>([]);
     const [loadingMessage, setLoadingMessage] = useState('Inicializando Sistema...');
     const [isProcessing, setIsProcessing] = useState(false);
     
@@ -98,7 +100,7 @@ export const AttendanceTerminal: React.FC = () => {
         setLoadingMessage('Indexando Biometria...');
         
         const faceApi = (faceapi as any).default || faceapi;
-        const labeledDescriptorsTemp: faceapi.LabeledFaceDescriptors[] = [];
+        const labeledDescriptorsTemp: any[] = [];
         
         const studentsWithPhoto = studentList.filter(s => s.photoUrl);
         let processedCount = 0;

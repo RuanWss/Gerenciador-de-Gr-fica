@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -29,26 +30,27 @@ import {
   UserPlus, 
   Users, 
   GraduationCap, 
-  ClipboardCheck,
-  FileSpreadsheet,
-  BarChart2,
-  PieChart,
-  Home,
-  Trash2,
-  Megaphone,
-  CalendarClock,
-  RefreshCw,
-  MonitorPlay,
-  FileDown,
-  ScanBarcode,
-  History,
-  Camera,
-  User,
-  X,
-  Loader2,
-  AlertCircle,
+  ClipboardCheck, 
+  FileSpreadsheet, 
+  BarChart2, 
+  PieChart, 
+  Home, 
+  Trash2, 
+  Megaphone, 
+  CalendarClock, 
+  RefreshCw, 
+  MonitorPlay, 
+  FileDown, 
+  ScanBarcode, 
+  History, 
+  Camera, 
+  User, 
+  X, 
+  Loader2, 
+  AlertCircle, 
   Pencil
 } from 'lucide-react';
+// @ts-ignore
 import * as faceapi from 'face-api.js';
 
 type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance';
