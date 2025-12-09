@@ -36,7 +36,8 @@ import {
   PlusCircle,
   Layout,
   FolderUp,
-  Folder
+  Folder,
+  Download // Adicionado ícone de Download
 } from 'lucide-react';
 
 // --- CONSTANTES DE IMAGEM ---
@@ -100,6 +101,9 @@ export const TeacherDashboard: React.FC = () => {
   const [materialClass, setMaterialClass] = useState('');
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
+  
+  // State auxiliar para download
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // Fetch Data
   useEffect(() => {
@@ -306,6 +310,34 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
+  // Função para forçar o download do arquivo
+  const handleForceDownload = async (url: string, filename: string, id: string) => {
+      try {
+          setDownloadingId(id);
+          const response = await fetch(url);
+          const blob = await response.blob();
+          
+          // Cria um link temporário
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename; // Atributo que força o download e sugere o nome
+          
+          document.body.appendChild(link);
+          link.click();
+          
+          // Limpeza
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+      } catch (error) {
+          console.error("Erro no download automático:", error);
+          // Fallback se o fetch falhar (ex: CORS), abre em nova aba
+          window.open(url, '_blank');
+      } finally {
+          setDownloadingId(null);
+      }
+  };
+
   const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create' | 'materials', label: string, icon: any }) => (
     <button
       onClick={id === 'create' ? handleNewExam : () => setActiveTab(id)}
@@ -435,398 +467,4 @@ export const TeacherDashboard: React.FC = () => {
                         {/* Upload Form */}
                         <div className="md:col-span-1">
                             <Card className="sticky top-8">
-                                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                    <FolderUp className="text-brand-500" size={20}/> Upload de Material
-                                </h3>
-                                
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-1">Título do Material</label>
-                                        <input 
-                                            value={materialTitle}
-                                            onChange={(e) => setMaterialTitle(e.target.value)}
-                                            className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
-                                            placeholder="Ex: Slides da Aula 01"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-1">Selecione a Turma</label>
-                                        <select
-                                            value={materialClass}
-                                            onChange={(e) => setMaterialClass(e.target.value)}
-                                            className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
-                                        >
-                                            <option value="">-- Selecione --</option>
-                                            {user?.classes?.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-                                            <option value="6º ANO">6º ANO</option>
-                                            <option value="7º ANO">7º ANO</option>
-                                            <option value="8º ANO">8º ANO</option>
-                                            <option value="9º ANO">9º ANO</option>
-                                            <option value="1ª SÉRIE EM">1ª SÉRIE EM</option>
-                                            <option value="2ª SÉRIE EM">2ª SÉRIE EM</option>
-                                            <option value="3ª SÉRIE EM">3ª SÉRIE EM</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-1">Arquivo</label>
-                                        <input 
-                                            type="file" 
-                                            onChange={handleMaterialFileChange}
-                                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
-                                        />
-                                    </div>
-
-                                    <Button 
-                                        onClick={handleUploadMaterial} 
-                                        isLoading={isUploadingMaterial}
-                                        className="w-full mt-4"
-                                    >
-                                        Enviar para a Turma
-                                    </Button>
-                                    
-                                    <p className="text-xs text-gray-400 mt-2 text-center">
-                                        Os arquivos serão organizados automaticamente na pasta da turma selecionada.
-                                    </p>
-                                </div>
-                            </Card>
-                        </div>
-
-                        {/* Recent Files List */}
-                        <div className="md:col-span-2">
-                             <Card>
-                                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                                    <Folder className="text-blue-500" size={20}/> Arquivos Enviados
-                                </h3>
-
-                                {materials.length === 0 ? (
-                                    <div className="text-center py-12 text-gray-500">
-                                        Nenhum material enviado ainda.
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {materials.map(mat => (
-                                            <div key={mat.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold shrink-0">
-                                                        {mat.fileType.includes('pdf') ? 'PDF' : 'DOC'}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-bold text-gray-800">{mat.title}</h4>
-                                                        <p className="text-xs text-gray-500 flex items-center gap-2">
-                                                            <span className="bg-gray-200 px-1.5 py-0.5 rounded text-gray-700 font-bold">{mat.className}</span>
-                                                            • {new Date(mat.createdAt).toLocaleDateString()}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <a 
-                                                    href={mat.fileUrl} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="text-blue-600 hover:text-blue-800 text-sm font-bold"
-                                                >
-                                                    Baixar
-                                                </a>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                             </Card>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* VIEW: NEW REQUEST (EDITOR) */}
-            {activeTab === 'create' && (
-                <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
-                    
-                    {/* TOOLBAR */}
-                    <div className="bg-white border-b border-gray-200 px-8 py-4 shadow-sm z-30 flex justify-between items-center shrink-0">
-                        <div>
-                            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                                {editingExamId ? <Edit3 size={20} className="text-blue-500"/> : <PlusCircle size={20} className="text-green-500"/>}
-                                {editingExamId ? 'Editar Solicitação' : 'Nova Solicitação'}
-                            </h2>
-                            <p className="text-xs text-gray-500 mt-1">Configure a impressão e visualize o resultado final.</p>
-                        </div>
-
-                        <div className="flex bg-gray-100 p-1 rounded-lg">
-                            <button
-                                onClick={() => setEditorSubTab('document')}
-                                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${editorSubTab === 'document' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                Documento
-                            </button>
-                            <button
-                                onClick={() => setEditorSubTab('details')}
-                                className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${editorSubTab === 'details' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                Detalhes
-                            </button>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setActiveTab('requests')}>
-                                Cancelar
-                            </Button>
-                            <Button onClick={handleSaveExam} isLoading={isSaving} className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-900/20">
-                                <Save size={16} className="mr-2"/> {editingExamId ? 'Salvar Alterações' : 'Enviar Pedido'}
-                            </Button>
-                        </div>
-                    </div>
-
-                    {/* SCROLLABLE CONTENT */}
-                    <div className="flex-1 overflow-auto p-8 custom-scrollbar">
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
-                            
-                            {/* --- LEFT COLUMN: CONTROLS --- */}
-                            <div className="lg:col-span-4 space-y-6 flex flex-col h-fit">
-                                {editorSubTab === 'document' ? (
-                                    <>
-                                        {/* CARD 1: TIPO DE MATERIAL */}
-                                        <Card>
-                                            <SectionHeader title="Tipo de Material" />
-                                            <div className="grid grid-cols-2 gap-3 mb-4">
-                                                <button 
-                                                    onClick={() => setMaterialType('exam')}
-                                                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${materialType === 'exam' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 hover:border-brand-200 text-gray-500'}`}
-                                                >
-                                                    <FileText size={24} className="mb-2"/>
-                                                    <span className="font-bold text-sm">Prova</span>
-                                                </button>
-                                                <button 
-                                                    onClick={() => setMaterialType('handout')}
-                                                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${materialType === 'handout' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 hover:border-brand-200 text-gray-500'}`}
-                                                >
-                                                    <BookOpen size={24} className="mb-2"/>
-                                                    <span className="font-bold text-sm">Apostila</span>
-                                                </button>
-                                            </div>
-                                            
-                                            <label className="block text-sm font-bold text-gray-700 mb-1">Título</label>
-                                            <input 
-                                                value={docTitle} 
-                                                onChange={(e) => setDocTitle(e.target.value)}
-                                                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-shadow"
-                                                placeholder="Ex: Avaliação de História"
-                                            />
-                                        </Card>
-
-                                        {/* CARD 2: DIAGRAMAÇÃO & UPLOAD */}
-                                        <Card>
-                                            <SectionHeader title="Diagramação & Arquivo" subtitle="O sistema adicionará o cabeçalho padrão." />
-                                            
-                                            <div className="mb-6">
-                                                <label className="block text-sm font-bold text-gray-700 mb-2">Colunas</label>
-                                                <div className="flex gap-4 p-1 bg-gray-100 rounded-lg">
-                                                    <button 
-                                                        onClick={() => setDocColumns(1)}
-                                                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${docColumns === 1 ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}
-                                                    >
-                                                        <Layout size={16}/> 1 Coluna
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => setDocColumns(2)}
-                                                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${docColumns === 2 ? 'bg-white shadow-sm text-brand-600' : 'text-gray-500'}`}
-                                                    >
-                                                        <Columns size={16}/> 2 Colunas
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-col">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <label className="block text-sm font-bold text-gray-700">Upload do Conteúdo</label>
-                                                    {uploadedFile && (
-                                                        <button 
-                                                            onClick={handleAIDiagramming}
-                                                            disabled={isDiagramming}
-                                                            className="text-xs flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full font-bold hover:bg-purple-200 transition-colors disabled:opacity-50"
-                                                        >
-                                                            {isDiagramming ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                                            {isDiagramming ? 'Processando...' : 'Diagramar com IA'}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                
-                                                <label className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-8 cursor-pointer transition-all relative overflow-hidden group ${uploadedFile ? 'border-green-500 bg-green-50/50' : 'border-gray-300 hover:border-brand-400 hover:bg-brand-50/30'}`}>
-                                                    {isDiagramming && (
-                                                        <div className="absolute inset-0 bg-white/90 z-10 flex flex-col items-center justify-center">
-                                                            <Sparkles className="text-purple-600 animate-bounce mb-2" size={32}/>
-                                                            <p className="text-sm font-bold text-purple-800 animate-pulse">A IA está diagramando...</p>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {uploadedFile ? (
-                                                        <>
-                                                            <CheckCircle className="text-green-500 mb-3" size={32}/>
-                                                            <span className="text-sm font-bold text-green-700 text-center break-all">{uploadedFile.name}</span>
-                                                            <span className="text-xs text-green-600 mt-1 bg-green-100 px-2 py-1 rounded">Clique para trocar</span>
-                                                        </>
-                                                    ) : existingFileUrl ? (
-                                                        <>
-                                                            <FileText className="text-blue-500 mb-3" size={32}/>
-                                                            <span className="text-sm font-bold text-blue-700">Arquivo Existente</span>
-                                                            <span className="text-xs text-blue-600 mt-1 bg-blue-100 px-2 py-1 rounded">Clique para substituir</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <UploadCloud className="text-gray-400 mb-3 group-hover:text-brand-500 transition-colors" size={32}/>
-                                                            <span className="text-sm font-bold text-gray-600">Clique para enviar</span>
-                                                            <span className="text-xs text-gray-400 mt-1">PDF ou Imagem (Foto)</span>
-                                                        </>
-                                                    )}
-                                                    <input type="file" className="hidden" accept=".pdf,image/*" onChange={handleFileUpload} />
-                                                </label>
-                                            </div>
-                                        </Card>
-                                    </>
-                                ) : (
-                                    /* SUBTAB: DETAILS */
-                                    <Card>
-                                        <SectionHeader title="Detalhes Adicionais" />
-                                        
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-bold text-gray-700 mb-1">Subtítulo / Instruções</label>
-                                                <textarea 
-                                                    value={docSubtitle} 
-                                                    onChange={(e) => setDocSubtitle(e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none h-32"
-                                                    placeholder="Instruções para os alunos..."
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-bold text-gray-700 mb-1">Turma (Sugestão no Cabeçalho)</label>
-                                                <select
-                                                    value={selectedClassForExam}
-                                                    onChange={(e) => setSelectedClassForExam(e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
-                                                >
-                                                    <option value="">Deixar em branco (____)</option>
-                                                    {user?.classes?.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-                                                    <option value="6º ANO">6º ANO</option>
-                                                    <option value="7º ANO">7º ANO</option>
-                                                    <option value="8º ANO">8º ANO</option>
-                                                    <option value="9º ANO">9º ANO</option>
-                                                    <option value="1ª SÉRIE EM">1ª SÉRIE EM</option>
-                                                    <option value="2ª SÉRIE EM">2ª SÉRIE EM</option>
-                                                    <option value="3ª SÉRIE EM">3ª SÉRIE EM</option>
-                                                </select>
-                                            </div>
-
-                                            {materialType === 'exam' && (
-                                                <div className="pt-4 border-t border-gray-100">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <label className="text-sm font-medium text-gray-700">Mostrar campo "Nome do Aluno"</label>
-                                                        <input type="checkbox" checked={showStudentName} onChange={e => setShowStudentName(e.target.checked)} className="rounded text-brand-600 focus:ring-brand-500"/>
-                                                    </div>
-                                                    <div className="flex items-center justify-between">
-                                                        <label className="text-sm font-medium text-gray-700">Valor da Prova</label>
-                                                        <input type="number" value={maxScore} onChange={e => setMaxScore(Number(e.target.value))} className="w-16 border rounded p-1 text-center text-sm"/>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </Card>
-                                )}
-                            </div>
-
-                            {/* --- RIGHT COLUMN: PREVIEW --- */}
-                            <div className="lg:col-span-8 flex flex-col bg-gray-200/50 rounded-xl border-2 border-dashed border-gray-300 relative overflow-hidden h-[800px] lg:h-auto">
-                                
-                                {/* ZOOM CONTROLS */}
-                                <div className="absolute top-4 right-4 z-20 bg-white rounded-lg shadow-sm p-1 flex items-center gap-1 border border-gray-200">
-                                    <button onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="p-1.5 hover:bg-gray-100 rounded text-gray-600"><ZoomOut size={16}/></button>
-                                    <span className="text-xs font-mono w-10 text-center font-bold text-gray-700">{Math.round(zoomLevel * 100)}%</span>
-                                    <button onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))} className="p-1.5 hover:bg-gray-100 rounded text-gray-600"><ZoomIn size={16}/></button>
-                                </div>
-
-                                <div className="flex-1 overflow-auto flex justify-center p-8 custom-scrollbar bg-slate-100">
-                                    
-                                    {/* A4 PAPER SIMULATION */}
-                                    <div 
-                                        className="bg-white shadow-2xl transition-transform duration-200 origin-top flex flex-col relative"
-                                        style={{ 
-                                            width: '794px', 
-                                            minHeight: '1123px', // Aproximadamente A4 a 96dpi
-                                            height: 'auto', // Permite crescimento infinito para paginação automática na impressão
-                                            transform: `scale(${zoomLevel})`,
-                                            padding: '40px',
-                                            marginBottom: '100px'
-                                        }}
-                                    >
-                                        {/* CABEÇALHO PERSONALIZADO (IMAGEM) */}
-                                        <div className="mb-6">
-                                            <img 
-                                                src={materialType === 'exam' ? HEADER_EXAM_URL : HEADER_HANDOUT_URL} 
-                                                alt="Cabeçalho da Instituição" 
-                                                className="w-full h-auto object-contain mb-4 border-b border-gray-100 pb-2"
-                                            />
-                                            
-                                            <div className="grid grid-cols-2 gap-4 text-sm font-serif pt-2 px-2 text-gray-800">
-                                                <p><span className="font-bold">Professor:</span> {user?.name}</p>
-                                                <p><span className="font-bold">Disciplina:</span> {user?.subject || 'Geral'}</p>
-                                                <p><span className="font-bold">Turma:</span> {selectedClassForExam || '_______'}</p>
-                                                <p><span className="font-bold">Data:</span> ___/___/____</p>
-                                                {materialType === 'exam' && showStudentName && (
-                                                    <p className="col-span-2 mt-2 border-t border-gray-200 pt-2">
-                                                        <span className="font-bold">Aluno(a):</span> ____________________________________________________________________
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* TÍTULO E SUBTÍTULO */}
-                                        <div className="text-center mb-8">
-                                            <h2 className="text-lg font-bold uppercase font-serif text-gray-900 border-b-2 border-gray-800 inline-block pb-1 px-4 mb-2">{docTitle}</h2>
-                                            {docSubtitle && <p className="text-sm italic font-serif text-gray-600 whitespace-pre-line">{docSubtitle}</p>}
-                                        </div>
-
-                                        {/* CONTEÚDO (DIAGRAMAÇÃO AUTOMÁTICA) */}
-                                        <div className={`flex-1 ${docColumns === 2 ? 'columns-2 gap-8 [column-rule:1px_solid_#eee]' : ''}`}>
-                                            
-                                            {aiGeneratedContent ? (
-                                                // Renderização do HTML gerado pela IA
-                                                <div 
-                                                    className="prose prose-sm max-w-none prose-p:text-justify prose-p:text-sm prose-headings:font-bold prose-headings:uppercase prose-li:text-sm text-gray-900 font-serif"
-                                                    dangerouslySetInnerHTML={{ __html: aiGeneratedContent }}
-                                                />
-                                            ) : filePreviewUrl ? (
-                                                filePreviewUrl.startsWith('blob:') && uploadedFile?.type === 'application/pdf' ? (
-                                                    // PDF Placeholder
-                                                    <div className="w-full h-[600px] bg-gray-50 border border-gray-200 rounded flex flex-col items-center justify-center text-gray-400 break-inside-avoid">
-                                                        <FileText size={48} className="mb-4 text-red-400"/>
-                                                        <p className="font-bold text-gray-600">Visualização de PDF</p>
-                                                        <p className="text-xs max-w-xs text-center mt-2">O arquivo PDF será mesclado abaixo deste cabeçalho na impressão final.</p>
-                                                    </div>
-                                                ) : (
-                                                    // Image Preview (Raw)
-                                                    <img src={filePreviewUrl} alt="Preview" className="w-full h-auto object-contain rounded mb-4 break-inside-avoid" />
-                                                )
-                                            ) : existingFileUrl ? (
-                                                <div className="w-full h-[600px] bg-gray-50 border border-gray-200 rounded flex flex-col items-center justify-center text-gray-400 break-inside-avoid">
-                                                    <FileText size={48} className="mb-4 text-blue-400"/>
-                                                    <p className="font-bold text-gray-600">Arquivo Existente Anexado</p>
-                                                    <p className="text-xs max-w-xs text-center mt-2">O conteúdo original será mantido e formatado com o novo cabeçalho.</p>
-                                                </div>
-                                            ) : (
-                                                // Empty State
-                                                <div className="w-full h-96 border-2 border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center text-gray-300 select-none break-inside-avoid bg-gray-50/50">
-                                                    <p className="text-sm font-bold text-gray-400">Área de Conteúdo</p>
-                                                    <p className="text-xs mt-1">Faça o upload e use a IA para diagramar aqui.</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    </div>
-  );
-};
+                                <h3

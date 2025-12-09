@@ -105,6 +105,22 @@ export const getClassMaterials = async (teacherId: string): Promise<ClassMateria
     }
 };
 
+// Monitora materiais de uma turma específica em tempo real
+export const listenToClassMaterials = (className: string, callback: (materials: ClassMaterial[]) => void) => {
+    // Ordena por criação decrescente (mais recentes primeiro) e limita aos últimos 20
+    const q = query(
+        collection(db, MATERIALS_COLLECTION), 
+        where("className", "==", className),
+        orderBy("createdAt", "desc"),
+        limit(20)
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+        const materials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassMaterial));
+        callback(materials);
+    });
+};
+
 // --- EXAMS ---
 
 export const getExams = async (): Promise<ExamRequest[]> => {

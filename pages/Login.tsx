@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { listenToSystemConfig } from '../services/firebaseService';
 import { SystemConfig } from '../types';
-import { Megaphone, CalendarClock, Eye, EyeOff } from 'lucide-react';
+import { Megaphone, CalendarClock, Eye, EyeOff, FolderOpen } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -52,6 +53,15 @@ export const Login: React.FC = () => {
       >
         <CalendarClock size={18} />
         <span className="hidden sm:inline">Quadro de Horários</span>
+      </a>
+
+      {/* Classroom Files Button */}
+      <a 
+        href="/#materiais"
+        className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 text-white px-4 py-2 rounded-full transition-all text-sm font-medium shadow-lg"
+      >
+        <FolderOpen size={18} />
+        <span className="hidden sm:inline">Arquivos da Turma</span>
       </a>
 
       {/* System Banner */}

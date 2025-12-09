@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import { Login } from './pages/Login';
@@ -5,6 +6,7 @@ import { TeacherDashboard } from './pages/TeacherDashboard';
 import { PrintShopDashboard } from './pages/PrintShopDashboard';
 import { PublicSchedule } from './pages/PublicSchedule';
 import { AttendanceTerminal } from './pages/AttendanceTerminal';
+import { ClassroomFiles } from './pages/ClassroomFiles';
 import { UserRole } from './types';
 import { LogOut } from 'lucide-react';
 
@@ -29,6 +31,10 @@ const AppContent: React.FC = () => {
   
   if (currentPath === '/horarios' || currentHash === '#horarios') {
       return <PublicSchedule />;
+  }
+
+  if (currentPath === '/materiais' || currentHash === '#materiais') {
+      return <ClassroomFiles />;
   }
 
   if (!isAuthenticated) {
