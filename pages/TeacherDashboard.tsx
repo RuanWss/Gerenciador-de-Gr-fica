@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
     getExams, 
@@ -102,6 +102,7 @@ export const TeacherDashboard: React.FC = () => {
   const [materialClass, setMaterialClass] = useState('');
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // State auxiliar para download
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -285,7 +286,7 @@ export const TeacherDashboard: React.FC = () => {
           const fileUrl = await uploadClassMaterialFile(materialFile, materialClass);
           
           const newMaterial: ClassMaterial = {
-              id: '',
+              id: '', // Temporário
               teacherId: user.id,
               teacherName: user.name,
               className: materialClass,
@@ -296,12 +297,20 @@ export const TeacherDashboard: React.FC = () => {
               createdAt: Date.now()
           };
 
-          await saveClassMaterial(newMaterial);
+          // Salva no banco e recebe o ID gerado
+          const docId = await saveClassMaterial(newMaterial);
+          newMaterial.id = docId;
           
           setMaterials([newMaterial, ...materials]);
           setMaterialFile(null);
           setMaterialTitle('');
           setMaterialClass('');
+          
+          // Limpa o input file visualmente para permitir novos uploads do mesmo arquivo se necessário
+          if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+          }
+
           alert("Material enviado com sucesso! O arquivo foi organizado na pasta da turma.");
       } catch (error) {
           console.error("Erro no upload", error);
@@ -502,7 +511,8 @@ export const TeacherDashboard: React.FC = () => {
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Arquivo</label>
                                         <input 
-                                            type="file" 
+                                            type="file"
+                                            ref={fileInputRef}
                                             className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
                                             onChange={handleMaterialFileChange}
                                         />

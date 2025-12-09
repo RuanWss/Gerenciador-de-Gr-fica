@@ -72,7 +72,9 @@ export const uploadClassMaterialFile = async (file: File, className: string): Pr
   try {
     // Sanitiza o nome da turma para criar uma pasta válida
     const safeClassName = className.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    const storageRef = ref(storage, `materials/${safeClassName}/${Date.now()}_${file.name}`);
+    // Sanitiza o nome do arquivo para evitar erros no Storage
+    const safeFileName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+    const storageRef = ref(storage, `materials/${safeClassName}/${Date.now()}_${safeFileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     return await getDownloadURL(snapshot.ref);
@@ -84,10 +86,11 @@ export const uploadClassMaterialFile = async (file: File, className: string): Pr
 
 // --- CLASS MATERIALS ---
 
-export const saveClassMaterial = async (material: ClassMaterial): Promise<void> => {
+export const saveClassMaterial = async (material: ClassMaterial): Promise<string> => {
     try {
         const { id, ...data } = material;
-        await addDoc(collection(db, MATERIALS_COLLECTION), data);
+        const docRef = await addDoc(collection(db, MATERIALS_COLLECTION), data);
+        return docRef.id;
     } catch (error) {
         console.error("Erro ao salvar material:", error);
         throw error;
