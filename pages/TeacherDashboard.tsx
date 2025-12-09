@@ -304,7 +304,8 @@ export const TeacherDashboard: React.FC = () => {
           setMaterials([newMaterial, ...materials]);
           setMaterialFile(null);
           setMaterialTitle('');
-          setMaterialClass('');
+          // NÃO LIMPA A TURMA para facilitar upload sequencial
+          // setMaterialClass('');
           
           // Limpa o input file visualmente para permitir novos uploads do mesmo arquivo se necessário
           if (fileInputRef.current) {

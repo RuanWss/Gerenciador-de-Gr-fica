@@ -42,12 +42,16 @@ export const ClassroomFiles: React.FC = () => {
         const unsubscribe = listenToClassMaterials(selectedClassName, (newMaterials) => {
             setIsLoading(false);
             
+            // Ordena os materiais localmente (mais recentes primeiro)
+            newMaterials.sort((a, b) => b.createdAt - a.createdAt);
+            
             // Detectar novo arquivo (se a lista aumentou ou o ID do topo mudou)
             if (!isFirstLoad.current && newMaterials.length > 0) {
                  const latestFile = newMaterials[0];
                  const currentLatestId = materials.length > 0 ? materials[0].id : null;
 
-                 if (latestFile.id !== currentLatestId) {
+                 // Apenas toca se for realmente um arquivo novo e diferente do que já está na tela
+                 if (latestFile.id !== currentLatestId && latestFile.id) {
                      // Novo arquivo detectado!
                      playNotification();
                      

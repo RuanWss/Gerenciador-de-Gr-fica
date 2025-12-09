@@ -110,12 +110,11 @@ export const getClassMaterials = async (teacherId: string): Promise<ClassMateria
 
 // Monitora materiais de uma turma específica em tempo real
 export const listenToClassMaterials = (className: string, callback: (materials: ClassMaterial[]) => void) => {
-    // Ordena por criação decrescente (mais recentes primeiro) e limita aos últimos 20
+    // REMOVIDO orderBy para evitar erro de índice composto no Firestore
+    // A ordenação será feita no cliente (frontend)
     const q = query(
         collection(db, MATERIALS_COLLECTION), 
-        where("className", "==", className),
-        orderBy("createdAt", "desc"),
-        limit(20)
+        where("className", "==", className)
     );
     
     return onSnapshot(q, (snapshot) => {
