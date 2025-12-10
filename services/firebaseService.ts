@@ -26,7 +26,7 @@ import {
 } from 'firebase/storage';
 import { initializeApp } from 'firebase/app';
 import { db, auth, storage } from '../firebaseConfig';
-import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog, ClassMaterial } from '../types';
+import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog, ClassMaterial, LessonPlan } from '../types';
 
 // Nome das coleções no Firestore
 const EXAMS_COLLECTION = 'exams';
@@ -39,6 +39,7 @@ const CONFIG_COLLECTION = 'config';
 const SCHEDULE_COLLECTION = 'schedules';
 const ATTENDANCE_COLLECTION = 'attendance_logs';
 const MATERIALS_COLLECTION = 'class_materials';
+const PLANS_COLLECTION = 'lesson_plans';
 
 // --- STORAGE ---
 
@@ -109,7 +110,11 @@ export const getClassMaterials = async (teacherId: string): Promise<ClassMateria
 };
 
 // Monitora materiais de uma turma específica em tempo real
-export const listenToClassMaterials = (className: string, callback: (materials: ClassMaterial[]) => void) => {
+export const listenToClassMaterials = (
+  className: string, 
+  onData: (materials: ClassMaterial[]) => void,
+  onError?: (error: any) => void
+) => {
     // REMOVIDO orderBy para evitar erro de índice composto no Firestore
     // A ordenação será feita no cliente (frontend)
     const q = query(
@@ -119,8 +124,39 @@ export const listenToClassMaterials = (className: string, callback: (materials: 
     
     return onSnapshot(q, (snapshot) => {
         const materials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassMaterial));
-        callback(materials);
+        onData(materials);
+    }, (error) => {
+        console.error("Firestore Listener Error:", error);
+        if (onError) onError(error);
     });
+};
+
+// --- LESSON PLANS ---
+
+export const saveLessonPlan = async (plan: LessonPlan): Promise<void> => {
+    try {
+        const { id, ...data } = plan;
+        await addDoc(collection(db, PLANS_COLLECTION), data);
+    } catch (error) {
+        console.error("Erro ao salvar planejamento:", error);
+        throw error;
+    }
+};
+
+export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
+    try {
+        let q = query(collection(db, PLANS_COLLECTION));
+        
+        if (teacherId) {
+            q = query(collection(db, PLANS_COLLECTION), where("teacherId", "==", teacherId));
+        }
+
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LessonPlan));
+    } catch (error) {
+        console.error("Erro ao buscar planejamentos:", error);
+        return [];
+    }
 };
 
 // --- EXAMS ---

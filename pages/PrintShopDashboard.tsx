@@ -17,9 +17,10 @@ import {
     clearSystemAnnouncement,
     getAttendanceLogs,
     getAllAttendanceLogs,
-    uploadStudentPhoto
+    uploadStudentPhoto,
+    getLessonPlans
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, TimeSlot, AttendanceLog } from '../types';
+import { ExamRequest, ExamStatus, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, TimeSlot, AttendanceLog, LessonPlan } from '../types';
 import { Button } from '../components/Button';
 import { 
   Printer, 
@@ -48,12 +49,15 @@ import {
   X, 
   Loader2, 
   AlertCircle, 
-  Pencil
+  Pencil,
+  BookOpenCheck,
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
-type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance';
+type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance' | 'plans';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -166,6 +170,10 @@ export const PrintShopDashboard: React.FC = () => {
   const [selectedReportClass, setSelectedReportClass] = useState('');
   const [selectedReportStudent, setSelectedReportStudent] = useState('');
 
+  // Plans State
+  const [allPlans, setAllPlans] = useState<LessonPlan[]>([]);
+  const [selectedTeacherForPlans, setSelectedTeacherForPlans] = useState<string | null>(null);
+
   // Initial Load
   useEffect(() => {
     refreshData();
@@ -184,6 +192,9 @@ export const PrintShopDashboard: React.FC = () => {
       }
       if (activeTab === 'students' && !modelsLoaded) {
           loadFaceApiModels();
+      }
+      if (activeTab === 'plans') {
+          loadPlans();
       }
   }, [activeTab]);
 
@@ -284,6 +295,11 @@ export const PrintShopDashboard: React.FC = () => {
       setAttendanceLogs(logs);
       const all = await getAllAttendanceLogs();
       setAllLogs(all);
+  };
+  
+  const loadPlans = async () => {
+      const plans = await getLessonPlans();
+      setAllPlans(plans);
   };
 
   const handleUpdateConfig = async (e: React.FormEvent) => {
@@ -534,6 +550,26 @@ export const PrintShopDashboard: React.FC = () => {
     return true;
   });
 
+  // Group plans by Teacher
+  const plansByTeacher = allPlans.reduce((acc, plan) => {
+      if (!acc[plan.teacherName]) {
+          acc[plan.teacherName] = [];
+      }
+      acc[plan.teacherName].push(plan);
+      return acc;
+  }, {} as Record<string, LessonPlan[]>);
+
+  const selectedTeacherPlansList = selectedTeacherForPlans ? plansByTeacher[selectedTeacherForPlans] || [] : [];
+  
+  // Group selected teacher's plans by Class
+  const plansByClass = selectedTeacherPlansList.reduce((acc, plan) => {
+      if (!acc[plan.className]) {
+          acc[plan.className] = [];
+      }
+      acc[plan.className].push(plan);
+      return acc;
+  }, {} as Record<string, LessonPlan[]>);
+
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden">
         {/* --- SIDEBAR --- */}
@@ -547,6 +583,7 @@ export const PrintShopDashboard: React.FC = () => {
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Gestão Escolar</p>
                 <SidebarItem id="schedule" label="Quadro de Horários" icon={CalendarClock} />
                 <SidebarItem id="teachers" label="Professores" icon={UserPlus} />
+                <SidebarItem id="plans" label="Planejamentos" icon={BookOpenCheck} />
                 <SidebarItem id="classes" label="Turmas" icon={GraduationCap} />
                 <SidebarItem id="students" label="Alunos" icon={Users} />
                 <SidebarItem id="attendance" label="Frequência" icon={ScanBarcode} />
@@ -870,6 +907,126 @@ export const PrintShopDashboard: React.FC = () => {
                             
                             <Button type="submit" isLoading={isSavingTeacher} className="w-full h-12 text-lg">Cadastrar Professor</Button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* PLANS (Admin View) */}
+            {activeTab === 'plans' && (
+                <div className="max-w-6xl mx-auto">
+                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                        <BookOpenCheck className="text-brand-500" /> Planejamentos Pedagógicos
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {Object.keys(plansByTeacher).length > 0 ? (
+                            Object.keys(plansByTeacher).map(teacherName => (
+                                <button 
+                                    key={teacherName}
+                                    onClick={() => setSelectedTeacherForPlans(teacherName)}
+                                    className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 flex items-center justify-between hover:scale-105 transition-transform group"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-12 w-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold">
+                                            {teacherName.charAt(0)}
+                                        </div>
+                                        <div className="text-left">
+                                            <h3 className="font-bold text-gray-800">{teacherName}</h3>
+                                            <p className="text-xs text-gray-500">{plansByTeacher[teacherName].length} planejamentos</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="text-gray-300 group-hover:text-blue-500" />
+                                </button>
+                            ))
+                        ) : (
+                            <div className="col-span-full text-center py-20 text-gray-500 bg-white/5 rounded-2xl border border-white/5">
+                                <p>Nenhum planejamento enviado ainda.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* PLANS MODAL */}
+            {selectedTeacherForPlans && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                    <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+                            <div>
+                                <h3 className="text-2xl font-bold text-gray-800">{selectedTeacherForPlans}</h3>
+                                <p className="text-sm text-gray-500">Planejamentos enviados</p>
+                            </div>
+                            <button onClick={() => setSelectedTeacherForPlans(null)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                                <X size={24} className="text-gray-600" />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                            {Object.keys(plansByClass).map(className => (
+                                <div key={className} className="mb-8 last:mb-0">
+                                    <h4 className="font-bold text-brand-600 uppercase tracking-wide mb-4 border-b border-gray-200 pb-2 flex items-center gap-2">
+                                        <GraduationCap size={18} /> {className}
+                                    </h4>
+                                    
+                                    <div className="space-y-4">
+                                        {plansByClass[className].map(plan => (
+                                            <div key={plan.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${plan.type === 'daily' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                        {plan.type === 'daily' ? 'Planejamento Diário' : 'Planejamento Semestral'}
+                                                    </span>
+                                                    <span className="text-xs text-gray-400 font-mono">Enviado em: {new Date(plan.createdAt).toLocaleDateString()}</span>
+                                                </div>
+
+                                                {plan.type === 'daily' ? (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                                                        <div className="col-span-full">
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Data & Tema</p>
+                                                            <p className="font-semibold text-gray-800">{plan.date} - {plan.topic}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Conteúdo</p>
+                                                            <p className="text-gray-700 whitespace-pre-wrap mt-1">{plan.content}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Metodologia</p>
+                                                            <p className="text-gray-700 whitespace-pre-wrap mt-1">{plan.methodology}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Avaliação</p>
+                                                            <p className="text-gray-700 whitespace-pre-wrap mt-1">{plan.evaluation}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Tarefa de Casa</p>
+                                                            <p className="text-gray-700 whitespace-pre-wrap mt-1">{plan.homework || 'Nenhuma'}</p>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-4 text-sm">
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Período</p>
+                                                            <p className="font-semibold text-gray-800">{plan.semester}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Objetivos Gerais</p>
+                                                            <p className="text-gray-700 whitespace-pre-wrap mt-1">{plan.generalObjectives}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Cronograma</p>
+                                                            <p className="text-gray-700 whitespace-pre-wrap mt-1 bg-gray-50 p-3 rounded border border-gray-100 font-mono text-xs">{plan.timeline}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-400 uppercase">Bibliografia</p>
+                                                            <p className="text-gray-700 whitespace-pre-wrap mt-1">{plan.bibliography}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}

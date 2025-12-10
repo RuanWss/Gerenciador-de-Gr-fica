@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToClassMaterials } from '../services/firebaseService';
 import { ClassMaterial } from '../types';
-import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink } from 'lucide-react';
+import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle } from 'lucide-react';
 
 const CLASSES_LIST = [
     { id: '6efaf', name: '6º ANO EFAF' },
@@ -21,6 +21,7 @@ export const ClassroomFiles: React.FC = () => {
     const [materials, setMaterials] = useState<ClassMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [autoOpen, setAutoOpen] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     
     // Controlar primeira carga para não tocar som em arquivos antigos
     const isFirstLoad = useRef(true);
@@ -36,35 +37,49 @@ export const ClassroomFiles: React.FC = () => {
         if (!selectedClassName) return;
 
         setIsLoading(true);
+        setError(null);
         // Salvar seleção
         localStorage.setItem('classroom_selected_class', selectedClassName);
 
-        const unsubscribe = listenToClassMaterials(selectedClassName, (newMaterials) => {
-            setIsLoading(false);
-            
-            // Ordena os materiais localmente (mais recentes primeiro)
-            newMaterials.sort((a, b) => b.createdAt - a.createdAt);
-            
-            // Detectar novo arquivo (se a lista aumentou ou o ID do topo mudou)
-            if (!isFirstLoad.current && newMaterials.length > 0) {
-                 const latestFile = newMaterials[0];
-                 const currentLatestId = materials.length > 0 ? materials[0].id : null;
+        const unsubscribe = listenToClassMaterials(
+            selectedClassName, 
+            (newMaterials) => {
+                setIsLoading(false);
+                setError(null);
+                
+                // Ordena os materiais localmente (mais recentes primeiro)
+                newMaterials.sort((a, b) => b.createdAt - a.createdAt);
+                
+                // Detectar novo arquivo (se a lista aumentou ou o ID do topo mudou)
+                if (!isFirstLoad.current && newMaterials.length > 0) {
+                     const latestFile = newMaterials[0];
+                     const currentLatestId = materials.length > 0 ? materials[0].id : null;
 
-                 // Apenas toca se for realmente um arquivo novo e diferente do que já está na tela
-                 if (latestFile.id !== currentLatestId && latestFile.id) {
-                     // Novo arquivo detectado!
-                     playNotification();
-                     
-                     if (autoOpen) {
-                         // Tenta abrir em nova aba (pode ser bloqueado pelo browser)
-                         window.open(latestFile.fileUrl, '_blank');
+                     // Apenas toca se for realmente um arquivo novo e diferente do que já está na tela
+                     if (latestFile.id !== currentLatestId && latestFile.id) {
+                         // Novo arquivo detectado!
+                         playNotification();
+                         
+                         if (autoOpen) {
+                             // Tenta abrir em nova aba (pode ser bloqueado pelo browser)
+                             window.open(latestFile.fileUrl, '_blank');
+                         }
                      }
-                 }
-            }
+                }
 
-            setMaterials(newMaterials);
-            isFirstLoad.current = false;
-        });
+                setMaterials(newMaterials);
+                isFirstLoad.current = false;
+            },
+            (err) => {
+                console.error("Erro no listener:", err);
+                setIsLoading(false);
+                if (err.code === 'permission-denied') {
+                    setError("Acesso Negado: Regras de Segurança do Firebase bloqueando leitura. Configure as permissões no Console.");
+                } else {
+                    setError("Erro de conexão ao buscar arquivos.");
+                }
+            }
+        );
 
         return () => unsubscribe();
     }, [selectedClassName]);
@@ -79,6 +94,7 @@ export const ClassroomFiles: React.FC = () => {
     const handleSelectClass = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setSelectedClassName(e.target.value);
         setMaterials([]);
+        setError(null);
         isFirstLoad.current = true;
     };
 
@@ -136,6 +152,14 @@ export const ClassroomFiles: React.FC = () => {
                 </div>
             ) : (
                 <div className="max-w-7xl mx-auto">
+                     {error && (
+                         <div className="bg-red-900/20 border border-red-500/50 rounded-2xl p-6 text-center mb-8 flex flex-col items-center">
+                             <AlertTriangle size={48} className="text-red-500 mb-2"/>
+                             <h3 className="text-xl font-bold text-white">Falha de Conexão</h3>
+                             <p className="text-red-300 mt-2">{error}</p>
+                         </div>
+                     )}
+
                      {isLoading && (
                          <div className="text-center py-10 text-brand-500 flex items-center justify-center gap-2">
                              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce"></div>
@@ -145,7 +169,7 @@ export const ClassroomFiles: React.FC = () => {
                          </div>
                      )}
 
-                     {!isLoading && materials.length === 0 && (
+                     {!isLoading && !error && materials.length === 0 && (
                          <div className="text-center py-20 bg-gray-900/50 rounded-3xl border border-gray-800 border-dashed">
                              <p className="text-gray-500 font-medium">Nenhum arquivo enviado para a turma <span className="text-white font-bold">{selectedClassName}</span> recentemente.</p>
                          </div>

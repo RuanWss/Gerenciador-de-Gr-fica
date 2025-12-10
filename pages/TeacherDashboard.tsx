@@ -8,10 +8,12 @@ import {
     uploadExamFile, 
     uploadClassMaterialFile, 
     saveClassMaterial,
-    getClassMaterials
+    getClassMaterials,
+    saveLessonPlan,
+    getLessonPlans
 } from '../services/firebaseService';
 import { digitizeMaterial } from '../services/geminiService';
-import { ExamRequest, ExamStatus, MaterialType, ClassMaterial } from '../types';
+import { ExamRequest, ExamStatus, MaterialType, ClassMaterial, LessonPlan, LessonPlanType } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, 
@@ -38,7 +40,10 @@ import {
   FolderUp,
   Folder,
   Download,
-  FolderOpen
+  FolderOpen,
+  BookOpenCheck,
+  Calendar,
+  Layers
 } from 'lucide-react';
 
 // --- CONSTANTES DE IMAGEM ---
@@ -64,7 +69,7 @@ export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials' | 'plans'>('requests');
   const [editorSubTab, setEditorSubTab] = useState<'document' | 'details'>('document');
 
   // Exam Data List
@@ -107,6 +112,28 @@ export const TeacherDashboard: React.FC = () => {
   // State auxiliar para download
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  // PLANNING STATE
+  const [planType, setPlanType] = useState<LessonPlanType>('daily');
+  const [planClass, setPlanClass] = useState('');
+  // Daily
+  const [planDate, setPlanDate] = useState('');
+  const [planTopic, setPlanTopic] = useState('');
+  const [planContent, setPlanContent] = useState('');
+  const [planMethodology, setPlanMethodology] = useState('');
+  const [planResources, setPlanResources] = useState('');
+  const [planEvaluation, setPlanEvaluation] = useState('');
+  const [planHomework, setPlanHomework] = useState('');
+  // Semester
+  const [planSemester, setPlanSemester] = useState<'1º Semestre' | '2º Semestre'>('1º Semestre');
+  const [planGenObj, setPlanGenObj] = useState('');
+  const [planSpecObj, setPlanSpecObj] = useState('');
+  const [planSkills, setPlanSkills] = useState('');
+  const [planTimeline, setPlanTimeline] = useState('');
+  const [planBibliography, setPlanBibliography] = useState('');
+  
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
+  const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
+
   // Fetch Data
   useEffect(() => {
     const fetchData = async () => {
@@ -118,6 +145,10 @@ export const TeacherDashboard: React.FC = () => {
             // Fetch materials
             const userMaterials = await getClassMaterials(user.id);
             setMaterials(userMaterials.sort((a,b) => b.createdAt - a.createdAt));
+
+            // Fetch Plans
+            const userPlans = await getLessonPlans(user.id);
+            setLessonPlans(userPlans.sort((a,b) => b.createdAt - a.createdAt));
 
             setIsLoadingExams(false);
         }
@@ -313,11 +344,69 @@ export const TeacherDashboard: React.FC = () => {
           }
 
           alert("Material enviado com sucesso! O arquivo foi organizado na pasta da turma.");
-      } catch (error) {
+      } catch (error: any) {
           console.error("Erro no upload", error);
-          alert("Falha ao enviar material.");
+          if (error.code === 'storage/unauthorized') {
+             alert("Erro de Permissão: Você não tem permissão para enviar arquivos. Verifique as regras do Storage no Firebase Console.");
+          } else if (error.code === 'permission-denied') {
+             alert("Erro de Permissão: Falha ao salvar registro no banco de dados. Verifique as regras do Firestore.");
+          } else {
+             alert("Falha ao enviar material: " + (error.message || "Erro desconhecido"));
+          }
       } finally {
           setIsUploadingMaterial(false);
+      }
+  };
+
+  const handleSavePlan = async () => {
+      if (!user) return;
+      if (!planClass) return alert("Selecione a turma.");
+
+      setIsSavingPlan(true);
+      try {
+          const newPlan: LessonPlan = {
+              id: '',
+              teacherId: user.id,
+              teacherName: user.name,
+              type: planType,
+              className: planClass,
+              subject: user.subject || 'Geral',
+              createdAt: Date.now(),
+              // Conditional Fields
+              ...(planType === 'daily' ? {
+                  date: planDate,
+                  topic: planTopic,
+                  content: planContent,
+                  methodology: planMethodology,
+                  resources: planResources,
+                  evaluation: planEvaluation,
+                  homework: planHomework
+              } : {
+                  semester: planSemester,
+                  generalObjectives: planGenObj,
+                  specificObjectives: planSpecObj,
+                  skills: planSkills,
+                  timeline: planTimeline,
+                  bibliography: planBibliography
+              })
+          };
+
+          await saveLessonPlan(newPlan);
+          
+          // Reset fields
+          setPlanTopic(''); setPlanContent(''); setPlanMethodology(''); setPlanResources(''); setPlanEvaluation(''); setPlanHomework('');
+          setPlanGenObj(''); setPlanSpecObj(''); setPlanSkills(''); setPlanTimeline(''); setPlanBibliography('');
+          
+          alert("Planejamento salvo com sucesso!");
+          
+          // Update local list
+          setLessonPlans([newPlan, ...lessonPlans]);
+
+      } catch (error) {
+          console.error("Erro ao salvar planejamento", error);
+          alert("Erro ao salvar planejamento.");
+      } finally {
+          setIsSavingPlan(false);
       }
   };
 
@@ -349,7 +438,7 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
-  const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create' | 'materials', label: string, icon: any }) => (
+  const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create' | 'materials' | 'plans', label: string, icon: any }) => (
     <button
       onClick={id === 'create' ? handleNewExam : () => setActiveTab(id)}
       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
@@ -374,6 +463,7 @@ export const TeacherDashboard: React.FC = () => {
                 <SidebarItem id="requests" label="Meus Pedidos" icon={List} />
                 <SidebarItem id="create" label="Nova Solicitação" icon={PlusCircle} />
                 <SidebarItem id="materials" label="Materiais de Aula" icon={FolderUp} />
+                <SidebarItem id="plans" label="Planejamento" icon={BookOpenCheck} />
             </div>
             
             <div className="mt-auto bg-blue-50 p-4 rounded-xl border border-blue-100">
@@ -573,6 +663,175 @@ export const TeacherDashboard: React.FC = () => {
                                      ))
                                  )}
                              </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* VIEW: LESSON PLANS */}
+            {activeTab === 'plans' && (
+                <div className="flex-1 overflow-y-auto p-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <header className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800">Planejamento de Aula</h1>
+                        <p className="text-gray-500">Organize suas aulas e envie o planejamento para a coordenação.</p>
+                    </header>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* FORMULARIO */}
+                        <div className="lg:col-span-2">
+                            <Card>
+                                <div className="flex gap-4 mb-6 border-b border-gray-100 pb-4">
+                                    <button 
+                                        onClick={() => setPlanType('daily')}
+                                        className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 ${planType === 'daily' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                    >
+                                        <Calendar size={18}/> Planejamento Diário
+                                    </button>
+                                    <button 
+                                        onClick={() => setPlanType('semester')}
+                                        className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 ${planType === 'semester' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                                    >
+                                        <Layers size={18}/> Planejamento Semestral
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Turma</label>
+                                            <select 
+                                                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                                value={planClass}
+                                                onChange={e => setPlanClass(e.target.value)}
+                                            >
+                                                <option value="">Selecione...</option>
+                                                {["6º ANO EFAF", "7º ANO EFAF", "8º ANO EFAF", "9º ANO EFAF", "1ª SÉRIE EM", "2ª SÉRIE EM", "3ª SÉRIE EM"].map(c => (
+                                                    <option key={c} value={c}>{c}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {planType === 'daily' ? (
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data da Aula</label>
+                                                <input 
+                                                    type="date"
+                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                                    value={planDate}
+                                                    onChange={e => setPlanDate(e.target.value)}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Semestre</label>
+                                                <select 
+                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                                    value={planSemester}
+                                                    onChange={e => setPlanSemester(e.target.value as any)}
+                                                >
+                                                    <option value="1º Semestre">1º Semestre</option>
+                                                    <option value="2º Semestre">2º Semestre</option>
+                                                </select>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {planType === 'daily' ? (
+                                        <>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tema da Aula</label>
+                                                <input type="text" className="w-full border border-gray-300 rounded-lg p-2.5" value={planTopic} onChange={e => setPlanTopic(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Conteúdo Programático</label>
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planContent} onChange={e => setPlanContent(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Metodologia / Estratégias</label>
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planMethodology} onChange={e => setPlanMethodology(e.target.value)} />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Recursos Didáticos</label>
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planResources} onChange={e => setPlanResources(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Avaliação</label>
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planEvaluation} onChange={e => setPlanEvaluation(e.target.value)} />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tarefa de Casa</label>
+                                                <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planHomework} onChange={e => setPlanHomework(e.target.value)} />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Objetivos Gerais</label>
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planGenObj} onChange={e => setPlanGenObj(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Objetivos Específicos</label>
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planSpecObj} onChange={e => setPlanSpecObj(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Habilidades (BNCC)</label>
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planSkills} onChange={e => setPlanSkills(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cronograma de Conteúdos</label>
+                                                <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-2.5" value={planTimeline} onChange={e => setPlanTimeline(e.target.value)} placeholder="Ex: Semana 1: Introdução; Semana 2: ..." />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bibliografia / Referências</label>
+                                                <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planBibliography} onChange={e => setPlanBibliography(e.target.value)} />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <div className="pt-4">
+                                        <Button 
+                                            onClick={handleSavePlan}
+                                            isLoading={isSavingPlan}
+                                            className="w-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg"
+                                        >
+                                            <Save size={18} className="mr-2"/> Salvar Planejamento
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Card>
+                        </div>
+                        
+                        {/* HISTORICO */}
+                        <div className="lg:col-span-1">
+                            <h3 className="font-bold text-gray-700 mb-4">Meus Planejamentos</h3>
+                            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                                {lessonPlans.map(plan => (
+                                    <div key={plan.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${plan.type === 'daily' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                                {plan.type === 'daily' ? 'Diário' : 'Semestral'}
+                                            </span>
+                                            <span className="text-xs text-gray-400">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                        <h4 className="font-bold text-gray-800 text-sm mb-1">{plan.className}</h4>
+                                        <p className="text-xs text-gray-600 mb-2">{plan.subject}</p>
+                                        {plan.type === 'daily' ? (
+                                            <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                                                <p><strong>Data:</strong> {plan.date}</p>
+                                                <p className="truncate"><strong>Tema:</strong> {plan.topic}</p>
+                                            </div>
+                                        ) : (
+                                            <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                                                <p><strong>Período:</strong> {plan.semester}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                                {lessonPlans.length === 0 && (
+                                    <p className="text-gray-400 text-center text-sm py-4">Nenhum planejamento salvo.</p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

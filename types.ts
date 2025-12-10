@@ -138,3 +138,32 @@ export interface AttendanceLog {
   type: 'entry' | 'exit';
   dateString: string;
 }
+
+export type LessonPlanType = 'daily' | 'semester';
+
+export interface LessonPlan {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  type: LessonPlanType;
+  className: string;
+  subject: string;
+  createdAt: number;
+  
+  // Campos do Planejamento Diário
+  date?: string; // Data da aula
+  topic?: string; // Tema
+  content?: string; // Conteúdo Programático
+  methodology?: string; // Metodologia / Estratégias
+  resources?: string; // Recursos Didáticos
+  evaluation?: string; // Avaliação
+  homework?: string; // Tarefa de Casa
+
+  // Campos do Planejamento Semestral
+  semester?: '1º Semestre' | '2º Semestre';
+  generalObjectives?: string;
+  specificObjectives?: string;
+  skills?: string; // Habilidades BNCC
+  timeline?: string; // Cronograma
+  bibliography?: string; // Referências
+}
