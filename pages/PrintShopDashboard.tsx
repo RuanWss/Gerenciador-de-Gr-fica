@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
     getExams, 
     updateExamStatus, 
-    createTeacherUser, 
+    createTeamMember, 
     saveStudent, 
     updateStudent,
     deleteStudent,
@@ -52,12 +52,13 @@ import {
   Pencil,
   BookOpenCheck,
   ChevronRight,
-  FileText
+  FileText,
+  Briefcase
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
-type Tab = 'overview' | 'printing' | 'teachers' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance' | 'plans';
+type Tab = 'overview' | 'printing' | 'team' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance' | 'plans';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -109,13 +110,17 @@ export const PrintShopDashboard: React.FC = () => {
 
   // --- FORMS STATES ---
   
-  // Teacher
+  // Team / Teacher
   const [isSavingTeacher, setIsSavingTeacher] = useState(false);
   const [newTeacherName, setNewTeacherName] = useState('');
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newTeacherPassword, setNewTeacherPassword] = useState('');
   const [newTeacherSubject, setNewTeacherSubject] = useState('');
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  
+  // Role Selection
+  const [isRoleTeacher, setIsRoleTeacher] = useState(false);
+  const [isRoleAdmin, setIsRoleAdmin] = useState(false);
   
   // Classes (Fixed Lists)
   const [classList, setClassList] = useState<SchoolClass[]>([]);
@@ -352,27 +357,41 @@ export const PrintShopDashboard: React.FC = () => {
     }
   };
 
-  const handleAddTeacher = async (e: React.FormEvent) => {
+  const handleAddTeamMember = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isRoleTeacher && !isRoleAdmin) {
+        alert("Selecione pelo menos uma função (Professor ou Administrativo)");
+        return;
+    }
+
     setIsSavingTeacher(true);
+    
+    const roles: UserRole[] = [];
+    if (isRoleTeacher) roles.push(UserRole.TEACHER);
+    if (isRoleAdmin) roles.push(UserRole.PRINTSHOP);
+
     const newUser = {
         id: '', 
         name: newTeacherName,
         email: newTeacherEmail,
-        role: UserRole.TEACHER,
-        subject: newTeacherSubject,
-        classes: selectedClasses
+        role: roles[0], // Define a primeira como padrão
+        roles: roles,   // Array de funções permitidas
+        subject: isRoleTeacher ? newTeacherSubject : undefined,
+        classes: isRoleTeacher ? selectedClasses : []
     };
+
     try {
-        await createTeacherUser(newUser, newTeacherPassword);
-        alert('Professor cadastrado com sucesso!');
+        await createTeamMember(newUser, newTeacherPassword);
+        alert('Membro da equipe cadastrado com sucesso!');
         setNewTeacherName('');
         setNewTeacherEmail('');
         setNewTeacherPassword('');
         setNewTeacherSubject('');
         setSelectedClasses([]);
+        setIsRoleTeacher(false);
+        setIsRoleAdmin(false);
     } catch (error: any) {
-        alert('Erro ao criar professor: ' + error.message);
+        alert('Erro ao criar membro: ' + error.message);
     } finally {
         setIsSavingTeacher(false);
     }
@@ -582,7 +601,7 @@ export const PrintShopDashboard: React.FC = () => {
             <div className="px-2">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Gestão Escolar</p>
                 <SidebarItem id="schedule" label="Quadro de Horários" icon={CalendarClock} />
-                <SidebarItem id="teachers" label="Professores" icon={UserPlus} />
+                <SidebarItem id="team" label="Equipe" icon={Briefcase} />
                 <SidebarItem id="plans" label="Planejamentos" icon={BookOpenCheck} />
                 <SidebarItem id="classes" label="Turmas" icon={GraduationCap} />
                 <SidebarItem id="students" label="Alunos" icon={Users} />
@@ -863,12 +882,12 @@ export const PrintShopDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* TEACHERS */}
-            {activeTab === 'teachers' && (
+            {/* TEAM REGISTRATION */}
+            {activeTab === 'team' && (
                 <div className="max-w-4xl mx-auto">
-                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><UserPlus className="text-brand-500" /> Cadastro de Professores</h2>
+                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><Briefcase className="text-brand-500" /> Cadastro de Equipe</h2>
                     <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8">
-                        <form onSubmit={handleAddTeacher} className="space-y-6">
+                        <form onSubmit={handleAddTeamMember} className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
@@ -876,36 +895,66 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-gray-700 mb-1">E-mail de Acesso</label>
-                                    <input type="email" className="w-full border border-gray-300 rounded-lg p-3" required value={newTeacherEmail} onChange={e => setNewTeacherEmail(e.target.value)} placeholder="professor@escola.com"/>
+                                    <input type="email" className="w-full border border-gray-300 rounded-lg p-3" required value={newTeacherEmail} onChange={e => setNewTeacherEmail(e.target.value)} placeholder="email@escola.com"/>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-bold text-gray-700 mb-1">Senha Provisória</label>
                                     <input type="text" className="w-full border border-gray-300 rounded-lg p-3" required value={newTeacherPassword} onChange={e => setNewTeacherPassword(e.target.value)} placeholder="******"/>
                                 </div>
+                                
+                                {/* ROLE SELECTION */}
                                 <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-1">Disciplina Principal</label>
-                                    <input type="text" className="w-full border border-gray-300 rounded-lg p-3" required value={newTeacherSubject} onChange={e => setNewTeacherSubject(e.target.value)} placeholder="Ex: Matemática"/>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">Função / Permissões</label>
+                                    <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isRoleTeacher} 
+                                                onChange={e => setIsRoleTeacher(e.target.checked)} 
+                                                className="rounded text-brand-600 focus:ring-brand-500 w-5 h-5"
+                                            />
+                                            <span className="text-sm text-gray-800">Professor (Acesso ao Diário e Impressões)</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isRoleAdmin} 
+                                                onChange={e => setIsRoleAdmin(e.target.checked)} 
+                                                className="rounded text-brand-600 focus:ring-brand-500 w-5 h-5"
+                                            />
+                                            <span className="text-sm text-gray-800">Administrativo (Acesso à Gestão Escolar)</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-3">Turmas Vinculadas</label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                    {classList.map(cls => (
-                                        <label key={cls.id} className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-white rounded transition-colors">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={selectedClasses.includes(cls.name)}
-                                                onChange={() => toggleClass(cls.name)}
-                                                className="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"
-                                            />
-                                            <span className="text-sm text-gray-700 font-medium">{cls.name}</span>
-                                        </label>
-                                    ))}
+                            {/* TEACHER SPECIFIC FIELDS */}
+                            {isRoleTeacher && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-6 pt-4 border-t border-gray-100">
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Disciplina Principal</label>
+                                        <input type="text" className="w-full border border-gray-300 rounded-lg p-3" required={isRoleTeacher} value={newTeacherSubject} onChange={e => setNewTeacherSubject(e.target.value)} placeholder="Ex: Matemática"/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-3">Turmas Vinculadas</label>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                            {classList.map(cls => (
+                                                <label key={cls.id} className="flex items-center space-x-2 cursor-pointer p-2 hover:bg-white rounded transition-colors">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={selectedClasses.includes(cls.name)}
+                                                        onChange={() => toggleClass(cls.name)}
+                                                        className="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"
+                                                    />
+                                                    <span className="text-sm text-gray-700 font-medium">{cls.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                             
-                            <Button type="submit" isLoading={isSavingTeacher} className="w-full h-12 text-lg">Cadastrar Professor</Button>
+                            <Button type="submit" isLoading={isSavingTeacher} className="w-full h-12 text-lg">Cadastrar Membro</Button>
                         </form>
                     </div>
                 </div>

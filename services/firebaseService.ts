@@ -24,7 +24,6 @@ import {
   uploadBytes, 
   getDownloadURL 
 } from 'firebase/storage';
-import { initializeApp } from 'firebase/app';
 import { db, auth, storage } from '../firebaseConfig';
 import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog, ClassMaterial, LessonPlan } from '../types';
 
@@ -40,6 +39,17 @@ const SCHEDULE_COLLECTION = 'schedules';
 const ATTENDANCE_COLLECTION = 'attendance_logs';
 const MATERIALS_COLLECTION = 'class_materials';
 const PLANS_COLLECTION = 'lesson_plans';
+
+// --- HELPER: Clean Data ---
+const cleanData = (data: any) => {
+    const cleaned = { ...data };
+    Object.keys(cleaned).forEach(key => {
+        if (cleaned[key] === undefined) {
+            delete cleaned[key];
+        }
+    });
+    return cleaned;
+};
 
 // --- STORAGE ---
 
@@ -90,7 +100,8 @@ export const uploadClassMaterialFile = async (file: File, className: string): Pr
 export const saveClassMaterial = async (material: ClassMaterial): Promise<string> => {
     try {
         const { id, ...data } = material;
-        const docRef = await addDoc(collection(db, MATERIALS_COLLECTION), data);
+        const cleanedData = cleanData(data);
+        const docRef = await addDoc(collection(db, MATERIALS_COLLECTION), cleanedData);
         return docRef.id;
     } catch (error) {
         console.error("Erro ao salvar material:", error);
@@ -100,6 +111,7 @@ export const saveClassMaterial = async (material: ClassMaterial): Promise<string
 
 export const getClassMaterials = async (teacherId: string): Promise<ClassMaterial[]> => {
     try {
+        // Removido orderBy para evitar erro de índice composto
         const q = query(collection(db, MATERIALS_COLLECTION), where("teacherId", "==", teacherId));
         const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassMaterial));
@@ -112,23 +124,303 @@ export const getClassMaterials = async (teacherId: string): Promise<ClassMateria
 // Monitora materiais de uma turma específica em tempo real
 export const listenToClassMaterials = (
   className: string, 
-  onData: (materials: ClassMaterial[]) => void,
+  onUpdate: (materials: ClassMaterial[]) => void,
   onError?: (error: any) => void
 ) => {
-    // REMOVIDO orderBy para evitar erro de índice composto no Firestore
-    // A ordenação será feita no cliente (frontend)
-    const q = query(
-        collection(db, MATERIALS_COLLECTION), 
-        where("className", "==", className)
-    );
+    // Removido orderBy para evitar erro de índice composto
+    const q = query(collection(db, MATERIALS_COLLECTION), where("className", "==", className));
     
     return onSnapshot(q, (snapshot) => {
-        const materials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassMaterial));
-        onData(materials);
+        const materials = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as ClassMaterial));
+        onUpdate(materials);
     }, (error) => {
-        console.error("Firestore Listener Error:", error);
+        console.error("Erro no listener de materiais:", error);
         if (onError) onError(error);
     });
+};
+
+// --- AUTH & USERS ---
+
+export const getUserProfile = async (userId: string): Promise<User | null> => {
+  try {
+    const docRef = doc(db, USERS_COLLECTION, userId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data() as User;
+      // Compatibilidade com usuários antigos que não têm 'roles'
+      if (!data.roles && data.role) {
+          data.roles = [data.role];
+      }
+      return data;
+    }
+    return null;
+  } catch (error) {
+    console.error("Erro ao buscar perfil:", error);
+    return null;
+  }
+};
+
+export const createTeamMember = async (userData: User, password: string): Promise<void> => {
+    // 1. Criar Auth
+    const userCredential = await createUserWithEmailAndPassword(auth, userData.email, password);
+    const uid = userCredential.user.uid;
+
+    // 2. Atualizar Profile
+    await updateProfile(userCredential.user, { displayName: userData.name });
+
+    // 3. Salvar no Firestore
+    const { id, ...dataToSave } = userData;
+    const cleanedData = cleanData(dataToSave);
+    
+    await setDoc(doc(db, USERS_COLLECTION, uid), {
+        ...cleanedData,
+        id: uid,
+        createdAt: Date.now()
+    });
+};
+
+// --- EXAMS ---
+
+export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
+  try {
+    let q;
+    if (teacherId) {
+        // Se for professor, busca apenas as dele
+        q = query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId));
+    } else {
+        // Se for admin, busca todas
+        q = collection(db, EXAMS_COLLECTION);
+    }
+    
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamRequest));
+  } catch (error) {
+    console.error("Erro ao buscar provas:", error);
+    return [];
+  }
+};
+
+export const saveExam = async (exam: ExamRequest): Promise<void> => {
+  try {
+    const { id, ...data } = exam;
+    const cleanedData = cleanData(data);
+    await addDoc(collection(db, EXAMS_COLLECTION), cleanedData);
+  } catch (error) {
+    console.error("Erro ao salvar prova:", error);
+    throw error;
+  }
+};
+
+export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
+  try {
+    const examRef = doc(db, EXAMS_COLLECTION, examId);
+    await updateDoc(examRef, { status });
+  } catch (error) {
+    console.error("Erro ao atualizar status:", error);
+    throw error;
+  }
+};
+
+export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
+    try {
+        const { id, ...data } = exam;
+        const examRef = doc(db, EXAMS_COLLECTION, id);
+        const cleanedData = cleanData(data);
+        await updateDoc(examRef, cleanedData);
+    } catch (error) {
+        console.error("Erro ao atualizar prova:", error);
+        throw error;
+    }
+};
+
+// --- SYSTEM CONFIG ---
+
+export const listenToSystemConfig = (onUpdate: (config: SystemConfig) => void) => {
+    const docRef = doc(db, CONFIG_COLLECTION, 'main');
+    return onSnapshot(docRef, (doc) => {
+        if (doc.exists()) {
+            onUpdate(doc.data() as SystemConfig);
+        } else {
+            // Default config
+            onUpdate({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
+        }
+    }, (error) => {
+        console.warn("Erro ao ouvir config (provavelmente permissão):", error.code);
+        // Não trava a app, apenas loga
+    });
+};
+
+export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
+    try {
+        const docRef = doc(db, CONFIG_COLLECTION, 'main');
+        const cleanedData = cleanData(config);
+        await setDoc(docRef, cleanedData, { merge: true });
+    } catch (error) {
+        console.error("Erro ao atualizar config:", error);
+        throw error;
+    }
+};
+
+export const clearSystemAnnouncement = async (): Promise<void> => {
+    try {
+        const docRef = doc(db, CONFIG_COLLECTION, 'main');
+        await updateDoc(docRef, {
+            bannerMessage: '',
+            isBannerActive: false
+        });
+    } catch (error) {
+        console.error("Erro ao limpar aviso:", error);
+        throw error;
+    }
+};
+
+// --- SCHEDULE ---
+
+export const listenToSchedule = (onUpdate: (schedule: ScheduleEntry[]) => void) => {
+    const q = collection(db, SCHEDULE_COLLECTION);
+    return onSnapshot(q, (snapshot) => {
+        const schedule = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduleEntry));
+        onUpdate(schedule);
+    }, (error) => {
+        console.warn("Erro ao ouvir horários:", error.code);
+    });
+};
+
+export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
+    try {
+        const querySnapshot = await getDocs(collection(db, SCHEDULE_COLLECTION));
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduleEntry));
+    } catch (error) {
+        console.error("Erro ao buscar horários:", error);
+        return [];
+    }
+};
+
+export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
+    try {
+        const docRef = doc(db, SCHEDULE_COLLECTION, entry.id);
+        const cleanedData = cleanData(entry);
+        await setDoc(docRef, cleanedData);
+    } catch (error) {
+        console.error("Erro ao salvar horário:", error);
+        throw error;
+    }
+};
+
+// --- STUDENTS ---
+
+export const getStudents = async (): Promise<Student[]> => {
+    try {
+        const querySnapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student));
+    } catch (error) {
+        console.error("Erro ao buscar alunos:", error);
+        return [];
+    }
+};
+
+export const saveStudent = async (student: Student): Promise<void> => {
+    try {
+        const { id, ...data } = student;
+        const cleanedData = cleanData(data);
+        await addDoc(collection(db, STUDENTS_COLLECTION), cleanedData);
+    } catch (error) {
+        console.error("Erro ao salvar aluno:", error);
+        throw error;
+    }
+};
+
+export const updateStudent = async (student: Student): Promise<void> => {
+    try {
+        const { id, ...data } = student;
+        const studentRef = doc(db, STUDENTS_COLLECTION, id);
+        const cleanedData = cleanData(data);
+        await updateDoc(studentRef, cleanedData);
+    } catch (error) {
+        console.error("Erro ao atualizar aluno:", error);
+        throw error;
+    }
+};
+
+export const deleteStudent = async (id: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
+    } catch (error) {
+        console.error("Erro ao deletar aluno:", error);
+        throw error;
+    }
+};
+
+// --- ATTENDANCE ---
+
+export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
+    try {
+        // Verifica se já existe registro para este aluno nesta data
+        const q = query(
+            collection(db, ATTENDANCE_COLLECTION), 
+            where("studentId", "==", log.studentId),
+            where("dateString", "==", log.dateString)
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        // Se já existe um registro hoje, não duplica (regra de negócio simples para MVP)
+        if (!snapshot.empty) {
+            return false; 
+        }
+
+        const { id, ...data } = log;
+        const cleanedData = cleanData(data);
+        await addDoc(collection(db, ATTENDANCE_COLLECTION), cleanedData);
+        return true;
+    } catch (error) {
+        console.error("Erro ao registrar presença:", error);
+        return false;
+    }
+};
+
+export const getAttendanceLogs = async (dateString?: string): Promise<AttendanceLog[]> => {
+    try {
+        let q;
+        if (dateString) {
+             q = query(collection(db, ATTENDANCE_COLLECTION), where("dateString", "==", dateString));
+        } else {
+             // Busca apenas os de hoje por padrão se não passar data
+             const today = new Date().toISOString().split('T')[0];
+             q = query(collection(db, ATTENDANCE_COLLECTION), where("dateString", "==", today));
+        }
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog))
+            .sort((a,b) => b.timestamp - a.timestamp);
+    } catch (error) {
+        console.error("Erro ao buscar logs:", error);
+        return [];
+    }
+};
+
+export const getAllAttendanceLogs = async (): Promise<AttendanceLog[]> => {
+    try {
+        const snapshot = await getDocs(collection(db, ATTENDANCE_COLLECTION));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
+    } catch (error) {
+        console.error("Erro ao buscar todos logs:", error);
+        return [];
+    }
+};
+
+// --- ANSWER KEYS & CORRECTIONS (MOCK / PLACEHOLDER) ---
+
+export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
+    try {
+        const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AnswerKey));
+    } catch (error) {
+        return [];
+    }
 };
 
 // --- LESSON PLANS ---
@@ -136,7 +428,8 @@ export const listenToClassMaterials = (
 export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
     try {
         const { id, ...data } = plan;
-        const docRef = await addDoc(collection(db, PLANS_COLLECTION), data);
+        const cleanedData = cleanData(data);
+        const docRef = await addDoc(collection(db, PLANS_COLLECTION), cleanedData);
         return docRef.id;
     } catch (error) {
         console.error("Erro ao salvar planejamento:", error);
@@ -146,366 +439,17 @@ export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
 
 export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
     try {
-        let q = query(collection(db, PLANS_COLLECTION));
-        
+        let q;
         if (teacherId) {
             q = query(collection(db, PLANS_COLLECTION), where("teacherId", "==", teacherId));
+        } else {
+            q = collection(db, PLANS_COLLECTION);
         }
-
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LessonPlan));
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LessonPlan));
     } catch (error) {
         console.error("Erro ao buscar planejamentos:", error);
         return [];
     }
-};
-
-// --- EXAMS ---
-
-export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
-  try {
-    let q;
-    if (teacherId) {
-        q = query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId));
-    } else {
-        q = collection(db, EXAMS_COLLECTION);
-    }
-    
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as ExamRequest));
-  } catch (error) {
-    console.error("Erro ao buscar provas:", error);
-    return [];
-  }
-};
-
-export const saveExam = async (exam: ExamRequest): Promise<void> => {
-  try {
-    const { id, ...examData } = exam;
-    await addDoc(collection(db, EXAMS_COLLECTION), examData);
-  } catch (error) {
-    console.error("Erro ao salvar prova:", error);
-    throw error;
-  }
-};
-
-export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
-    try {
-        if (!exam.id) throw new Error("ID da prova necessário para atualização");
-        const examRef = doc(db, EXAMS_COLLECTION, exam.id);
-        const { id, ...examData } = exam;
-        await updateDoc(examRef, examData);
-    } catch (error) {
-        console.error("Erro ao atualizar prova:", error);
-        throw error;
-    }
-};
-
-export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
-  try {
-    const examRef = doc(db, EXAMS_COLLECTION, examId);
-    await updateDoc(examRef, { status });
-  } catch (error) {
-    console.error("Erro ao atualizar status:", error);
-  }
-};
-
-// --- ANSWER KEYS ---
-
-export const saveAnswerKey = async (key: AnswerKey): Promise<void> => {
-  try {
-    if (key.id) {
-        const docRef = doc(db, ANSWER_KEYS_COLLECTION, key.id);
-        const { id, ...data } = key;
-        await updateDoc(docRef, data);
-    } else {
-        const { id, ...data } = key;
-        await addDoc(collection(db, ANSWER_KEYS_COLLECTION), data);
-    }
-  } catch (error) {
-    console.error("Erro ao salvar gabarito:", error);
-    throw error;
-  }
-};
-
-export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
-  try {
-    const querySnapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as AnswerKey));
-  } catch (error) {
-    console.error("Erro ao buscar gabaritos:", error);
-    return [];
-  }
-};
-
-export const deleteAnswerKey = async (id: string): Promise<void> => {
-  try {
-    await deleteDoc(doc(db, ANSWER_KEYS_COLLECTION, id));
-  } catch (error) {
-    console.error("Erro ao excluir gabarito:", error);
-    throw error;
-  }
-};
-
-// --- CORRECTIONS ---
-
-export const saveStudentCorrection = async (correction: StudentCorrection): Promise<void> => {
-    try {
-        const { id, ...data } = correction;
-        await addDoc(collection(db, CORRECTIONS_COLLECTION), data);
-    } catch (error) {
-        console.error("Erro ao salvar correção", error);
-        throw error;
-    }
-};
-
-export const getStudentCorrections = async (answerKeyId?: string): Promise<StudentCorrection[]> => {
-    try {
-        let q = query(collection(db, CORRECTIONS_COLLECTION));
-        if (answerKeyId) {
-            q = query(collection(db, CORRECTIONS_COLLECTION), where("answerKeyId", "==", answerKeyId));
-        }
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudentCorrection));
-    } catch (error) {
-        console.error("Erro ao buscar correções", error);
-        return [];
-    }
-};
-
-// --- USERS & ADMIN ---
-
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-  try {
-    const userDoc = await getDoc(doc(db, USERS_COLLECTION, uid));
-    if (userDoc.exists()) {
-      return { id: userDoc.id, ...userDoc.data() } as User;
-    }
-    return null;
-  } catch (error) {
-    console.error("Erro ao buscar perfil:", error);
-    return null;
-  }
-};
-
-export const createTeacherUser = async (user: User, password: string): Promise<void> => {
-  const secondaryApp = initializeApp(auth.app.options, 'Secondary');
-  const secondaryAuth = getAuth(secondaryApp);
-
-  try {
-    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, user.email, password);
-    const uid = userCredential.user.uid;
-
-    await updateProfile(userCredential.user, { displayName: user.name });
-
-    await setDoc(doc(db, USERS_COLLECTION, uid), {
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      subject: user.subject || '',
-      classes: user.classes || []
-    });
-    
-    await secondaryAuth.signOut(); 
-  } catch (error) {
-    console.error("Erro ao criar professor:", error);
-    throw error;
-  }
-};
-
-// --- CLASSES & STUDENTS ---
-
-export const getClasses = async (): Promise<SchoolClass[]> => {
-  try {
-    const querySnapshot = await getDocs(collection(db, CLASSES_COLLECTION));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SchoolClass));
-  } catch (error) {
-    console.error("Erro ao buscar turmas", error);
-    return [];
-  }
-};
-
-export const saveClass = async (schoolClass: SchoolClass): Promise<void> => {
-  try {
-    const { id, ...data } = schoolClass;
-    await addDoc(collection(db, CLASSES_COLLECTION), data);
-  } catch (error) {
-    console.error("Erro ao salvar turma", error);
-    throw error;
-  }
-};
-
-export const getStudents = async (): Promise<Student[]> => {
-  try {
-    const querySnapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student));
-  } catch (error) {
-    console.error("Erro ao buscar alunos", error);
-    return [];
-  }
-};
-
-export const saveStudent = async (student: Student): Promise<void> => {
-  try {
-    const { id, ...data } = student;
-    await addDoc(collection(db, STUDENTS_COLLECTION), data);
-  } catch (error) {
-    console.error("Erro ao salvar aluno", error);
-    throw error;
-  }
-};
-
-export const updateStudent = async (student: Student): Promise<void> => {
-  try {
-    if (!student.id) throw new Error("ID do aluno necessário para atualização");
-    const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-    const { id, ...data } = student;
-    await updateDoc(studentRef, data);
-  } catch (error) {
-    console.error("Erro ao atualizar aluno", error);
-    throw error;
-  }
-};
-
-export const deleteStudent = async (id: string): Promise<void> => {
-  try {
-    await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
-  } catch (error) {
-    console.error("Erro ao excluir aluno", error);
-    throw error;
-  }
-};
-
-// --- SCHEDULE SYSTEM ---
-
-export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
-    try {
-        const querySnapshot = await getDocs(collection(db, SCHEDULE_COLLECTION));
-        return querySnapshot.docs.map(doc => doc.data() as ScheduleEntry);
-    } catch (error) {
-        console.error("Erro ao buscar horários", error);
-        return [];
-    }
-};
-
-export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) => {
-    const q = query(collection(db, SCHEDULE_COLLECTION));
-    return onSnapshot(q, (snapshot) => {
-        const entries = snapshot.docs.map(doc => doc.data() as ScheduleEntry);
-        callback(entries);
-    });
-};
-
-export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
-    try {
-        const docId = `${entry.classId}_${entry.dayOfWeek}_${entry.slotId}`;
-        await setDoc(doc(db, SCHEDULE_COLLECTION, docId), { ...entry, id: docId });
-    } catch (error) {
-        console.error("Erro ao salvar horário", error);
-        throw error;
-    }
-};
-
-// --- SYSTEM CONFIG ---
-
-export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
-    try {
-        const docRef = doc(db, CONFIG_COLLECTION, 'general');
-        await setDoc(docRef, config);
-    } catch (error) {
-        console.error("Erro ao atualizar config:", error);
-    }
-};
-
-export const clearSystemAnnouncement = async (): Promise<void> => {
-     try {
-        const docRef = doc(db, CONFIG_COLLECTION, 'general');
-        await setDoc(docRef, {
-            bannerMessage: '',
-            isBannerActive: false,
-            showOnTV: false,
-            tvStart: '',
-            tvEnd: ''
-        }, { merge: true });
-    } catch (error) {
-        console.error("Erro ao limpar config:", error);
-    }
-};
-
-export const listenToSystemConfig = (callback: (config: SystemConfig | null) => void) => {
-    const docRef = doc(db, CONFIG_COLLECTION, 'general');
-    return onSnapshot(docRef, (doc) => {
-        if (doc.exists()) {
-            callback(doc.data() as SystemConfig);
-        } else {
-            callback(null);
-        }
-    });
-};
-
-// --- ATTENDANCE SYSTEM ---
-
-export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
-    try {
-        // Verificar se já existe registro para este aluno HOJE
-        const q = query(
-            collection(db, ATTENDANCE_COLLECTION),
-            where('studentId', '==', log.studentId),
-            where('dateString', '==', log.dateString)
-        );
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-            // Já existe registro
-            console.log("Frequência já registrada para hoje.");
-            return false;
-        }
-
-        const { id, ...data } = log;
-        await addDoc(collection(db, ATTENDANCE_COLLECTION), data);
-        return true;
-    } catch (error) {
-        console.error("Erro ao registrar frequência", error);
-        throw error;
-    }
-};
-
-export const getAttendanceLogs = async (dateString?: string): Promise<AttendanceLog[]> => {
-    try {
-        let q = query(collection(db, ATTENDANCE_COLLECTION), orderBy('timestamp', 'desc'), limit(100));
-        
-        if (dateString) {
-             q = query(collection(db, ATTENDANCE_COLLECTION), where('dateString', '==', dateString), orderBy('timestamp', 'desc'));
-        }
-        
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
-    } catch (error) {
-        console.error("Erro ao buscar logs de frequência", error);
-        return [];
-    }
-};
-
-// Busca todos os logs para relatórios (pode ser pesado em produção, ideal filtrar por range de data)
-export const getAllAttendanceLogs = async (): Promise<AttendanceLog[]> => {
-    try {
-        const querySnapshot = await getDocs(collection(db, ATTENDANCE_COLLECTION));
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
-    } catch (error) {
-        console.error("Erro ao buscar histórico completo", error);
-        return [];
-    }
-};
-
-// Remove undefined fields helper
-export const cleanData = (data: any) => {
-    return Object.fromEntries(
-        Object.entries(data).filter(([_, v]) => v !== undefined)
-    );
 };

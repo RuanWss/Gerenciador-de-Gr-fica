@@ -9,7 +9,8 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: UserRole; // Role ativa na sessão atual
+  roles?: UserRole[]; // Lista de roles permitidas para o usuário
   password?: string;
   subject?: string;
   classes?: string[];
