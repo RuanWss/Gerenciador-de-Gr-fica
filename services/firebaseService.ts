@@ -162,9 +162,16 @@ export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> 
 
 // --- EXAMS ---
 
-export const getExams = async (): Promise<ExamRequest[]> => {
+export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
   try {
-    const querySnapshot = await getDocs(collection(db, EXAMS_COLLECTION));
+    let q;
+    if (teacherId) {
+        q = query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId));
+    } else {
+        q = collection(db, EXAMS_COLLECTION);
+    }
+    
+    const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()

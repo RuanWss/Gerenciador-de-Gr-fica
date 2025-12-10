@@ -46,7 +46,8 @@ import {
   Layers,
   ArrowLeft,
   FileUp,
-  PenTool
+  PenTool,
+  ExternalLink
 } from 'lucide-react';
 
 // --- CONSTANTES DE IMAGEM ---
@@ -145,8 +146,8 @@ export const TeacherDashboard: React.FC = () => {
     const fetchData = async () => {
         if (user) {
             setIsLoadingExams(true);
-            const allExams = await getExams();
-            setExams(allExams.filter(e => e.teacherId === user.id).sort((a,b) => b.createdAt - a.createdAt));
+            const allExams = await getExams(user.id); // Pass user.id to filter
+            setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
             
             // Fetch materials
             const userMaterials = await getClassMaterials(user.id);
@@ -485,6 +486,30 @@ export const TeacherDashboard: React.FC = () => {
                 <SidebarItem id="plans" label="Planejamento" icon={BookOpenCheck} />
             </div>
             
+            <div className="mb-6 border-t border-gray-100 pt-6">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Acesso Externo</p>
+                
+                <a 
+                    href="https://login.plurall.net/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-2 font-medium text-sm text-white bg-purple-600 hover:bg-purple-700 transition-colors shadow-sm"
+                >
+                    <ExternalLink size={18} />
+                    <span>Plurall</span>
+                </a>
+
+                <a 
+                    href="https://apps.gennera.com.br/public/#/login" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-2 font-medium text-sm text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                    <ExternalLink size={18} />
+                    <span>Gennera</span>
+                </a>
+            </div>
+
             <div className="mt-auto bg-blue-50 p-4 rounded-xl border border-blue-100">
                 <p className="text-xs font-bold text-blue-800 mb-2">Dica do Sistema</p>
                 <p className="text-xs text-blue-600 leading-relaxed">
