@@ -133,10 +133,11 @@ export const listenToClassMaterials = (
 
 // --- LESSON PLANS ---
 
-export const saveLessonPlan = async (plan: LessonPlan): Promise<void> => {
+export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
     try {
         const { id, ...data } = plan;
-        await addDoc(collection(db, PLANS_COLLECTION), data);
+        const docRef = await addDoc(collection(db, PLANS_COLLECTION), data);
+        return docRef.id;
     } catch (error) {
         console.error("Erro ao salvar planejamento:", error);
         throw error;
