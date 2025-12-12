@@ -92,16 +92,14 @@ export const StaffAttendanceTerminal: React.FC = () => {
         }
     }, [modelsLoaded, staff]);
 
-    // Função auxiliar para carregar imagem com CORS anônimo (CRUCIAL PARA FIREBASE)
-    // FIX: Adicionado timestamp para evitar cache do navegador que bloqueia CORS
+    // Função auxiliar para carregar imagem com CORS anônimo
     const loadImage = (url: string): Promise<HTMLImageElement> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.crossOrigin = 'anonymous'; // Permite que a IA leia os pixels
             img.onload = () => resolve(img);
             img.onerror = (e) => reject(e);
-            // Cache busting: Força o navegador a baixar a imagem novamente com os headers corretos
-            img.src = `${url}${url.includes('?') ? '&' : '?'}t=${new Date().getTime()}`;
+            img.src = url;
         });
     };
 
@@ -308,30 +306,33 @@ export const StaffAttendanceTerminal: React.FC = () => {
     return (
         <div className="h-screen w-screen bg-gradient-to-br from-gray-900 via-red-900 to-black text-white overflow-hidden flex flex-col font-sans">
             
-            {/* --- HEADER --- */}
-            <div className="h-[15vh] bg-black/20 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-8 z-20 shadow-lg relative">
-                <div className="flex items-center gap-6">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 w-auto drop-shadow-md" alt="Logo" />
-                    <div className="h-10 w-px bg-white/10"></div>
+            {/* --- HEADER (RESPONSIVO) --- */}
+            <div className="h-auto min-h-[10vh] md:h-[15vh] py-4 bg-black/20 backdrop-blur-md border-b border-white/10 flex flex-col md:flex-row items-center justify-between px-4 md:px-8 z-20 shadow-lg relative gap-4">
+                <div className="flex items-center gap-4 md:gap-6">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 md:h-16 w-auto drop-shadow-md" alt="Logo" />
+                    <div className="h-8 md:h-10 w-px bg-white/10"></div>
                     <div>
-                        <h1 className="text-2xl font-black uppercase tracking-wider text-white">Ponto Eletrônico</h1>
-                        <p className="text-xs font-medium text-red-400 tracking-[0.2em] uppercase">Controle de Equipe</p>
+                        <h1 className="text-lg md:text-2xl font-black uppercase tracking-wider text-white">Ponto Eletrônico</h1>
+                        <p className="text-[10px] md:text-xs font-medium text-red-400 tracking-[0.2em] uppercase">Controle de Equipe</p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-6">
-                    <div className="text-right hidden md:block">
-                        <p className="text-4xl font-black font-mono leading-none tracking-tight">
+                <div className="flex items-center gap-4 md:gap-6">
+                    <div className="text-right">
+                        <p className="text-2xl md:text-4xl font-black font-mono leading-none tracking-tight">
                             {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">
+                        <p className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest mt-1 hidden md:block">
                             {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1 md:hidden">
+                            {currentTime.toLocaleDateString('pt-BR', { day: 'numeric', month: 'numeric' })}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg border border-white/5">
                         <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${labeledDescriptors.length > 0 ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-500'}`} title="Funcionários com biometria carregada">
                             <Database size={14} />
-                            {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}
+                            <span className="hidden md:inline">{labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}</span>
                         </div>
                          <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" title="Sair do Terminal">
                             <LogOut size={18} />
@@ -341,11 +342,14 @@ export const StaffAttendanceTerminal: React.FC = () => {
             </div>
 
             {/* --- MAIN CONTENT --- */}
-            <div className="flex-1 relative flex flex-col items-center justify-center p-6 bg-transparent">
+            <div className="flex-1 relative flex flex-col items-center justify-center p-4 md:p-6 bg-transparent">
                 
-                {/* CAMERA CONTAINER */}
-                <div className={`relative w-full max-w-5xl aspect-video bg-black rounded-3xl overflow-hidden border-2 shadow-2xl transition-all duration-500 ${getStatusColor()} ${isProcessing ? 'scale-[0.98] opacity-80' : 'scale-100'}`}>
+                {/* CAMERA CONTAINER (RESPONSIVO) */}
+                {/* Mobile: aspect-[3/4] (Portrait friendly), Desktop: aspect-video (Landscape) */}
+                {/* max-w-5xl on Desktop, w-full on mobile */}
+                <div className={`relative w-full md:max-w-5xl aspect-[3/4] md:aspect-video bg-black rounded-3xl overflow-hidden border-2 shadow-2xl transition-all duration-500 ${getStatusColor()} ${isProcessing ? 'scale-[0.98] opacity-80' : 'scale-100'}`}>
                     
+                    {/* Vídeo e Canvas com object-cover para preencher todo o container responsivo sem distorção */}
                     <video 
                         ref={videoRef} 
                         autoPlay 
@@ -353,32 +357,32 @@ export const StaffAttendanceTerminal: React.FC = () => {
                         onPlay={() => setIsVideoReady(true)}
                         className="w-full h-full object-cover transform scale-x-[-1]" 
                     />
-                    <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1]" />
+                    <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1] object-cover" />
 
                     {/* OVERLAYS */}
                     <div className="absolute inset-0 pointer-events-none">
                         
                         {loadingMessage && !lastLog && (
-                            <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+                            <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 text-center">
                                 <Loader2 size={64} className="text-red-500 animate-spin mb-6" />
-                                <h2 className="text-2xl font-bold text-white tracking-widest uppercase animate-pulse">{loadingMessage}</h2>
+                                <h2 className="text-xl md:text-2xl font-bold text-white tracking-widest uppercase animate-pulse">{loadingMessage}</h2>
                             </div>
                         )}
 
                         {/* AVISO DE BANCO VAZIO - CASO 1: SEM FUNCIONÁRIOS */}
                         {!loadingMessage && modelsLoaded && staff.length === 0 && (
-                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 text-center">
                                 <AlertTriangle size={64} className="text-yellow-500 mb-6 animate-bounce" />
-                                <h2 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Dados Vazio</h2>
+                                <h2 className="text-xl md:text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Dados Vazio</h2>
                                 <p className="text-gray-400 max-w-md text-center">Nenhum funcionário cadastrado ou ativo.</p>
                             </div>
                         )}
 
                         {/* AVISO DE BANCO VAZIO - CASO 2: FUNCIONÁRIOS EXISTEM, MAS SEM DESCRITORES (ERRO DE FOTO) */}
                         {!loadingMessage && modelsLoaded && staff.length > 0 && labeledDescriptors.length === 0 && (
-                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 text-center">
                                 <AlertTriangle size={64} className="text-red-500 mb-6 animate-pulse" />
-                                <h2 className="text-2xl font-bold text-red-500 tracking-widest uppercase mb-2">Erro de Biometria</h2>
+                                <h2 className="text-xl md:text-2xl font-bold text-red-500 tracking-widest uppercase mb-2">Erro de Biometria</h2>
                                 <p className="text-gray-400 max-w-md text-center mb-4">
                                     {staff.length} funcionários encontrados, mas nenhuma foto pôde ser processada.
                                     Verifique se as fotos são rostos nítidos e se o sistema tem permissão de acesso.
@@ -396,9 +400,9 @@ export const StaffAttendanceTerminal: React.FC = () => {
                             <div className="absolute inset-0 z-10 opacity-30">
                                 <div className="w-full h-1 bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-[scan_3s_ease-in-out_infinite]"></div>
                                 <div className="absolute bottom-10 left-0 right-0 text-center">
-                                    <span className="bg-black/60 backdrop-blur px-6 py-2 rounded-full text-red-400 font-bold uppercase tracking-[0.2em] text-sm border border-red-500/30 animate-pulse">
+                                    <span className="bg-black/60 backdrop-blur px-6 py-2 rounded-full text-red-400 font-bold uppercase tracking-[0.2em] text-xs md:text-sm border border-red-500/30 animate-pulse">
                                         <Scan className="inline-block mr-2 -mt-1" size={16}/>
-                                        Aproxime-se para registrar o ponto
+                                        Aproxime-se para registrar
                                     </span>
                                 </div>
                             </div>
@@ -408,7 +412,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                              <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px] z-20 flex items-center justify-center">
                                  <div className="flex flex-col items-center">
                                      <div className="h-16 w-16 border-4 border-t-transparent border-white rounded-full animate-spin mb-4"></div>
-                                     <span className="text-xl font-bold text-white tracking-widest uppercase">Validando Biometria...</span>
+                                     <span className="text-xl font-bold text-white tracking-widest uppercase">Validando...</span>
                                  </div>
                              </div>
                         )}
@@ -417,15 +421,15 @@ export const StaffAttendanceTerminal: React.FC = () => {
 
                 {/* RESULT CARD (POPUP) */}
                 {lastLog && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-6 animate-in fade-in zoom-in-95 duration-300">
-                        <div className={`w-full max-w-md bg-[#18181b] rounded-3xl p-1 shadow-2xl border-t-4 ${
+                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-300">
+                        <div className={`w-[90%] md:w-full max-w-md bg-[#18181b] rounded-3xl p-1 shadow-2xl border-t-4 ${
                             statusType === 'success' ? 'border-green-500 shadow-green-900/20' : 
                             statusType === 'warning' ? 'border-yellow-500 shadow-yellow-900/20' : 
                             'border-red-500 shadow-red-900/20'
                         }`}>
-                            <div className="bg-[#121214] rounded-[20px] p-8 flex flex-col items-center text-center relative overflow-hidden">
+                            <div className="bg-[#121214] rounded-[20px] p-6 md:p-8 flex flex-col items-center text-center relative overflow-hidden">
                                 
-                                <div className={`relative h-40 w-40 rounded-full p-1 mb-6 border-4 ${
+                                <div className={`relative h-32 w-32 md:h-40 md:w-40 rounded-full p-1 mb-4 md:mb-6 border-4 ${
                                     statusType === 'success' ? 'border-green-500' : 
                                     statusType === 'warning' ? 'border-yellow-500' : 
                                     'border-red-500'
@@ -437,8 +441,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
                                     />
                                 </div>
 
-                                <h2 className="text-3xl font-black text-white uppercase leading-tight mb-1">{lastLog.staffName}</h2>
-                                <p className="text-lg text-gray-400 font-medium mb-8 flex items-center gap-2">
+                                <h2 className="text-2xl md:text-3xl font-black text-white uppercase leading-tight mb-1">{lastLog.staffName}</h2>
+                                <p className="text-sm md:text-lg text-gray-400 font-medium mb-6 flex items-center gap-2">
                                     <User size={16} /> {lastLog.staffRole}
                                 </p>
 
@@ -461,9 +465,13 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 )}
             </div>
 
-            <div className="h-12 bg-black/40 backdrop-blur-md border-t border-white/10 flex items-center justify-between px-8 text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+            {/* --- FOOTER --- */}
+            <div className="h-auto py-2 md:h-12 bg-black/40 backdrop-blur-md border-t border-white/10 flex flex-col md:flex-row items-center justify-between px-4 md:px-8 text-[10px] text-gray-400 uppercase tracking-widest font-bold gap-2">
                  <div className="flex items-center gap-4">
                      <span className="flex items-center gap-1"><Zap size={10} className="text-red-600" /> Sistema CEMAL RH</span>
+                 </div>
+                 <div className="text-[8px] md:text-[10px] opacity-60">
+                     v2.5 Mobile/Tablet Ready
                  </div>
             </div>
             <style>{`
