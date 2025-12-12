@@ -23,7 +23,8 @@ import {
   Loader2,
   Briefcase,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  LogOut
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
@@ -213,22 +214,26 @@ export const HRDashboard: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-8 font-sans">
-            <header className="max-w-7xl mx-auto mb-8 flex justify-between items-center">
+        <div className="min-h-screen bg-gray-50 p-6 md:p-12 font-sans">
+            <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-                        <Briefcase className="text-blue-600" /> Painel de Recursos Humanos
+                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
+                        <Briefcase className="text-blue-600" size={32} />
+                        Recursos Humanos
                     </h1>
-                    <p className="text-gray-500">Gerenciamento de Equipe e Ponto Eletrônico</p>
+                    <p className="text-gray-500 mt-1">Gerenciamento de Equipe e Ponto Eletrônico</p>
                 </div>
-                <div className="flex gap-4">
-                     <span className="text-sm bg-gray-200 px-3 py-1 rounded-full text-gray-600 font-bold flex items-center">
+                <div className="flex gap-4 items-center">
+                     <span className="text-sm bg-gray-200 px-3 py-1 rounded-full text-gray-600 font-bold hidden md:flex items-center">
                          {user?.email}
                      </span>
+                     <Button onClick={logout} className="bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-2">
+                        <LogOut size={18} /> Sair
+                     </Button>
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto">
+            <div>
                 {/* TABS */}
                 <div className="flex gap-4 mb-6 border-b border-gray-200 pb-1">
                     <button 
@@ -377,7 +382,7 @@ export const HRDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
-            </main>
+            </div>
         </div>
     );
 };
