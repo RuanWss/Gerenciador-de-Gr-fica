@@ -94,6 +94,17 @@ export interface StaffMember {
   photoUrl?: string;
   active: boolean;
   createdAt: number;
+  
+  // Novos campos de Jornada
+  workPeriod?: 'morning' | 'afternoon' | 'full';
+  isTeacher?: boolean;
+  weeklyClasses?: {
+      monday: number;
+      tuesday: number;
+      wednesday: number;
+      thursday: number;
+      friday: number;
+  };
 }
 
 export interface AnswerKey {

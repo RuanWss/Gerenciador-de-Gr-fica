@@ -24,7 +24,9 @@ import {
   Briefcase,
   CheckCircle,
   AlertCircle,
-  LogOut
+  LogOut,
+  Calendar,
+  GraduationCap
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
@@ -45,6 +47,17 @@ export const HRDashboard: React.FC = () => {
     const [newPhoto, setNewPhoto] = useState<File | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     
+    // Novos Estados do Form (Jornada)
+    const [workPeriod, setWorkPeriod] = useState<'morning' | 'afternoon' | 'full'>('morning');
+    const [isTeacher, setIsTeacher] = useState(false);
+    const [weeklyClasses, setWeeklyClasses] = useState({
+        monday: 0,
+        tuesday: 0,
+        wednesday: 0,
+        thursday: 0,
+        friday: 0
+    });
+
     // Photo Analysis
     const [photoStatus, setPhotoStatus] = useState<'idle' | 'analyzing' | 'valid' | 'invalid'>('idle');
     const [photoMessage, setPhotoMessage] = useState('');
@@ -158,7 +171,11 @@ export const HRDashboard: React.FC = () => {
                 role: newRole,
                 photoUrl,
                 active: true,
-                createdAt: editingId ? (staffList.find(s=>s.id === editingId)?.createdAt || Date.now()) : Date.now()
+                createdAt: editingId ? (staffList.find(s=>s.id === editingId)?.createdAt || Date.now()) : Date.now(),
+                // Novos campos
+                workPeriod,
+                isTeacher,
+                weeklyClasses: isTeacher ? weeklyClasses : undefined
             };
 
             if (editingId) {
@@ -189,6 +206,16 @@ export const HRDashboard: React.FC = () => {
         setNewRole(staff.role);
         setNewPhoto(null);
         setPhotoStatus('idle');
+        
+        // Populate new fields
+        setWorkPeriod(staff.workPeriod || 'morning');
+        setIsTeacher(staff.isTeacher || false);
+        if (staff.weeklyClasses) {
+            setWeeklyClasses(staff.weeklyClasses);
+        } else {
+            setWeeklyClasses({ monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0 });
+        }
+
         setShowForm(true);
     };
 
@@ -210,7 +237,20 @@ export const HRDashboard: React.FC = () => {
         setNewPhoto(null);
         setPhotoStatus('idle');
         setPhotoMessage('');
+        
+        // Reset new fields
+        setWorkPeriod('morning');
+        setIsTeacher(false);
+        setWeeklyClasses({ monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0 });
+        
         setShowForm(false);
+    };
+
+    const handleClassCountChange = (day: keyof typeof weeklyClasses, value: string) => {
+        setWeeklyClasses(prev => ({
+            ...prev,
+            [day]: Number(value)
+        }));
     };
 
     return (
@@ -264,14 +304,78 @@ export const HRDashboard: React.FC = () => {
                             <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-8 animate-in slide-in-from-top-4">
                                 <h3 className="font-bold text-blue-800 mb-4">{editingId ? 'Editar Funcionário' : 'Cadastrar Novo Funcionário'}</h3>
                                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
+                                    {/* DADOS PESSOAIS */}
+                                    <div className="col-span-2 md:col-span-1">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
                                         <input className="w-full border p-2 rounded" value={newName} onChange={e => setNewName(e.target.value)} required placeholder="Ex: Maria da Silva" />
                                     </div>
-                                    <div>
+                                    <div className="col-span-2 md:col-span-1">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Cargo / Função</label>
                                         <input className="w-full border p-2 rounded" value={newRole} onChange={e => setNewRole(e.target.value)} required placeholder="Ex: Auxiliar de Limpeza" />
                                     </div>
+
+                                    {/* JORNADA DE TRABALHO (NOVO) */}
+                                    <div className="col-span-2 bg-white/50 p-4 rounded-lg border border-blue-100">
+                                        <h4 className="text-sm font-black text-blue-800 uppercase mb-3 flex items-center gap-2">
+                                            <Calendar size={16} /> Informações Contratuais
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 mb-1">Período de Trabalho</label>
+                                                <select 
+                                                    className="w-full border p-2 rounded text-sm bg-white"
+                                                    value={workPeriod}
+                                                    onChange={e => setWorkPeriod(e.target.value as any)}
+                                                >
+                                                    <option value="morning">Matutino (Manhã)</option>
+                                                    <option value="afternoon">Vespertino (Tarde)</option>
+                                                    <option value="full">Integral</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <label className="flex items-center gap-2 cursor-pointer bg-blue-100/50 hover:bg-blue-100 p-2 rounded-lg transition-colors w-full">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={isTeacher} 
+                                                        onChange={e => setIsTeacher(e.target.checked)}
+                                                        className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                                    />
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-bold text-gray-800">É Professor?</span>
+                                                        <span className="text-[10px] text-gray-500">Habilita contagem de aulas</span>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        {/* GRADE DE AULAS */}
+                                        {isTeacher && (
+                                            <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                                                <label className="block text-xs font-bold text-gray-500 mb-2 flex items-center gap-1">
+                                                    <GraduationCap size={14} /> Quantidade de Aulas por Dia
+                                                </label>
+                                                <div className="grid grid-cols-5 gap-2">
+                                                    {['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].map((day) => (
+                                                        <div key={day} className="flex flex-col items-center">
+                                                            <span className="text-[10px] font-bold text-gray-400 uppercase mb-1">
+                                                                {day === 'monday' ? 'Seg' : day === 'tuesday' ? 'Ter' : day === 'wednesday' ? 'Qua' : day === 'thursday' ? 'Qui' : 'Sex'}
+                                                            </span>
+                                                            <input 
+                                                                type="number" 
+                                                                min="0" 
+                                                                max="10"
+                                                                className="w-full text-center border p-1 rounded font-bold text-blue-800"
+                                                                value={weeklyClasses[day as keyof typeof weeklyClasses]}
+                                                                onChange={e => handleClassCountChange(day as any, e.target.value)}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* FOTO BIOMETRIA */}
                                     <div className="col-span-2">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Foto para Biometria</label>
                                         <div className="flex items-center gap-4">
@@ -298,6 +402,7 @@ export const HRDashboard: React.FC = () => {
                                     <tr>
                                         <th className="p-4">Funcionário</th>
                                         <th className="p-4">Cargo</th>
+                                        <th className="p-4">Jornada</th>
                                         <th className="p-4">Status</th>
                                         <th className="p-4 text-right">Ações</th>
                                     </tr>
@@ -311,7 +416,13 @@ export const HRDashboard: React.FC = () => {
                                                 </div>
                                                 <span className="font-bold text-gray-800">{staff.name}</span>
                                             </td>
-                                            <td className="p-4 text-gray-600">{staff.role}</td>
+                                            <td className="p-4 text-gray-600">
+                                                {staff.role}
+                                                {staff.isTeacher && <span className="ml-2 px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-bold border border-blue-100">PROF</span>}
+                                            </td>
+                                            <td className="p-4 text-gray-500 text-xs">
+                                                {staff.workPeriod === 'morning' ? 'Matutino' : staff.workPeriod === 'afternoon' ? 'Vespertino' : 'Integral'}
+                                            </td>
                                             <td className="p-4">
                                                 <span className={`px-2 py-1 rounded-full text-xs font-bold ${staff.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                                     {staff.active ? 'Ativo' : 'Desligado'}
@@ -324,7 +435,7 @@ export const HRDashboard: React.FC = () => {
                                         </tr>
                                     ))}
                                     {staffList.length === 0 && (
-                                        <tr><td colSpan={4} className="p-8 text-center text-gray-400">Nenhum funcionário cadastrado.</td></tr>
+                                        <tr><td colSpan={5} className="p-8 text-center text-gray-400">Nenhum funcionário cadastrado.</td></tr>
                                     )}
                                 </tbody>
                             </table>
