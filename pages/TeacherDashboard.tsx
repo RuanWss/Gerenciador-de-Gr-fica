@@ -564,8 +564,8 @@ export const TeacherDashboard: React.FC = () => {
       onClick={id === 'create' ? handleNewExam : () => setActiveTab(id)}
       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
       ${activeTab === id 
-        ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/50' 
-        : 'text-gray-500 hover:bg-gray-100'}`}
+        ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' 
+        : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
     >
       <div className="flex items-center gap-3">
         <Icon size={18} />
@@ -578,7 +578,7 @@ export const TeacherDashboard: React.FC = () => {
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8">
         
         {/* --- SIDEBAR --- */}
-        <div className="w-64 bg-white border-r border-gray-200 p-6 flex flex-col h-full z-20">
+        <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
             <div className="mb-6">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Menu do Professor</p>
                 <SidebarItem id="requests" label="Meus Pedidos" icon={List} />
@@ -587,7 +587,7 @@ export const TeacherDashboard: React.FC = () => {
                 <SidebarItem id="plans" label="Planejamento" icon={BookOpenCheck} />
             </div>
             
-            <div className="mb-6 border-t border-gray-100 pt-6">
+            <div className="mb-6 border-t border-white/10 pt-6">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Acesso Externo</p>
                 
                 <a 
@@ -611,23 +611,23 @@ export const TeacherDashboard: React.FC = () => {
                 </a>
             </div>
 
-            <div className="mt-auto bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <p className="text-xs font-bold text-blue-800 mb-2">Dica do Sistema</p>
-                <p className="text-xs text-blue-600 leading-relaxed">
+            <div className="mt-auto bg-blue-900/40 p-4 rounded-xl border border-blue-500/30">
+                <p className="text-xs font-bold text-blue-300 mb-2">Dica do Sistema</p>
+                <p className="text-xs text-blue-200 leading-relaxed">
                     Utilize o "Estúdio de Criação" para diagramar provas automaticamente usando IA.
                 </p>
             </div>
         </div>
 
         {/* --- MAIN CONTENT AREA --- */}
-        <div className="flex-1 bg-gray-50 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
             
             {/* VIEW: MY REQUESTS */}
             {activeTab === 'requests' && (
                 <div className="flex-1 overflow-y-auto p-8 animate-in fade-in slide-in-from-right-4 duration-300">
                     <header className="mb-8">
-                        <h1 className="text-3xl font-bold text-gray-800">Meus Pedidos</h1>
-                        <p className="text-gray-500">Acompanhe o status das suas impressões na gráfica.</p>
+                        <h1 className="text-3xl font-bold text-white">Meus Pedidos</h1>
+                        <p className="text-gray-400">Acompanhe o status das suas impressões na gráfica.</p>
                     </header>
                     
                     <Card>
@@ -718,8 +718,8 @@ export const TeacherDashboard: React.FC = () => {
             {activeTab === 'materials' && (
                 <div className="flex-1 overflow-y-auto p-8 animate-in fade-in slide-in-from-right-4 duration-300">
                     <header className="mb-8">
-                        <h1 className="text-3xl font-bold text-gray-800">Materiais de Aula</h1>
-                        <p className="text-gray-500">Envie PDFs, slides e documentos organizados por turma.</p>
+                        <h1 className="text-3xl font-bold text-white">Materiais de Aula</h1>
+                        <p className="text-gray-400">Envie PDFs, slides e documentos organizados por turma.</p>
                     </header>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {/* Upload Form */}
@@ -797,9 +797,9 @@ export const TeacherDashboard: React.FC = () => {
                         <div className="md:col-span-2">
                              <div className="space-y-4">
                                  {materials.length === 0 ? (
-                                     <div className="bg-white border-2 border-dashed border-gray-300 rounded-xl p-12 text-center">
-                                         <FolderOpen size={48} className="mx-auto text-gray-300 mb-4" />
-                                         <p className="text-gray-500 font-medium">Nenhum material enviado ainda.</p>
+                                     <div className="bg-white/10 backdrop-blur border border-white/10 rounded-xl p-12 text-center">
+                                         <FolderOpen size={48} className="mx-auto text-gray-400 mb-4" />
+                                         <p className="text-gray-300 font-medium">Nenhum material enviado ainda.</p>
                                      </div>
                                  ) : (
                                      materials.map(material => (
@@ -850,13 +850,12 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
             
-            {/* ... Resto do código (Plans, Create, etc.) mantido igual ... */}
             {/* VIEW: LESSON PLANS */}
             {activeTab === 'plans' && (
                 <div className="flex-1 overflow-y-auto p-8 animate-in fade-in slide-in-from-right-4 duration-300">
                     <header className="mb-8">
-                        <h1 className="text-3xl font-bold text-gray-800">Planejamento de Aula</h1>
-                        <p className="text-gray-500">Organize suas aulas e envie o planejamento para a coordenação.</p>
+                        <h1 className="text-3xl font-bold text-white">Planejamento de Aula</h1>
+                        <p className="text-gray-400">Organize suas aulas e envie o planejamento para a coordenação.</p>
                     </header>
                     {/* (Existing Plans Code) */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -987,7 +986,7 @@ export const TeacherDashboard: React.FC = () => {
                         
                         {/* HISTORICO */}
                         <div className="lg:col-span-1">
-                            <h3 className="font-bold text-gray-700 mb-4">Meus Planejamentos</h3>
+                            <h3 className="font-bold text-white mb-4">Meus Planejamentos</h3>
                             <div className="space-y-3 max-h-[600px] overflow-y-auto">
                                 {lessonPlans.map(plan => (
                                     <div key={plan.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
@@ -1002,7 +1001,7 @@ export const TeacherDashboard: React.FC = () => {
                                     </div>
                                 ))}
                                 {lessonPlans.length === 0 && (
-                                    <p className="text-gray-400 text-center text-sm py-4">Nenhum planejamento salvo.</p>
+                                    <p className="text-gray-300 text-center text-sm py-4 bg-white/5 rounded-lg border border-white/10">Nenhum planejamento salvo.</p>
                                 )}
                             </div>
                         </div>
@@ -1012,13 +1011,13 @@ export const TeacherDashboard: React.FC = () => {
 
             {/* VIEW: CREATE/EDIT REQUEST */}
             {activeTab === 'create' && (
-                <div className="flex-1 flex flex-col h-full bg-gray-50">
+                <div className="flex-1 flex flex-col h-full bg-transparent">
                     
                     {/* SELECTION SCREEN */}
                     {creationMode === 'none' && (
                         <div className="flex-1 flex flex-col items-center justify-center p-8 animate-in fade-in zoom-in-95 duration-300">
                              <div className="max-w-4xl w-full">
-                                 <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center">Como deseja solicitar sua impressão?</h2>
+                                 <h2 className="text-3xl font-bold text-white mb-8 text-center">Como deseja solicitar sua impressão?</h2>
                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                      {/* Option A: Direct Upload */}
                                      <button 
@@ -1057,10 +1056,10 @@ export const TeacherDashboard: React.FC = () => {
                     {creationMode === 'upload' && (
                          <div className="max-w-3xl mx-auto w-full p-8 animate-in fade-in slide-in-from-bottom-4">
                              <div className="flex items-center gap-4 mb-8">
-                                 <button onClick={() => setCreationMode('none')} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-                                     <ArrowLeft size={24} className="text-gray-600" />
+                                 <button onClick={() => setCreationMode('none')} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white">
+                                     <ArrowLeft size={24} />
                                  </button>
-                                 <h2 className="text-2xl font-bold text-gray-800">Solicitação de Impressão (Envio Rápido)</h2>
+                                 <h2 className="text-2xl font-bold text-white">Solicitação de Impressão (Envio Rápido)</h2>
                              </div>
 
                              <Card className="space-y-6">

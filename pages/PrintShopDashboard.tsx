@@ -245,7 +245,7 @@ export const PrintShopDashboard: React.FC = () => {
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
         <button
             onClick={() => setActiveTab(id as any)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-500 hover:bg-white'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
         >
             <Icon size={18} />
             <span>{label}</span>
@@ -268,17 +268,17 @@ export const PrintShopDashboard: React.FC = () => {
         : plans;
 
     return (
-        <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-gray-50">
+        <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
             
             {/* SIDEBAR */}
-            <div className="w-64 bg-gray-50 border-r border-gray-200 p-6 flex flex-col h-full z-20">
+            <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
                 <div className="mb-6">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Painel Escolar</p>
                     <SidebarItem id="exams" label="Gráfica / Impressão" icon={Printer} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
                     <SidebarItem id="schedule" label="Quadro de Horários" icon={Calendar} />
                     <SidebarItem id="planning" label="Planejamento" icon={BookOpen} />
-                    <div className="my-4 border-t border-gray-200"></div>
+                    <div className="my-4 border-t border-white/10"></div>
                     <SidebarItem id="config" label="Configurações & TV" icon={Settings} />
                 </div>
             </div>
@@ -291,19 +291,19 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="flex justify-between items-center mb-8">
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Printer className="text-blue-600"/> Central de Cópias</h1>
-                                <p className="text-gray-500">Gerenciamento de solicitações de impressão</p>
+                                <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Printer className="text-red-500"/> Central de Cópias</h1>
+                                <p className="text-gray-400">Gerenciamento de solicitações de impressão</p>
                             </div>
-                            <Button onClick={loadExams} variant="outline" size="sm"><Loader2 size={16} className={isLoading ? "animate-spin" : ""}/> Atualizar</Button>
+                            <Button onClick={loadExams} variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10"><Loader2 size={16} className={isLoading ? "animate-spin" : ""}/> Atualizar</Button>
                         </header>
 
-                        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between">
+                        <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between">
                             <div className="flex gap-2">
                                 {['ALL', 'PENDING', 'IN_PROGRESS', 'COMPLETED'].map(s => (
                                     <button 
                                         key={s} 
                                         onClick={() => setExamFilter(s as any)}
-                                        className={`px-3 py-1 rounded-md text-xs font-bold ${examFilter === s ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
+                                        className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${examFilter === s ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                                     >
                                         {s === 'ALL' ? 'Todos' : s === 'PENDING' ? 'Pendentes' : s === 'IN_PROGRESS' ? 'Em Produção' : 'Concluídos'}
                                     </button>
@@ -312,7 +312,7 @@ export const PrintShopDashboard: React.FC = () => {
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                                 <input 
-                                    className="pl-9 pr-4 py-2 border rounded-lg text-sm w-64" 
+                                    className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-64 bg-gray-50 focus:bg-white transition-colors" 
                                     placeholder="Buscar por título ou professor..."
                                     value={examSearch}
                                     onChange={e => setExamSearch(e.target.value)}
@@ -347,7 +347,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
-                            {filteredExams.length === 0 && <p className="text-center text-gray-500 py-10">Nenhum pedido encontrado.</p>}
+                            {filteredExams.length === 0 && <div className="bg-white/10 backdrop-blur rounded-xl p-10 text-center border border-white/20 text-gray-300">Nenhum pedido encontrado.</div>}
                         </div>
                     </div>
                 )}
@@ -357,8 +357,8 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="flex justify-between items-center mb-8">
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-blue-600"/> Gestão de Alunos</h1>
-                                <p className="text-gray-500">Cadastro e controle de fotos para reconhecimento facial</p>
+                                <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Users className="text-red-500"/> Gestão de Alunos</h1>
+                                <p className="text-gray-400">Cadastro e controle de fotos para reconhecimento facial</p>
                             </div>
                             <Button onClick={() => { setEditingStudent(null); setStudentName(''); setStudentClassId(CLASSES[0].id); setShowStudentForm(true); }}>
                                 <Plus size={16} className="mr-2"/> Novo Aluno
@@ -367,7 +367,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                         {showStudentForm && (
                             <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-lg mb-6 animate-in slide-in-from-top-4">
-                                <h3 className="font-bold text-lg mb-4">{editingStudent ? 'Editar Aluno' : 'Cadastrar Novo Aluno'}</h3>
+                                <h3 className="font-bold text-lg mb-4 text-gray-800">{editingStudent ? 'Editar Aluno' : 'Cadastrar Novo Aluno'}</h3>
                                 <form onSubmit={handleSaveStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="col-span-2 md:col-span-1">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
@@ -435,8 +435,8 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'schedule' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8">
-                            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Layout className="text-blue-600"/> Quadro de Horários</h1>
-                            <p className="text-gray-500">Edição da grade exibida no painel público</p>
+                            <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Layout className="text-red-500"/> Quadro de Horários</h1>
+                            <p className="text-gray-400">Edição da grade exibida no painel público</p>
                         </header>
 
                         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
@@ -513,14 +513,14 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'planning' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8">
-                            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><BookOpen className="text-blue-600"/> Planejamentos de Aula</h1>
-                            <p className="text-gray-500">Acompanhamento dos envios dos professores</p>
+                            <h1 className="text-3xl font-bold text-white flex items-center gap-2"><BookOpen className="text-red-500"/> Planejamentos de Aula</h1>
+                            <p className="text-gray-400">Acompanhamento dos envios dos professores</p>
                         </header>
 
                         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-                            <button onClick={() => setPlanFilterClass('')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${planFilterClass === '' ? 'bg-blue-600 text-white' : 'bg-white border text-gray-600'}`}>Todos</button>
+                            <button onClick={() => setPlanFilterClass('')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${planFilterClass === '' ? 'bg-red-600 text-white shadow-md' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>Todos</button>
                             {CLASSES.map(c => (
-                                <button key={c.id} onClick={() => setPlanFilterClass(c.name)} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${planFilterClass === c.name ? 'bg-blue-600 text-white' : 'bg-white border text-gray-600'}`}>{c.name}</button>
+                                <button key={c.id} onClick={() => setPlanFilterClass(c.name)} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${planFilterClass === c.name ? 'bg-red-600 text-white shadow-md' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>{c.name}</button>
                             ))}
                         </div>
 
@@ -563,7 +563,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
-                            {filteredPlans.length === 0 && <p className="col-span-3 text-center text-gray-400 py-10">Nenhum planejamento encontrado.</p>}
+                            {filteredPlans.length === 0 && <div className="col-span-3 text-center text-gray-300 py-10 bg-white/10 backdrop-blur rounded-xl border border-white/20">Nenhum planejamento encontrado.</div>}
                         </div>
                     </div>
                 )}
@@ -572,8 +572,8 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'config' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
                         <header className="mb-8">
-                            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Tv className="text-blue-600"/> Configuração da TV</h1>
-                            <p className="text-gray-500">Controle de avisos e exibição pública</p>
+                            <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Tv className="text-red-500"/> Configuração da TV</h1>
+                            <p className="text-gray-400">Controle de avisos e exibição pública</p>
                         </header>
 
                         <div className="bg-white p-8 rounded-xl border border-gray-200 shadow-lg relative overflow-hidden">
@@ -624,7 +624,7 @@ export const PrintShopDashboard: React.FC = () => {
                              </div>
 
                              <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
-                                 <Button onClick={handleSaveConfig} className="bg-blue-600 hover:bg-blue-700 shadow-lg"><Save size={18} className="mr-2"/> Salvar Configuração</Button>
+                                 <Button onClick={handleSaveConfig} className="bg-red-600 hover:bg-red-700 shadow-lg text-white"><Save size={18} className="mr-2"/> Salvar Configuração</Button>
                              </div>
                         </div>
                     </div>

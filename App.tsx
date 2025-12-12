@@ -65,7 +65,7 @@ const AppContent: React.FC = () => {
   // VERIFICAÇÃO DE MÚLTIPLOS ROLES
   if (user?.roles && user.roles.length > 1 && !sessionRole) {
       return (
-          <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-4">
               <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-gray-200 shadow-2xl text-center">
                   <img 
                     src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
@@ -117,10 +117,10 @@ const AppContent: React.FC = () => {
 
   const activeRole = sessionRole || user?.role;
 
-  // Renderização Padrão (Tema Claro para Painéis Administrativos)
+  // Renderização Padrão (Fundo Transparente para mostrar gradiente global)
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
-      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <div className="min-h-screen bg-transparent text-gray-100 font-sans">
+      <nav className="bg-black/30 backdrop-blur-md shadow-lg border-b border-white/10 sticky top-0 z-50 transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-20">
             <div className="flex items-center gap-4">
@@ -129,18 +129,18 @@ const AppContent: React.FC = () => {
                 alt="Logo" 
                 className="h-14 w-auto object-contain"
               />
-              <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
-              <span className="text-lg font-bold text-gray-700 hidden sm:block">
+              <div className="h-8 w-px bg-white/10 hidden sm:block"></div>
+              <span className="text-lg font-bold text-gray-200 hidden sm:block">
                 {activeRole === UserRole.TEACHER ? 'Portal do Professor' : activeRole === UserRole.HR ? 'Gestão de RH' : 'Painel da Escola'}
               </span>
             </div>
             <div className="flex items-center gap-4">
-               <span className="text-sm text-gray-500 hidden sm:block font-medium">{user?.email}</span>
+               <span className="text-sm text-gray-300 hidden sm:block font-medium">{user?.email}</span>
                
                {user?.roles && user.roles.length > 1 && (
                    <button 
                     onClick={() => setSessionRole(null)}
-                    className="p-2 rounded-md text-gray-400 hover:text-brand-600 hover:bg-gray-100 transition-colors hidden sm:block"
+                    className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-white/10 transition-colors hidden sm:block"
                     title="Trocar de Painel"
                    >
                        <LayoutGrid size={20} />
@@ -149,7 +149,7 @@ const AppContent: React.FC = () => {
 
                <button 
                 onClick={logout}
-                className="p-2 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                className="p-2 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 title="Sair"
                >
                  <LogOut size={20} />
