@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStudents, logAttendance } from '../services/firebaseService';
 import { Student, AttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban, ShieldAlert } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -24,6 +24,7 @@ export const AttendanceTerminal: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [lastLog, setLastLog] = useState<AttendanceLog | null>(null);
     const [statusMessage, setStatusMessage] = useState<string>('');
+    const [statusSubMessage, setStatusSubMessage] = useState<string>(''); // Novo estado para mensagem secundária
     const [statusType, setStatusType] = useState<'success' | 'error' | 'warning' | 'waiting'>('waiting');
     
     // AI State
@@ -222,12 +223,11 @@ export const AttendanceTerminal: React.FC = () => {
                         setTimeout(() => { 
                             processingRef.current = false; 
                             setIsProcessing(false);
-                        }, 4000); // Increased cooldown
+                        }, 5000); // Increased cooldown for message reading
                     }
                 }
             } catch (err) {
                 // Silently handle transient detection errors
-                // console.error("Detection error loop", err);
             }
         };
 
@@ -256,21 +256,26 @@ export const AttendanceTerminal: React.FC = () => {
             const AFTERNOON_START = 12 * 60 + 30; // 12:30
             const AFTERNOON_END = 19 * 60;       // 19:00
 
+            // Limites de Atraso
+            const MORNING_LATE_LIMIT = 7 * 60 + 20; // 07:20 = 440 minutos
+            const AFTERNOON_LATE_LIMIT = 13 * 60 + 15; // 13:15 = 795 minutos
+
             let isShiftValid = false;
+            let isLate = false;
 
             if (classConfig) {
                 if (classConfig.shift === 'morning') {
                     if (currentMinutes >= MORNING_START && currentMinutes <= MORNING_END) {
                         isShiftValid = true;
+                        if (currentMinutes > MORNING_LATE_LIMIT) isLate = true;
                     }
                 } else if (classConfig.shift === 'afternoon') {
                     if (currentMinutes >= AFTERNOON_START && currentMinutes <= AFTERNOON_END) {
                         isShiftValid = true;
+                        if (currentMinutes > AFTERNOON_LATE_LIMIT) isLate = true;
                     }
                 }
             } else {
-                // Se a turma não estiver na config, permite (fallback) ou bloqueia. 
-                // Assumindo permissão para evitar bloqueio indevido em turmas não mapeadas
                 isShiftValid = true; 
             }
 
@@ -288,6 +293,7 @@ export const AttendanceTerminal: React.FC = () => {
                 });
                 setStatusType('error');
                 setStatusMessage('FORA DO TURNO');
+                setStatusSubMessage('');
                 playSound('error');
                 setTimeout(() => resetState(), 4000);
                 return;
@@ -308,38 +314,27 @@ export const AttendanceTerminal: React.FC = () => {
 
             const success = await logAttendance(log);
 
+            setLastLog(log);
+
             if (success) {
-                setLastLog(log);
-                setStatusType('success');
-                setStatusMessage('PRESENÇA CONFIRMADA');
-                playSound('success');
-
-                // Lógica de Atraso
-                const morningLimit = 7 * 60 + 20; // 07:20
-                const afternoonLimit = 13 * 60 + 15; // 13:15
-                
-                let isLate = false;
-                if (classConfig?.shift === 'morning') {
-                    if (currentMinutes > morningLimit) isLate = true;
-                } else if (classConfig?.shift === 'afternoon') {
-                    if (currentMinutes > afternoonLimit) isLate = true;
-                }
-
+                // Se foi registrado com sucesso, verifica se é atraso
                 if (isLate) {
-                    setTimeout(() => {
-                        setStatusType('warning');
-                        setStatusMessage('REGISTRADO COM ATRASO');
-                        playSound('error'); // Use notification sound
-                        setTimeout(() => resetState(), 4000);
-                    }, 1500);
+                    setStatusType('error'); // Vermelho para alerta
+                    setStatusMessage('IR À COORDENAÇÃO');
+                    setStatusSubMessage('Realizar justificativa de atraso');
+                    playSound('error'); // Som de alerta
+                    setTimeout(() => resetState(), 8000); // 8 segundos para ler o aviso
                 } else {
+                    setStatusType('success');
+                    setStatusMessage('PRESENÇA CONFIRMADA');
+                    setStatusSubMessage('');
+                    playSound('success');
                     setTimeout(() => resetState(), 3000);
                 }
-
             } else {
-                setLastLog(log);
-                setStatusType('error');
+                setStatusType('warning'); // Amarelo se já bateu
                 setStatusMessage('ACESSO JÁ REGISTRADO');
+                setStatusSubMessage('');
                 playSound('error');
                 setTimeout(() => resetState(), 3000);
             }
@@ -350,6 +345,7 @@ export const AttendanceTerminal: React.FC = () => {
         setLastLog(null);
         setStatusType('waiting');
         setStatusMessage('');
+        setStatusSubMessage('');
         setIsProcessing(false);
     };
 
@@ -500,7 +496,7 @@ export const AttendanceTerminal: React.FC = () => {
                                     }`}>
                                         {statusType === 'success' && <CheckCircle size={20}/>}
                                         {statusType === 'warning' && <Clock size={20}/>}
-                                        {statusType === 'error' && <Ban size={20}/>}
+                                        {statusType === 'error' && <ShieldAlert size={20}/>}
                                     </div>
                                 </div>
 
@@ -511,12 +507,17 @@ export const AttendanceTerminal: React.FC = () => {
                                 </p>
 
                                 {/* Status Badge */}
-                                <div className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-[0.15em] flex items-center justify-center gap-2 ${
+                                <div className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-[0.15em] flex flex-col items-center justify-center gap-1 ${
                                     statusType === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 
                                     statusType === 'warning' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' : 
                                     'bg-red-500/10 text-red-500 border border-red-500/20'
                                 }`}>
                                     {statusMessage}
+                                    {statusSubMessage && (
+                                        <span className="text-[10px] normal-case font-normal tracking-normal opacity-80">
+                                            {statusSubMessage}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>

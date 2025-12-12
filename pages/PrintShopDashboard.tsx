@@ -51,7 +51,8 @@ import {
   School,
   ClipboardCheck,
   CalendarDays,
-  ArrowRight
+  ArrowRight,
+  FileSpreadsheet
 } from 'lucide-react';
 
 // --- CONSTANTES DE HORÁRIOS E TURMAS (Mesmos do PublicSchedule) ---
@@ -216,6 +217,27 @@ export const PrintShopDashboard: React.FC = () => {
         const data = await getAttendanceLogs(attendanceDate);
         setAttendanceLogs(data);
         setIsLoading(false);
+    };
+
+    const handleExportAttendanceReport = () => {
+        const headers = ["Data", "Horário", "Nome do Aluno", "Turma", "Status"];
+        const csvContent = [
+            headers.join(","),
+            ...attendanceLogs.map(log => {
+                const date = new Date(log.timestamp);
+                const time = date.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+                return [`"${log.dateString}"`, `"${time}"`, `"${log.studentName}"`, `"${log.className}"`, `"PRESENTE"`].join(",");
+            })
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `frequencia_cemal_${attendanceDate}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     // --- ACTIONS: SCHEDULE ---
@@ -445,6 +467,9 @@ export const PrintShopDashboard: React.FC = () => {
                                     onChange={(e) => setAttendanceDate(e.target.value)}
                                     className="bg-transparent border-none text-white font-bold text-sm focus:ring-0 p-2"
                                 />
+                                <Button size="sm" onClick={handleExportAttendanceReport} className="ml-2 bg-green-600 hover:bg-green-700 text-white font-bold">
+                                    <FileSpreadsheet size={16} className="mr-2"/> Baixar Relatório
+                                </Button>
                             </div>
                         </header>
 
