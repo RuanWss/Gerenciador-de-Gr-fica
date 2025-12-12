@@ -13,7 +13,8 @@ import {
     saveScheduleEntry,
     getLessonPlans,
     listenToSystemConfig,
-    updateSystemConfig
+    updateSystemConfig,
+    getAttendanceLogs
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -21,7 +22,8 @@ import {
     Student, 
     ScheduleEntry, 
     LessonPlan, 
-    SystemConfig 
+    SystemConfig,
+    AttendanceLog
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -45,7 +47,11 @@ import {
   Upload,
   Layout,
   GraduationCap,
-  Megaphone
+  Megaphone,
+  School,
+  ClipboardCheck,
+  CalendarDays,
+  ArrowRight
 } from 'lucide-react';
 
 // --- CONSTANTES DE HORÁRIOS E TURMAS (Mesmos do PublicSchedule) ---
@@ -80,7 +86,7 @@ const CLASSES = [
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'schedule' | 'planning' | 'config'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'classes' | 'attendance' | 'schedule' | 'planning' | 'config'>('exams');
     const [isLoading, setIsLoading] = useState(false);
 
     // --- STATES: EXAMS ---
@@ -97,6 +103,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [studentClassId, setStudentClassId] = useState('');
     const [studentPhoto, setStudentPhoto] = useState<File | null>(null);
 
+    // --- STATES: ATTENDANCE ---
+    const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+
     // --- STATES: SCHEDULE ---
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     const [selectedScheduleClass, setSelectedScheduleClass] = useState(CLASSES[0].id);
@@ -112,7 +122,8 @@ export const PrintShopDashboard: React.FC = () => {
     // --- LOAD DATA ---
     useEffect(() => {
         if (activeTab === 'exams') loadExams();
-        if (activeTab === 'students') loadStudents();
+        if (activeTab === 'students' || activeTab === 'classes') loadStudents();
+        if (activeTab === 'attendance') loadAttendance();
         if (activeTab === 'schedule') loadSchedule();
         if (activeTab === 'planning') loadPlans();
         if (activeTab === 'config') {
@@ -120,6 +131,12 @@ export const PrintShopDashboard: React.FC = () => {
             return () => unsub();
         }
     }, [activeTab]);
+
+    useEffect(() => {
+        if (activeTab === 'attendance') {
+            loadAttendance();
+        }
+    }, [attendanceDate]);
 
     // --- ACTIONS: EXAMS ---
     const loadExams = async () => {
@@ -192,6 +209,14 @@ export const PrintShopDashboard: React.FC = () => {
         loadStudents();
     };
 
+    // --- ACTIONS: ATTENDANCE ---
+    const loadAttendance = async () => {
+        setIsLoading(true);
+        const data = await getAttendanceLogs(attendanceDate);
+        setAttendanceLogs(data);
+        setIsLoading(false);
+    };
+
     // --- ACTIONS: SCHEDULE ---
     const loadSchedule = async () => {
         const data = await getFullSchedule();
@@ -218,12 +243,10 @@ export const PrintShopDashboard: React.FC = () => {
             professor: field === 'professor' ? value : (existingEntry?.professor || '')
         };
 
-        // Update local state immediately for UI responsiveness
         const newSchedule = schedule.filter(s => s.id !== newEntry.id);
         newSchedule.push(newEntry);
         setSchedule(newSchedule);
 
-        // Save to DB (debounce could be better here, but direct save for simplicity)
         await saveScheduleEntry(newEntry);
     };
 
@@ -239,6 +262,16 @@ export const PrintShopDashboard: React.FC = () => {
     const handleSaveConfig = async () => {
         await updateSystemConfig(config);
         alert("Configurações atualizadas com sucesso!");
+    };
+
+    // --- HELPERS ---
+    const getStudentCountByClass = (classId: string) => {
+        return students.filter(s => s.classId === classId).length;
+    };
+
+    const navigateToClassStudents = (classId: string) => {
+        setStudentSearch(CLASSES.find(c => c.id === classId)?.name || '');
+        setActiveTab('students');
     };
 
     // --- RENDER HELPERS ---
@@ -275,7 +308,9 @@ export const PrintShopDashboard: React.FC = () => {
                 <div className="mb-6">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Painel Escolar</p>
                     <SidebarItem id="exams" label="Gráfica / Impressão" icon={Printer} />
+                    <SidebarItem id="classes" label="Gestão de Turmas" icon={School} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
+                    <SidebarItem id="attendance" label="Frequência" icon={ClipboardCheck} />
                     <SidebarItem id="schedule" label="Quadro de Horários" icon={Calendar} />
                     <SidebarItem id="planning" label="Planejamento" icon={BookOpen} />
                     <div className="my-4 border-t border-white/10"></div>
@@ -348,6 +383,123 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                             ))}
                             {filteredExams.length === 0 && <div className="bg-white/10 backdrop-blur rounded-xl p-10 text-center border border-white/20 text-gray-300">Nenhum pedido encontrado.</div>}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB: CLASSES (GESTÃO DE TURMAS) --- */}
+                {activeTab === 'classes' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8">
+                            <h1 className="text-3xl font-bold text-white flex items-center gap-2"><School className="text-red-500"/> Gestão de Turmas</h1>
+                            <p className="text-gray-400">Visão geral das salas e alunos matriculados</p>
+                        </header>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {CLASSES.map(cls => (
+                                <div key={cls.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all group relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                                        <School size={64} className="text-gray-800" />
+                                    </div>
+                                    
+                                    <h3 className="text-xl font-bold text-gray-800 mb-1">{cls.name}</h3>
+                                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold uppercase mb-4 ${cls.shift === 'morning' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                                        {cls.shift === 'morning' ? 'Matutino' : 'Vespertino'}
+                                    </span>
+
+                                    <div className="flex items-center gap-2 mb-6">
+                                        <Users size={18} className="text-gray-400" />
+                                        <span className="text-2xl font-black text-gray-700">{getStudentCountByClass(cls.id)}</span>
+                                        <span className="text-xs text-gray-500 font-bold uppercase mt-1">Alunos</span>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => navigateToClassStudents(cls.id)}
+                                        className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        Ver Lista de Alunos <ArrowRight size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB: ATTENDANCE (FREQUÊNCIA) --- */}
+                {activeTab === 'attendance' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="flex justify-between items-center mb-8">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white flex items-center gap-2"><ClipboardCheck className="text-red-500"/> Frequência Escolar</h1>
+                                <p className="text-gray-400">Registros de entrada dos alunos via reconhecimento facial</p>
+                            </div>
+                            <div className="flex items-center gap-2 bg-white/10 backdrop-blur border border-white/20 p-1 rounded-lg">
+                                <CalendarDays className="text-gray-300 ml-2" size={18} />
+                                <input 
+                                    type="date" 
+                                    value={attendanceDate} 
+                                    onChange={(e) => setAttendanceDate(e.target.value)}
+                                    className="bg-transparent border-none text-white font-bold text-sm focus:ring-0 p-2"
+                                />
+                            </div>
+                        </header>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div className="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                                    <Clock size={16} /> Registros do Dia
+                                </h3>
+                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">
+                                    {attendanceLogs.length} Presenças
+                                </span>
+                            </div>
+                            
+                            {attendanceLogs.length === 0 ? (
+                                <div className="p-12 text-center text-gray-400">
+                                    <ClipboardCheck size={48} className="mx-auto mb-4 opacity-20" />
+                                    <p>Nenhum registro de frequência encontrado para esta data.</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-gray-100 text-gray-500 border-b border-gray-200 uppercase text-xs">
+                                            <tr>
+                                                <th className="p-4">Horário</th>
+                                                <th className="p-4">Aluno</th>
+                                                <th className="p-4">Turma</th>
+                                                <th className="p-4 text-center">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {attendanceLogs.map((log) => (
+                                                <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="p-4 font-mono font-bold text-blue-600">
+                                                        {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                                    </td>
+                                                    <td className="p-4 font-bold text-gray-800 flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
+                                                            {log.studentPhotoUrl ? (
+                                                                <img src={log.studentPhotoUrl} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <Users className="p-1.5 text-gray-400 w-full h-full" />
+                                                            )}
+                                                        </div>
+                                                        {log.studentName}
+                                                    </td>
+                                                    <td className="p-4 text-gray-500">
+                                                        {log.className}
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200">
+                                                            PRESENTE
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
