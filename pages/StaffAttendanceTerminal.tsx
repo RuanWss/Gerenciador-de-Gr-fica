@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database, RefreshCw } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -72,10 +72,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
 
     // 3. Listen to Staff Data (Tempo Real)
     useEffect(() => {
-        // Inscreve no listener do Firestore
         const unsubscribe = listenToStaffMembers((newStaffList) => {
             console.log("Lista de funcionários atualizada:", newStaffList.length);
-            const activeStaff = newStaffList.filter(s => s.active); // Apenas ativos
+            // Filtra apenas quem tem foto e está ativo
+            const activeStaff = newStaffList.filter(s => s.active); 
             setStaff(activeStaff);
         });
 
@@ -87,10 +87,21 @@ export const StaffAttendanceTerminal: React.FC = () => {
         if (modelsLoaded && staff.length > 0) {
             processStaffFaces(staff);
         } else if (modelsLoaded && staff.length === 0) {
-            setLoadingMessage(''); // Limpa msg se carregou mas não tem ninguém
+            setLoadingMessage(''); 
             setLabeledDescriptors([]);
         }
     }, [modelsLoaded, staff]);
+
+    // Função auxiliar para carregar imagem com CORS anônimo (CRUCIAL PARA FIREBASE)
+    const loadImage = (url: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous'; // Permite que a IA leia os pixels
+            img.onload = () => resolve(img);
+            img.onerror = (e) => reject(e);
+            img.src = url;
+        });
+    };
 
     // Helper: Process Student Photos (Create Descriptors)
     const processStaffFaces = async (staffList: StaffMember[]) => {
@@ -101,29 +112,34 @@ export const StaffAttendanceTerminal: React.FC = () => {
         
         const staffWithPhoto = staffList.filter(s => s.photoUrl);
         let processedCount = 0;
+        let errorCount = 0;
 
         for (const member of staffWithPhoto) {
             if (!member.photoUrl) continue;
             try {
-                const img = await faceApi.fetchImage(member.photoUrl);
+                // Usa o carregador seguro com CORS
+                const img = await loadImage(member.photoUrl);
                 const detection = await faceApi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
                 
                 if (detection) {
                     labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(member.id, [detection.descriptor]));
                 }
                 processedCount++;
-                // Atualiza progresso visualmente apenas se houver muitos
                 if (staffWithPhoto.length > 5) {
                      setLoadingMessage(`Sincronizando: ${Math.round((processedCount / staffWithPhoto.length) * 100)}%`);
                 }
             } catch (err) {
-                console.warn(`Erro ao processar foto de ${member.name}`, err);
+                console.warn(`Erro ao processar foto de ${member.name}:`, err);
+                errorCount++;
             }
         }
         
         setLabeledDescriptors(labeledDescriptorsTemp);
         setLoadingMessage('');
-        console.log("Biometria atualizada para", labeledDescriptorsTemp.length, "funcionários.");
+        
+        if (errorCount > 0) {
+            console.log(`Finalizado com ${errorCount} erros de leitura de imagem.`);
+        }
     };
 
     // 5. Start Camera
@@ -214,7 +230,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
         const intervalId = setInterval(detect, 500);
 
         return () => clearInterval(intervalId);
-    }, [modelsLoaded, isVideoReady, labeledDescriptors]); // Recria o intervalo quando as dependências mudam
+    }, [modelsLoaded, isVideoReady, labeledDescriptors]); 
 
     const processAttendance = async (staffId: string) => {
         const member = staff.find(s => s.id === staffId);
@@ -233,7 +249,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 dateString: dateString
             };
 
-            // Chama o logStaffAttendance que verifica a regra de 2 minutos
             const result = await logStaffAttendance(log);
 
             if (result === 'success') {
@@ -308,12 +323,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg border border-white/5">
-                        {/* Indicador de Status do Banco */}
                         <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${labeledDescriptors.length > 0 ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-500'}`} title="Funcionários com biometria carregada">
                             <Database size={14} />
                             {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}
                         </div>
-                        
                          <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" title="Sair do Terminal">
                             <LogOut size={18} />
                         </button>
@@ -346,12 +359,30 @@ export const StaffAttendanceTerminal: React.FC = () => {
                             </div>
                         )}
 
-                        {/* AVISO DE BANCO VAZIO */}
-                        {!loadingMessage && modelsLoaded && labeledDescriptors.length === 0 && (
+                        {/* AVISO DE BANCO VAZIO - CASO 1: SEM FUNCIONÁRIOS */}
+                        {!loadingMessage && modelsLoaded && staff.length === 0 && (
                              <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
                                 <AlertTriangle size={64} className="text-yellow-500 mb-6 animate-bounce" />
-                                <h2 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Faces Vazio</h2>
-                                <p className="text-gray-400 max-w-md text-center">Nenhum funcionário com foto foi encontrado no sistema. Cadastre as fotos no Painel de RH para ativar o reconhecimento.</p>
+                                <h2 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Dados Vazio</h2>
+                                <p className="text-gray-400 max-w-md text-center">Nenhum funcionário cadastrado ou ativo.</p>
+                            </div>
+                        )}
+
+                        {/* AVISO DE BANCO VAZIO - CASO 2: FUNCIONÁRIOS EXISTEM, MAS SEM DESCRITORES (ERRO DE FOTO) */}
+                        {!loadingMessage && modelsLoaded && staff.length > 0 && labeledDescriptors.length === 0 && (
+                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+                                <AlertTriangle size={64} className="text-red-500 mb-6 animate-pulse" />
+                                <h2 className="text-2xl font-bold text-red-500 tracking-widest uppercase mb-2">Erro de Biometria</h2>
+                                <p className="text-gray-400 max-w-md text-center mb-4">
+                                    {staff.length} funcionários encontrados, mas nenhuma foto pôde ser processada.
+                                    Verifique se as fotos são rostos nítidos e se o sistema tem permissão de acesso.
+                                </p>
+                                <button 
+                                    onClick={() => processStaffFaces(staff)}
+                                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold uppercase tracking-wider flex items-center gap-2 pointer-events-auto"
+                                >
+                                    <RefreshCw size={18} /> Tentar Novamente
+                                </button>
                             </div>
                         )}
 

@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getStudents, logAttendance } from '../services/firebaseService';
+import { listenToStudents, logAttendance } from '../services/firebaseService';
 import { Student, AttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban, ShieldAlert } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban, ShieldAlert, Database, RefreshCw } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -24,7 +24,7 @@ export const AttendanceTerminal: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [lastLog, setLastLog] = useState<AttendanceLog | null>(null);
     const [statusMessage, setStatusMessage] = useState<string>('');
-    const [statusSubMessage, setStatusSubMessage] = useState<string>(''); // Novo estado para mensagem secundária
+    const [statusSubMessage, setStatusSubMessage] = useState<string>('');
     const [statusType, setStatusType] = useState<'success' | 'error' | 'warning' | 'waiting'>('waiting');
     
     // AI State
@@ -32,6 +32,7 @@ export const AttendanceTerminal: React.FC = () => {
     const [labeledDescriptors, setLabeledDescriptors] = useState<any[]>([]);
     const [loadingMessage, setLoadingMessage] = useState('Inicializando Sistema...');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isVideoReady, setIsVideoReady] = useState(false);
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,10 +44,9 @@ export const AttendanceTerminal: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // 2. Load Students & AI Models
+    // 2. Load AI Models (Apenas uma vez)
     useEffect(() => {
         const loadModels = async () => {
-            // Handle FaceAPI import (ESM wrapper check)
             const faceApi = (faceapi as any).default || faceapi;
 
             if (!faceApi || !faceApi.nets) {
@@ -55,15 +55,12 @@ export const AttendanceTerminal: React.FC = () => {
                 return;
             }
 
-            // Otimização: Verificar se os modelos já estão carregados na memória global do face-api
             if (
                 faceApi.nets.ssdMobilenetv1.isLoaded && 
                 faceApi.nets.faceLandmark68Net.isLoaded && 
                 faceApi.nets.faceRecognitionNet.isLoaded
             ) {
-                console.log("Modelos FaceAPI já carregados. Pulando download.");
                 setModelsLoaded(true);
-                setLoadingMessage('Sincronizando Banco de Dados...');
                 return;
             }
 
@@ -76,38 +73,47 @@ export const AttendanceTerminal: React.FC = () => {
                     faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
                 setModelsLoaded(true);
-                setLoadingMessage('Sincronizando Banco de Dados...');
             } catch (error) {
                 console.error("Erro ao carregar modelos:", error);
                 setLoadingMessage('Erro de Conexão com IA');
             }
         };
-
-        const fetchStudents = async () => {
-            try {
-                const list = await getStudents();
-                setStudents(list);
-                return list;
-            } catch (error) {
-                console.error("Erro ao buscar alunos:", error);
-                return [];
-            }
-        };
-
-        const init = async () => {
-            await loadModels();
-            const studentList = await fetchStudents();
-            if (studentList.length > 0) {
-                await processStudentFaces(studentList);
-            } else {
-                setLoadingMessage('Nenhum aluno encontrado');
-            }
-        };
-
-        init();
+        loadModels();
     }, []);
 
-    // 3. Process Student Photos (Create Descriptors)
+    // 3. Listen to Students Data (Tempo Real)
+    useEffect(() => {
+        // Inscreve no listener do Firestore
+        const unsubscribe = listenToStudents((newStudents) => {
+            console.log("Lista de alunos atualizada:", newStudents.length);
+            setStudents(newStudents);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // 4. Process Faces (Reage a mudanças na lista ou nos modelos)
+    useEffect(() => {
+        if (modelsLoaded && students.length > 0) {
+            processStudentFaces(students);
+        } else if (modelsLoaded && students.length === 0) {
+             setLoadingMessage('Nenhum aluno encontrado');
+             setLabeledDescriptors([]);
+        }
+    }, [modelsLoaded, students]);
+
+     // Função auxiliar para carregar imagem com CORS anônimo
+     const loadImage = (url: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous'; // Permite que a IA leia os pixels
+            img.onload = () => resolve(img);
+            img.onerror = (e) => reject(e);
+            img.src = url;
+        });
+    };
+
+    // Helper: Process Student Photos
     const processStudentFaces = async (studentList: Student[]) => {
         setLoadingMessage('Indexando Biometria...');
         
@@ -116,36 +122,37 @@ export const AttendanceTerminal: React.FC = () => {
         
         const studentsWithPhoto = studentList.filter(s => s.photoUrl);
         let processedCount = 0;
+        let errorCount = 0;
 
-        // Process in chunks to avoid UI freeze if list is huge (simplified here)
         for (const student of studentsWithPhoto) {
             if (!student.photoUrl) continue;
             try {
-                // Check if fetchImage exists (it should in ESM build)
-                if (typeof faceApi.fetchImage !== 'function') {
-                    throw new Error("faceapi.fetchImage não disponível");
-                }
-
-                const img = await faceApi.fetchImage(student.photoUrl);
+                // Usa carregador seguro
+                const img = await loadImage(student.photoUrl);
                 const detection = await faceApi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
                 
                 if (detection) {
                     labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(student.id, [detection.descriptor]));
                 }
                 processedCount++;
-                if (processedCount % 5 === 0) {
+                if (studentsWithPhoto.length > 10) {
                      setLoadingMessage(`Indexando: ${Math.round((processedCount / studentsWithPhoto.length) * 100)}%`);
                 }
             } catch (err) {
                 console.warn(`Erro ao processar foto de ${student.name}`, err);
+                errorCount++;
             }
         }
         
         setLabeledDescriptors(labeledDescriptorsTemp);
         setLoadingMessage('');
+        
+        if (errorCount > 0) {
+            console.log(`Finalizado com ${errorCount} erros de imagem.`);
+        }
     };
 
-    // 4. Start Camera
+    // 5. Start Camera
     useEffect(() => {
         let stream: MediaStream | null = null;
         const startCamera = async () => {
@@ -175,21 +182,24 @@ export const AttendanceTerminal: React.FC = () => {
         };
     }, [modelsLoaded]);
 
-    // 5. Detection Loop
-    const handleVideoPlay = () => {
+    // 6. Detection Loop
+    useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         const faceApi = (faceapi as any).default || faceapi;
 
-        if (!video || !canvas || labeledDescriptors.length === 0 || !faceApi) return;
+        // Só inicia se tudo estiver pronto
+        if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0 || !faceApi) return;
 
-        const faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55); // Adjusted threshold
+        const faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
         const displaySize = { width: video.videoWidth, height: video.videoHeight };
+        
+        // Garante que o canvas tem o tamanho do vídeo
         faceApi.matchDimensions(canvas, displaySize);
 
         const detect = async () => {
-            if (processingRef.current) return; // Prevent overlapping calls
-            if (lastLog) return; // Pause detection while showing result
+            if (processingRef.current) return; 
+            if (lastLog) return; 
 
             try {
                 const detections = await faceApi.detectAllFaces(video, new faceApi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
@@ -198,12 +208,10 @@ export const AttendanceTerminal: React.FC = () => {
 
                 const resizedDetections = faceApi.resizeResults(detections, displaySize);
                 
-                // Clear canvas
                 const ctx = canvas.getContext('2d');
-                ctx?.clearRect(0, 0, canvas.width, canvas.height);
+                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (resizedDetections.length > 0) {
-                    // Draw visual box for detected face
                     const box = resizedDetections[0].detection.box;
                     const drawBox = new faceApi.draw.DrawBox(box, { 
                         label: 'Identificando...', 
@@ -215,28 +223,24 @@ export const AttendanceTerminal: React.FC = () => {
                     const bestMatch = faceMatcher.findBestMatch(resizedDetections[0].descriptor);
                     
                     if (bestMatch.label !== 'unknown') {
-                        // Match found!
                         processingRef.current = true;
                         setIsProcessing(true);
                         await processAttendance(bestMatch.label);
-                        // Wait a bit before resuming to avoid double triggers
                         setTimeout(() => { 
                             processingRef.current = false; 
                             setIsProcessing(false);
-                        }, 5000); // Increased cooldown for message reading
+                        }, 5000); 
                     }
                 }
             } catch (err) {
-                // Silently handle transient detection errors
+                // Silently handle
             }
         };
 
-        const intervalId = setInterval(() => {
-            detect();
-        }, 500); // Check every 500ms
+        const intervalId = setInterval(detect, 500);
 
         return () => clearInterval(intervalId);
-    };
+    }, [modelsLoaded, isVideoReady, labeledDescriptors]); // Recria o intervalo quando as dependências mudam
 
     const processAttendance = async (studentId: string) => {
         const student = students.find(s => s.id === studentId);
@@ -247,18 +251,15 @@ export const AttendanceTerminal: React.FC = () => {
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
             // --- VALIDAÇÃO DE TURNO ---
-            // 1. Identificar o turno da turma do aluno
             const classConfig = CLASSES_CONFIG.find(c => c.id === student.classId);
             
-            // Definição dos horários limites (em minutos do dia)
-            const MORNING_START = 6 * 60;        // 06:00
-            const MORNING_END = 12 * 60 + 20;    // 12:20
-            const AFTERNOON_START = 12 * 60 + 30; // 12:30
-            const AFTERNOON_END = 19 * 60;       // 19:00
+            const MORNING_START = 6 * 60;
+            const MORNING_END = 12 * 60 + 20;
+            const AFTERNOON_START = 12 * 60 + 30;
+            const AFTERNOON_END = 19 * 60;
 
-            // Limites de Atraso
-            const MORNING_LATE_LIMIT = 7 * 60 + 20; // 07:20 = 440 minutos
-            const AFTERNOON_LATE_LIMIT = 13 * 60 + 15; // 13:15 = 795 minutos
+            const MORNING_LATE_LIMIT = 7 * 60 + 20;
+            const AFTERNOON_LATE_LIMIT = 13 * 60 + 15;
 
             let isShiftValid = false;
             let isLate = false;
@@ -279,7 +280,6 @@ export const AttendanceTerminal: React.FC = () => {
                 isShiftValid = true; 
             }
 
-            // Se o horário for inválido para o turno
             if (!isShiftValid) {
                 setLastLog({
                     id: '',
@@ -299,8 +299,6 @@ export const AttendanceTerminal: React.FC = () => {
                 return;
             }
 
-            // --- FIM VALIDAÇÃO DE TURNO ---
-
             const log: AttendanceLog = {
                 id: '',
                 studentId: student.id,
@@ -317,13 +315,12 @@ export const AttendanceTerminal: React.FC = () => {
             setLastLog(log);
 
             if (success) {
-                // Se foi registrado com sucesso, verifica se é atraso
                 if (isLate) {
-                    setStatusType('error'); // Vermelho para alerta
+                    setStatusType('error');
                     setStatusMessage('IR À COORDENAÇÃO');
                     setStatusSubMessage('Realizar justificativa de atraso');
-                    playSound('error'); // Som de alerta
-                    setTimeout(() => resetState(), 8000); // 8 segundos para ler o aviso
+                    playSound('error');
+                    setTimeout(() => resetState(), 8000);
                 } else {
                     setStatusType('success');
                     setStatusMessage('PRESENÇA CONFIRMADA');
@@ -332,7 +329,7 @@ export const AttendanceTerminal: React.FC = () => {
                     setTimeout(() => resetState(), 3000);
                 }
             } else {
-                setStatusType('warning'); // Amarelo se já bateu
+                setStatusType('warning');
                 setStatusMessage('ACESSO JÁ REGISTRADO');
                 setStatusSubMessage('');
                 playSound('error');
@@ -358,7 +355,6 @@ export const AttendanceTerminal: React.FC = () => {
         audio.play().catch(e => console.log(e));
     };
 
-    // Helper for visual status colors
     const getStatusColor = () => {
         switch (statusType) {
             case 'success': return 'border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.3)]';
@@ -392,9 +388,9 @@ export const AttendanceTerminal: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg border border-white/5">
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${modelsLoaded ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-                            <Wifi size={14} />
-                            {modelsLoaded ? 'Online' : 'Iniciando'}
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${labeledDescriptors.length > 0 ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                            <Database size={14} />
+                            {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}
                         </div>
                          <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" title="Sair do Terminal">
                             <LogOut size={18} />
@@ -414,8 +410,8 @@ export const AttendanceTerminal: React.FC = () => {
                         ref={videoRef} 
                         autoPlay 
                         muted 
-                        onPlay={handleVideoPlay}
-                        className="w-full h-full object-cover transform scale-x-[-1]" // Mirror effect
+                        onPlay={() => setIsVideoReady(true)}
+                        className="w-full h-full object-cover transform scale-x-[-1]" 
                     />
                     <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1]" />
 
@@ -431,8 +427,35 @@ export const AttendanceTerminal: React.FC = () => {
                             </div>
                         )}
 
+                        {/* AVISO DE BANCO VAZIO */}
+                        {!loadingMessage && modelsLoaded && students.length === 0 && (
+                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+                                <AlertTriangle size={64} className="text-yellow-500 mb-6 animate-bounce" />
+                                <h2 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Faces Vazio</h2>
+                                <p className="text-gray-400 max-w-md text-center">Nenhum aluno com foto foi encontrado no sistema. Cadastre as fotos no Painel Escolar para ativar o reconhecimento.</p>
+                            </div>
+                        )}
+
+                         {/* AVISO DE ERRO NAS FOTOS */}
+                         {!loadingMessage && modelsLoaded && students.length > 0 && labeledDescriptors.length === 0 && (
+                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+                                <AlertTriangle size={64} className="text-red-500 mb-6 animate-pulse" />
+                                <h2 className="text-2xl font-bold text-red-500 tracking-widest uppercase mb-2">Erro de Biometria</h2>
+                                <p className="text-gray-400 max-w-md text-center mb-4">
+                                    {students.length} alunos encontrados, mas as fotos falharam ao carregar.
+                                    Verifique a conexão ou as permissões de acesso.
+                                </p>
+                                <button 
+                                    onClick={() => processStudentFaces(students)}
+                                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold uppercase tracking-wider flex items-center gap-2 pointer-events-auto"
+                                >
+                                    <RefreshCw size={18} /> Tentar Novamente
+                                </button>
+                            </div>
+                        )}
+
                         {/* SCANNING LINE (IDLE) */}
-                        {!loadingMessage && !lastLog && !isProcessing && (
+                        {!loadingMessage && !lastLog && !isProcessing && labeledDescriptors.length > 0 && (
                             <div className="absolute inset-0 z-10 opacity-30">
                                 <div className="w-full h-1 bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.8)] animate-[scan_3s_ease-in-out_infinite]"></div>
                                 <div className="absolute top-8 left-8 p-2 border-l-4 border-t-4 border-blue-500 w-16 h-16 rounded-tl-xl opacity-60"></div>

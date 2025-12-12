@@ -105,7 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
           if (
               (email === 'pontoequipecemal@ceprofmal.com' && password === 'cemal#2016') ||
-              (email === 'rh@ceprofmal.com' && password === 'cemal#2016')
+              (email === 'rh@ceprofmal.com' && password === 'cemal#2016') ||
+              (email === 'frequencia.cemal@ceprofmal.com' && password === 'cemal#2016')
           ) {
               try {
                   console.log("Criando conta de sistema automaticamente...");
