@@ -93,13 +93,15 @@ export const StaffAttendanceTerminal: React.FC = () => {
     }, [modelsLoaded, staff]);
 
     // Função auxiliar para carregar imagem com CORS anônimo (CRUCIAL PARA FIREBASE)
+    // FIX: Adicionado timestamp para evitar cache do navegador que bloqueia CORS
     const loadImage = (url: string): Promise<HTMLImageElement> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.crossOrigin = 'anonymous'; // Permite que a IA leia os pixels
             img.onload = () => resolve(img);
             img.onerror = (e) => reject(e);
-            img.src = url;
+            // Cache busting: Força o navegador a baixar a imagem novamente com os headers corretos
+            img.src = `${url}${url.includes('?') ? '&' : '?'}t=${new Date().getTime()}`;
         });
     };
 
@@ -123,13 +125,17 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 
                 if (detection) {
                     labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(member.id, [detection.descriptor]));
+                } else {
+                    console.warn(`Rosto não detectado na foto de: ${member.name}`);
+                    errorCount++;
                 }
+                
                 processedCount++;
                 if (staffWithPhoto.length > 5) {
                      setLoadingMessage(`Sincronizando: ${Math.round((processedCount / staffWithPhoto.length) * 100)}%`);
                 }
             } catch (err) {
-                console.warn(`Erro ao processar foto de ${member.name}:`, err);
+                console.error(`Erro crítico ao processar foto de ${member.name}:`, err);
                 errorCount++;
             }
         }
