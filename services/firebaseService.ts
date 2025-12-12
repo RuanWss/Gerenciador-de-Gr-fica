@@ -1,3 +1,4 @@
+
 import { db, storage } from '../firebaseConfig';
 import { 
   collection, 
@@ -306,6 +307,7 @@ export const updateSystemConfig = async (config: SystemConfig): Promise<void> =>
 
 // --- ATTENDANCE ---
 
+// DEPRECATED: Use listenToAttendanceLogs for real-time
 export const getAttendanceLogs = async (dateString?: string): Promise<AttendanceLog[]> => {
     try {
         let q;
@@ -320,6 +322,22 @@ export const getAttendanceLogs = async (dateString?: string): Promise<Attendance
         console.error("Error getting attendance logs:", error);
         return [];
     }
+};
+
+// NEW: Real-time listener for Student Attendance
+export const listenToAttendanceLogs = (dateString: string, onUpdate: (logs: AttendanceLog[]) => void) => {
+    const q = query(
+        collection(db, ATTENDANCE_LOGS_COLLECTION), 
+        where("dateString", "==", dateString),
+        orderBy("timestamp", "desc")
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+        const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
+        onUpdate(logs);
+    }, (error) => {
+        console.error("Error listening to attendance logs:", error);
+    });
 };
 
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
@@ -402,6 +420,22 @@ export const getStaffLogs = async (dateString: string): Promise<StaffAttendanceL
         console.error("Error getting staff logs:", error);
         return [];
     }
+};
+
+// NEW: Real-time listener for Staff Attendance
+export const listenToStaffLogs = (dateString: string, onUpdate: (logs: StaffAttendanceLog[]) => void) => {
+    const q = query(
+        collection(db, STAFF_LOGS_COLLECTION), 
+        where("dateString", "==", dateString),
+        orderBy("timestamp", "desc")
+    );
+    
+    return onSnapshot(q, (snapshot) => {
+        const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffAttendanceLog));
+        onUpdate(logs);
+    }, (error) => {
+        console.error("Error listening to staff logs:", error);
+    });
 };
 
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {

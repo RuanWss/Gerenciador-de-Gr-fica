@@ -7,7 +7,7 @@ import {
     updateStaffMember, 
     deleteStaffMember, 
     uploadStaffPhoto,
-    getStaffLogs
+    listenToStaffLogs // Atualizado para Listener
 } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
 import { Button } from '../components/Button';
@@ -68,9 +68,13 @@ export const HRDashboard: React.FC = () => {
         loadFaceModels();
     }, []);
 
+    // Listener Real-time para Logs de Ponto da Equipe
     useEffect(() => {
         if (activeTab === 'timesheet') {
-            loadLogs();
+            const unsubscribe = listenToStaffLogs(logFilterDate, (data) => {
+                setLogs(data);
+            });
+            return () => unsubscribe();
         }
     }, [activeTab, logFilterDate]);
 
@@ -79,11 +83,6 @@ export const HRDashboard: React.FC = () => {
         const list = await getStaffMembers();
         setStaffList(list.sort((a,b) => a.name.localeCompare(b.name)));
         setIsLoading(false);
-    };
-
-    const loadLogs = async () => {
-        const data = await getStaffLogs(logFilterDate);
-        setLogs(data);
     };
 
     const loadFaceModels = async () => {
@@ -471,7 +470,7 @@ export const HRDashboard: React.FC = () => {
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                     {logs.map(log => (
-                                        <tr key={log.id} className="hover:bg-gray-50">
+                                        <tr key={log.id} className="hover:bg-gray-50 animate-in slide-in-from-left-2 duration-300">
                                             <td className="p-4 font-mono font-bold text-blue-600">
                                                 {new Date(log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                                             </td>

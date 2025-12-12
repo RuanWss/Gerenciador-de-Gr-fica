@@ -14,7 +14,7 @@ import {
     getLessonPlans,
     listenToSystemConfig,
     updateSystemConfig,
-    getAttendanceLogs
+    listenToAttendanceLogs // Atualizado para listener
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -131,13 +131,11 @@ export const PrintShopDashboard: React.FC = () => {
     // --- LOAD DATA ---
     useEffect(() => {
         if (activeTab === 'exams') loadExams();
-        // Carrega alunos e frequência juntos para exibir status na lista de alunos
-        if (activeTab === 'students' || activeTab === 'classes') {
+        // Carrega alunos e inicializa listener de frequência para exibir status na lista de alunos
+        if (activeTab === 'students' || activeTab === 'classes' || activeTab === 'attendance') {
             loadStudents();
-            loadAttendance(); 
             loadFaceModels(); // Carrega modelos de IA
         }
-        if (activeTab === 'attendance') loadAttendance();
         if (activeTab === 'schedule') loadSchedule();
         if (activeTab === 'planning') loadPlans();
         if (activeTab === 'config') {
@@ -146,12 +144,16 @@ export const PrintShopDashboard: React.FC = () => {
         }
     }, [activeTab]);
 
+    // Listener Real-time para Frequência (atualiza quando a data muda ou quando a aba é relevante)
     useEffect(() => {
-        // Recarrega frequência se mudar a data (mesmo estando na aba de alunos se quiser implementar filtro de data lá depois)
         if (activeTab === 'attendance' || activeTab === 'students') {
-            loadAttendance();
+            // Inscreve no listener de logs
+            const unsubscribe = listenToAttendanceLogs(attendanceDate, (logs) => {
+                setAttendanceLogs(logs);
+            });
+            return () => unsubscribe();
         }
-    }, [attendanceDate]);
+    }, [attendanceDate, activeTab]);
 
     // --- AI FACE MODELS ---
     const loadFaceModels = async () => {
@@ -288,14 +290,6 @@ export const PrintShopDashboard: React.FC = () => {
     };
 
     // --- ACTIONS: ATTENDANCE ---
-    const loadAttendance = async () => {
-        // Não ativa loading global se estiver na aba de alunos para não piscar a tela toda
-        if (activeTab === 'attendance') setIsLoading(true);
-        const data = await getAttendanceLogs(attendanceDate);
-        setAttendanceLogs(data);
-        if (activeTab === 'attendance') setIsLoading(false);
-    };
-
     const handleExportAttendanceReport = () => {
         const headers = ["Data", "Horário", "Nome do Aluno", "Turma", "Status"];
         const csvContent = [
@@ -400,16 +394,12 @@ export const PrintShopDashboard: React.FC = () => {
         return matchesSearch && matchesClass;
     });
 
-    // Set de IDs presentes para busca rápida
+    // Set de IDs presentes para busca rápida (atualizado em tempo real pelo listener)
     const presentStudentIds = new Set(attendanceLogs.map(log => log.studentId));
     
-    // Contagem de presentes (apenas dos alunos filtrados atualmente ou totais?)
-    // Vamos contar quantos da lista filtrada estão presentes
+    // Contagem de presentes
     const presentCountFiltered = filteredStudents.filter(s => presentStudentIds.has(s.id)).length;
     
-    // Contagem total de presentes hoje (independente do filtro de busca/turma na tela)
-    const totalPresentToday = presentStudentIds.size;
-
     const filteredPlans = planFilterClass 
         ? plans.filter(p => p.className === planFilterClass)
         : plans;
@@ -545,7 +535,7 @@ export const PrintShopDashboard: React.FC = () => {
                         <header className="flex justify-between items-center mb-8">
                             <div>
                                 <h1 className="text-3xl font-bold text-white flex items-center gap-2"><ClipboardCheck className="text-red-500"/> Frequência Escolar</h1>
-                                <p className="text-gray-400">Registros de entrada dos alunos via reconhecimento facial</p>
+                                <p className="text-gray-400">Registros de entrada dos alunos via reconhecimento facial (Tempo Real)</p>
                             </div>
                             <div className="flex items-center gap-2 bg-white/10 backdrop-blur border border-white/20 p-1 rounded-lg">
                                 <CalendarDays className="text-gray-300 ml-2" size={18} />
@@ -566,7 +556,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 <h3 className="font-bold text-gray-700 flex items-center gap-2">
                                     <Clock size={16} /> Registros do Dia
                                 </h3>
-                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">
+                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
                                     {attendanceLogs.length} Presenças
                                 </span>
                             </div>
@@ -589,7 +579,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
                                             {attendanceLogs.map((log) => (
-                                                <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                                                <tr key={log.id} className="hover:bg-gray-50 transition-colors animate-in slide-in-from-left-2 duration-300">
                                                     <td className="p-4 font-mono font-bold text-blue-600">
                                                         {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                                     </td>
@@ -740,7 +730,7 @@ export const PrintShopDashboard: React.FC = () => {
                                                     <td className="p-4 text-gray-500">{student.className}</td>
                                                     <td className="p-4">
                                                         {isPresent ? (
-                                                            <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200">
+                                                            <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200 animate-in zoom-in">
                                                                 <CheckCircle size={12}/> PRESENTE
                                                             </span>
                                                         ) : (
