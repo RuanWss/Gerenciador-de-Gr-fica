@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { auth } from '../firebaseConfig';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getUserProfile } from '../services/firebaseService';
 
 interface AuthContextType {
@@ -20,27 +20,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Restaurar Sessão Virtual (Bypass Firebase)
-    const virtualSession = localStorage.getItem('virtual_session');
-    if (virtualSession) {
-        try {
-            const userData = JSON.parse(virtualSession);
-            setUser(userData);
-        } catch (e) {
-            console.error("Sessão virtual inválida", e);
-            localStorage.removeItem('virtual_session');
-        }
-    }
-
-    // 2. Ouvir Firebase Auth
+    // Ouvir Firebase Auth
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      // Se tiver sessão virtual ativa, ela tem prioridade sobre o estado 'null' do firebase
-      const currentVirtual = localStorage.getItem('virtual_session');
-      
       if (firebaseUser) {
-        // Se logou no Firebase, sobrescreve a virtual
-        localStorage.removeItem('virtual_session');
-
         // Lógica de mapeamento de usuários especiais do Firebase
         if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
              setUser({
@@ -48,6 +30,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 name: 'Terminal de Frequência',
                 email: firebaseUser.email,
                 role: UserRole.ATTENDANCE_TERMINAL,
+                subject: '',
+                classes: []
+              });
+        }
+        else if (firebaseUser.email === 'pontoequipecemal@ceprofmal.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Terminal de Ponto',
+                email: firebaseUser.email,
+                role: UserRole.STAFF_TERMINAL,
+                subject: '',
+                classes: []
+              });
+        }
+        else if (firebaseUser.email === 'rh@ceprofmal.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Recursos Humanos',
+                email: firebaseUser.email,
+                role: UserRole.HR,
                 subject: '',
                 classes: []
               });
@@ -82,10 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         }
       } else {
-        // Firebase deslogado. Só limpa user se não tiver sessão virtual.
-        if (!currentVirtual) {
-            setUser(null);
-        }
+        setUser(null);
       }
       setLoading(false);
     });
@@ -94,54 +93,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
-    // --- BYPASS PARA CONTAS DE SISTEMA SOLICITADAS ---
-    // Permite acesso imediato sem necessidade de criar user no Firebase Console
-    
-    // 1. Terminal de Ponto Equipe
-    if (email === 'pontoequipecemal@ceprofmal.com' && password === 'cemal#2016') {
-        const sysUser: User = {
-            id: 'sys_staff_terminal',
-            name: 'Terminal de Ponto',
-            email: email,
-            role: UserRole.STAFF_TERMINAL,
-            subject: '',
-            classes: []
-        };
-        setUser(sysUser);
-        localStorage.setItem('virtual_session', JSON.stringify(sysUser));
-        return true;
-    }
-
-    // 2. Painel de RH
-    if (email === 'rh@ceprofmal.com' && password === 'cemal#2016') {
-        const sysUser: User = {
-            id: 'sys_rh_admin',
-            name: 'Recursos Humanos',
-            email: email,
-            role: UserRole.HR,
-            subject: '',
-            classes: []
-        };
-        setUser(sysUser);
-        localStorage.setItem('virtual_session', JSON.stringify(sysUser));
-        return true;
-    }
-
-    // --- AUTENTICAÇÃO PADRÃO FIREBASE ---
     try {
       if (!password) return false;
       await signInWithEmailAndPassword(auth, email, password);
       return true;
     } catch (error: any) {
-      console.warn("Falha no login:", error.code);
+      console.warn("Falha no login padrão:", error.code);
+
+      // AUTO-PROVISIONAMENTO PARA CONTAS DE SISTEMA
+      // Se a conta de sistema não existe no Firebase, cria automaticamente para garantir acesso ao banco de dados
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+          if (
+              (email === 'pontoequipecemal@ceprofmal.com' && password === 'cemal#2016') ||
+              (email === 'rh@ceprofmal.com' && password === 'cemal#2016')
+          ) {
+              try {
+                  console.log("Criando conta de sistema automaticamente...");
+                  await createUserWithEmailAndPassword(auth, email, password);
+                  return true;
+              } catch (createError) {
+                  console.error("Erro ao criar conta de sistema:", createError);
+                  return false;
+              }
+          }
+      }
       return false;
     }
   };
 
   const logout = async () => {
     try {
-      localStorage.removeItem('virtual_session');
-      setUser(null);
       await signOut(auth);
     } catch (error) {
       console.error("Erro no logout", error);
