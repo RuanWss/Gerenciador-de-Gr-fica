@@ -97,6 +97,7 @@ export const PrintShopDashboard: React.FC = () => {
     // --- STATES: STUDENTS ---
     const [students, setStudents] = useState<Student[]>([]);
     const [studentSearch, setStudentSearch] = useState('');
+    const [studentFilterClass, setStudentFilterClass] = useState('ALL'); // New: Filtro de turma
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [showStudentForm, setShowStudentForm] = useState(false);
     const [studentName, setStudentName] = useState('');
@@ -270,7 +271,8 @@ export const PrintShopDashboard: React.FC = () => {
     };
 
     const navigateToClassStudents = (classId: string) => {
-        setStudentSearch(CLASSES.find(c => c.id === classId)?.name || '');
+        setStudentFilterClass(classId); // Set specific filter
+        setStudentSearch('');
         setActiveTab('students');
     };
 
@@ -291,10 +293,12 @@ export const PrintShopDashboard: React.FC = () => {
         return matchStatus && matchSearch;
     });
 
-    const filteredStudents = students.filter(s => 
-        s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
-        s.className.toLowerCase().includes(studentSearch.toLowerCase())
-    );
+    const filteredStudents = students.filter(s => {
+        const matchesSearch = s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
+                              s.className.toLowerCase().includes(studentSearch.toLowerCase());
+        const matchesClass = studentFilterClass === 'ALL' || s.classId === studentFilterClass;
+        return matchesSearch && matchesClass;
+    });
 
     const filteredPlans = planFilterClass 
         ? plans.filter(p => p.className === planFilterClass)
@@ -507,7 +511,7 @@ export const PrintShopDashboard: React.FC = () => {
                 {/* --- TAB: STUDENTS (ALUNOS) --- */}
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="flex justify-between items-center mb-8">
+                        <header className="flex justify-between items-center mb-4">
                             <div>
                                 <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Users className="text-red-500"/> Gestão de Alunos</h1>
                                 <p className="text-gray-400">Cadastro e controle de fotos para reconhecimento facial</p>
@@ -516,6 +520,25 @@ export const PrintShopDashboard: React.FC = () => {
                                 <Plus size={16} className="mr-2"/> Novo Aluno
                             </Button>
                         </header>
+
+                        {/* CLASS FILTERS */}
+                        <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                            <button 
+                                onClick={() => setStudentFilterClass('ALL')} 
+                                className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${studentFilterClass === 'ALL' ? 'bg-red-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                Todas as Turmas
+                            </button>
+                            {CLASSES.map(c => (
+                                <button 
+                                    key={c.id} 
+                                    onClick={() => setStudentFilterClass(c.id)} 
+                                    className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${studentFilterClass === c.id ? 'bg-red-600 text-white shadow-md' : 'bg-white text-gray-500 hover:bg-gray-100'}`}
+                                >
+                                    {c.name}
+                                </button>
+                            ))}
+                        </div>
 
                         {showStudentForm && (
                             <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-lg mb-6 animate-in slide-in-from-top-4">
