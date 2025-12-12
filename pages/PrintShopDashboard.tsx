@@ -60,32 +60,32 @@ import * as faceapi from 'face-api.js';
 
 // --- CONSTANTES DE HORÁRIOS E TURMAS (Mesmos do PublicSchedule) ---
 const MORNING_SLOTS = [
-    { id: 'm1', label: '1º Horário (07:20)' },
-    { id: 'm2', label: '2º Horário (08:10)' },
-    { id: 'm3', label: '3º Horário (09:20)' },
-    { id: 'm4', label: '4º Horário (10:10)' },
-    { id: 'm5', label: '5º Horário (11:00)' },
+    { id: 'm1', label: '1º (07:20)' },
+    { id: 'm2', label: '2º (08:10)' },
+    { id: 'm3', label: '3º (09:20)' },
+    { id: 'm4', label: '4º (10:10)' },
+    { id: 'm5', label: '5º (11:00)' },
 ];
 
 const AFTERNOON_SLOTS = [
-    { id: 'a1', label: '1º Horário (13:00)' },
-    { id: 'a2', label: '2º Horário (13:50)' },
-    { id: 'a3', label: '3º Horário (14:40)' },
-    { id: 'a4', label: '4º Horário (16:00)' },
-    { id: 'a5', label: '5º Horário (16:50)' },
-    { id: 'a6', label: '6º Horário (17:40)' },
-    { id: 'a7', label: '7º Horário (18:30)' },
-    { id: 'a8', label: '8º Horário (19:20)' },
+    { id: 'a1', label: '1º (13:00)' },
+    { id: 'a2', label: '2º (13:50)' },
+    { id: 'a3', label: '3º (14:40)' },
+    { id: 'a4', label: '4º (16:00)' },
+    { id: 'a5', label: '5º (16:50)' },
+    { id: 'a6', label: '6º (17:40)' },
+    { id: 'a7', label: '7º (18:30)' },
+    { id: 'a8', label: '8º (19:20)' },
 ];
 
 const CLASSES = [
-    { id: '6efaf', name: '6º ANO EFAF', shift: 'morning' },
-    { id: '7efaf', name: '7º ANO EFAF', shift: 'morning' },
-    { id: '8efaf', name: '8º ANO EFAF', shift: 'morning' },
-    { id: '9efaf', name: '9º ANO EFAF', shift: 'morning' },
-    { id: '1em', name: '1ª SÉRIE EM', shift: 'afternoon' },
-    { id: '2em', name: '2ª SÉRIE EM', shift: 'afternoon' },
-    { id: '3em', name: '3ª SÉRIE EM', shift: 'afternoon' },
+    { id: '6efaf', name: '6º EFAF', shift: 'morning' },
+    { id: '7efaf', name: '7º EFAF', shift: 'morning' },
+    { id: '8efaf', name: '8º EFAF', shift: 'morning' },
+    { id: '9efaf', name: '9º EFAF', shift: 'morning' },
+    { id: '1em', name: '1ª SÉRIE', shift: 'afternoon' },
+    { id: '2em', name: '2ª SÉRIE', shift: 'afternoon' },
+    { id: '3em', name: '3ª SÉRIE', shift: 'afternoon' },
 ];
 
 export const PrintShopDashboard: React.FC = () => {
@@ -118,7 +118,7 @@ export const PrintShopDashboard: React.FC = () => {
 
     // --- STATES: SCHEDULE ---
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
-    const [selectedScheduleClass, setSelectedScheduleClass] = useState(CLASSES[0].id);
+    const [selectedScheduleClass, setSelectedScheduleClass] = useState(CLASSES[0].id); // Legacy (unused in new view)
     const [selectedDay, setSelectedDay] = useState(1); // 1 = Segunda
 
     // --- STATES: PLANNING ---
@@ -317,19 +317,19 @@ export const PrintShopDashboard: React.FC = () => {
         setSchedule(data);
     };
 
-    const handleScheduleChange = async (slotId: string, field: 'subject' | 'professor', value: string) => {
-        const currentClass = CLASSES.find(c => c.id === selectedScheduleClass);
+    const handleScheduleChange = async (slotId: string, field: 'subject' | 'professor', value: string, classId: string) => {
+        const currentClass = CLASSES.find(c => c.id === classId);
         if (!currentClass) return;
 
         const existingEntry = schedule.find(s => 
-            s.classId === selectedScheduleClass && 
+            s.classId === classId && 
             s.dayOfWeek === selectedDay && 
             s.slotId === slotId
         );
 
         const newEntry: ScheduleEntry = {
-            id: existingEntry ? existingEntry.id : `${selectedScheduleClass}_${selectedDay}_${slotId}`,
-            classId: selectedScheduleClass,
+            id: existingEntry ? existingEntry.id : `${classId}_${selectedDay}_${slotId}`,
+            classId: classId,
             className: currentClass.name,
             dayOfWeek: selectedDay,
             slotId: slotId,
@@ -337,6 +337,7 @@ export const PrintShopDashboard: React.FC = () => {
             professor: field === 'professor' ? value : (existingEntry?.professor || '')
         };
 
+        // Otimistic Update
         const newSchedule = schedule.filter(s => s.id !== newEntry.id);
         newSchedule.push(newEntry);
         setSchedule(newSchedule);
@@ -756,77 +757,132 @@ export const PrintShopDashboard: React.FC = () => {
                 {/* --- TAB: SCHEDULE (HORÁRIOS) --- */}
                 {activeTab === 'schedule' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8">
-                            <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Layout className="text-red-500"/> Quadro de Horários</h1>
-                            <p className="text-gray-400">Edição da grade exibida no painel público</p>
+                        <header className="mb-8 flex justify-between items-center">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Layout className="text-red-500"/> Quadro de Horários</h1>
+                                <p className="text-gray-400">Edição da grade exibida no painel público</p>
+                            </div>
+                            
+                            <div className="bg-white/10 p-2 rounded-lg border border-white/20 flex items-center gap-4">
+                                <span className="text-sm font-bold text-gray-300 uppercase tracking-wider ml-2">Dia da Semana:</span>
+                                <select 
+                                    className="bg-black/50 border border-gray-600 rounded-lg font-bold text-white p-2 outline-none focus:border-red-500"
+                                    value={selectedDay} 
+                                    onChange={e => setSelectedDay(Number(e.target.value))}
+                                >
+                                    <option value={1}>Segunda-feira</option>
+                                    <option value={2}>Terça-feira</option>
+                                    <option value={3}>Quarta-feira</option>
+                                    <option value={4}>Quinta-feira</option>
+                                    <option value={5}>Sexta-feira</option>
+                                </select>
+                            </div>
                         </header>
 
-                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                            <div className="flex gap-4 mb-6">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Turma</label>
-                                    <select 
-                                        className="border p-2 rounded-lg font-bold text-gray-800"
-                                        value={selectedScheduleClass} 
-                                        onChange={e => setSelectedScheduleClass(e.target.value)}
-                                    >
-                                        {CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
+                        <div className="space-y-8">
+                            {/* MATUTINO */}
+                            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-lg">
+                                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                    <h3 className="text-lg font-black text-gray-800 uppercase tracking-wide">Turno Matutino</h3>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Dia da Semana</label>
-                                    <select 
-                                        className="border p-2 rounded-lg font-bold text-gray-800"
-                                        value={selectedDay} 
-                                        onChange={e => setSelectedDay(Number(e.target.value))}
-                                    >
-                                        <option value={1}>Segunda-feira</option>
-                                        <option value={2}>Terça-feira</option>
-                                        <option value={3}>Quarta-feira</option>
-                                        <option value={4}>Quinta-feira</option>
-                                        <option value={5}>Sexta-feira</option>
-                                    </select>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th className="p-3 text-left w-24 bg-gray-50 text-gray-500 font-bold border rounded-tl-lg">Horário</th>
+                                                {CLASSES.filter(c => c.shift === 'morning').map(cls => (
+                                                    <th key={cls.id} className="p-3 text-center bg-blue-50 text-blue-800 font-black border border-blue-100 min-w-[200px]">
+                                                        {cls.name}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {MORNING_SLOTS.map(slot => (
+                                                <tr key={slot.id}>
+                                                    <td className="p-3 font-mono text-xs font-bold text-gray-500 border bg-gray-50 text-center">{slot.label.split(' ')[1]?.replace('(','').replace(')','')}</td>
+                                                    {CLASSES.filter(c => c.shift === 'morning').map(cls => {
+                                                        const entry = schedule.find(s => s.classId === cls.id && s.dayOfWeek === selectedDay && s.slotId === slot.id);
+                                                        return (
+                                                            <td key={cls.id + slot.id} className="p-2 border hover:bg-gray-50 transition-colors">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <input 
+                                                                        className="w-full text-center font-bold text-gray-900 text-sm bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-white placeholder-gray-300 outline-none transition-all"
+                                                                        placeholder="Disciplina"
+                                                                        value={entry?.subject || ''}
+                                                                        onChange={e => handleScheduleChange(slot.id, 'subject', e.target.value, cls.id)}
+                                                                    />
+                                                                    <input 
+                                                                        className="w-full text-center text-xs text-gray-500 bg-transparent border-none focus:bg-white focus:text-gray-800 placeholder-gray-200 outline-none transition-all"
+                                                                        placeholder="Professor"
+                                                                        value={entry?.professor || ''}
+                                                                        onChange={e => handleScheduleChange(slot.id, 'professor', e.target.value, cls.id)}
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
 
-                            <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-gray-100 text-gray-500 border-b border-gray-200">
-                                        <tr>
-                                            <th className="p-3 text-left w-32">Horário</th>
-                                            <th className="p-3 text-left">Disciplina</th>
-                                            <th className="p-3 text-left">Professor</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200 bg-white">
-                                        {(CLASSES.find(c => c.id === selectedScheduleClass)?.shift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => {
-                                            const entry = schedule.find(s => s.classId === selectedScheduleClass && s.dayOfWeek === selectedDay && s.slotId === slot.id);
-                                            return (
-                                                <tr key={slot.id} className="group hover:bg-blue-50">
-                                                    <td className="p-3 font-mono text-xs font-bold text-gray-500 border-r border-gray-100">{slot.label}</td>
-                                                    <td className="p-3">
-                                                        <input 
-                                                            className="w-full bg-transparent border-none focus:ring-0 p-0 font-bold text-gray-800 group-hover:bg-white rounded px-2 transition-colors"
-                                                            placeholder="Vazio"
-                                                            value={entry?.subject || ''}
-                                                            onChange={e => handleScheduleChange(slot.id, 'subject', e.target.value)}
-                                                        />
-                                                    </td>
-                                                    <td className="p-3">
-                                                        <input 
-                                                            className="w-full bg-transparent border-none focus:ring-0 p-0 text-gray-600 group-hover:bg-white rounded px-2 transition-colors"
-                                                            placeholder="-"
-                                                            value={entry?.professor || ''}
-                                                            onChange={e => handleScheduleChange(slot.id, 'professor', e.target.value)}
-                                                        />
-                                                    </td>
+                            {/* VESPERTINO */}
+                            <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-lg">
+                                <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
+                                    <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                                    <h3 className="text-lg font-black text-gray-800 uppercase tracking-wide">Turno Vespertino</h3>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th className="p-3 text-left w-24 bg-gray-50 text-gray-500 font-bold border rounded-tl-lg">Horário</th>
+                                                {CLASSES.filter(c => c.shift === 'afternoon').map(cls => (
+                                                    <th key={cls.id} className="p-3 text-center bg-orange-50 text-orange-800 font-black border border-orange-100 min-w-[200px]">
+                                                        {cls.name}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {AFTERNOON_SLOTS.map(slot => (
+                                                <tr key={slot.id}>
+                                                    <td className="p-3 font-mono text-xs font-bold text-gray-500 border bg-gray-50 text-center">{slot.label.split(' ')[1]?.replace('(','').replace(')','')}</td>
+                                                    {CLASSES.filter(c => c.shift === 'afternoon').map(cls => {
+                                                        const entry = schedule.find(s => s.classId === cls.id && s.dayOfWeek === selectedDay && s.slotId === slot.id);
+                                                        return (
+                                                            <td key={cls.id + slot.id} className="p-2 border hover:bg-gray-50 transition-colors">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <input 
+                                                                        className="w-full text-center font-bold text-gray-900 text-sm bg-transparent border-b border-transparent focus:border-orange-500 focus:bg-white placeholder-gray-300 outline-none transition-all"
+                                                                        placeholder="Disciplina"
+                                                                        value={entry?.subject || ''}
+                                                                        onChange={e => handleScheduleChange(slot.id, 'subject', e.target.value, cls.id)}
+                                                                    />
+                                                                    <input 
+                                                                        className="w-full text-center text-xs text-gray-500 bg-transparent border-none focus:bg-white focus:text-gray-800 placeholder-gray-200 outline-none transition-all"
+                                                                        placeholder="Professor"
+                                                                        value={entry?.professor || ''}
+                                                                        onChange={e => handleScheduleChange(slot.id, 'professor', e.target.value, cls.id)}
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    })}
                                                 </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                            <p className="text-xs text-gray-400 mt-2 flex items-center gap-1"><Save size={12}/> Alterações salvas automaticamente ao digitar.</p>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                            <p className="text-xs text-gray-400 mt-2 flex items-center gap-1 bg-white/5 p-2 rounded border border-white/10"><Save size={12}/> Alterações salvas automaticamente.</p>
                         </div>
                     </div>
                 )}
