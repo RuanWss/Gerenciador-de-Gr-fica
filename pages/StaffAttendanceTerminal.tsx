@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database, RefreshCw } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database, RefreshCw, Settings, XCircle } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -19,7 +19,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
     // AI State
     const [modelsLoaded, setModelsLoaded] = useState(false);
     const [labeledDescriptors, setLabeledDescriptors] = useState<any[]>([]);
-    const [loadingMessage, setLoadingMessage] = useState('Inicializando Sistema da Equipe...');
+    const [loadingMessage, setLoadingMessage] = useState('Inicializando Sistema...');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
     
@@ -53,7 +53,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 return;
             }
 
-            setLoadingMessage('Carregando Modelos de IA...');
+            setLoadingMessage('Carregando IA...');
             try {
                 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
                 await Promise.all([
@@ -64,7 +64,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 setModelsLoaded(true);
             } catch (error) {
                 console.error("Erro ao carregar modelos:", error);
-                setLoadingMessage('Erro de Conexão com IA');
+                setLoadingMessage('Erro de Conexão');
             }
         };
         loadModels();
@@ -73,7 +73,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
     // 3. Listen to Staff Data (Tempo Real)
     useEffect(() => {
         const unsubscribe = listenToStaffMembers((newStaffList) => {
-            console.log("Lista de funcionários atualizada:", newStaffList.length);
             // Filtra apenas quem tem foto e está ativo
             const activeStaff = newStaffList.filter(s => s.active); 
             setStaff(activeStaff);
@@ -105,7 +104,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
 
     // Helper: Process Student Photos (Create Descriptors)
     const processStaffFaces = async (staffList: StaffMember[]) => {
-        setLoadingMessage('Sincronizando Biometria...');
+        setLoadingMessage('Sincronizando...');
         
         const faceApi = (faceapi as any).default || faceapi;
         const labeledDescriptorsTemp: any[] = [];
@@ -140,10 +139,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
         
         setLabeledDescriptors(labeledDescriptorsTemp);
         setLoadingMessage('');
-        
-        if (errorCount > 0) {
-            console.log(`Finalizado com ${errorCount} erros de leitura de imagem.`);
-        }
     };
 
     // 5. Start Camera
@@ -206,11 +201,13 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (resizedDetections.length > 0) {
+                    // Desenha apenas a caixa delimitadora sutil
                     const box = resizedDetections[0].detection.box;
                     const drawBox = new faceApi.draw.DrawBox(box, { 
-                        label: 'Identificando...', 
-                        boxColor: '#dc2626', 
-                        lineWidth: 2
+                        label: 'Verificando...', 
+                        boxColor: '#ffffff', 
+                        lineWidth: 1,
+                        drawLabelOptions: { fontSize: 10 }
                     });
                     drawBox.draw(canvas);
 
@@ -294,194 +291,166 @@ export const StaffAttendanceTerminal: React.FC = () => {
         audio.play().catch(e => console.log(e));
     };
 
-    const getStatusColor = () => {
-        switch (statusType) {
-            case 'success': return 'border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.3)]';
-            case 'warning': return 'border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]';
-            case 'error': return 'border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.3)]';
-            default: return 'border-white/10';
-        }
-    };
-
     return (
-        <div className="h-screen w-screen bg-gradient-to-br from-gray-900 via-red-900 to-black text-white overflow-hidden flex flex-col font-sans">
-            
-            {/* --- HEADER (RESPONSIVO) --- */}
-            <div className="h-auto min-h-[10vh] md:h-[15vh] py-4 bg-black/20 backdrop-blur-md border-b border-white/10 flex flex-col md:flex-row items-center justify-between px-4 md:px-8 z-20 shadow-lg relative gap-4">
-                <div className="flex items-center gap-4 md:gap-6">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 md:h-16 w-auto drop-shadow-md" alt="Logo" />
-                    <div className="h-8 md:h-10 w-px bg-white/10"></div>
-                    <div>
-                        <h1 className="text-lg md:text-2xl font-black uppercase tracking-wider text-white">Ponto Eletrônico</h1>
-                        <p className="text-[10px] md:text-xs font-medium text-red-400 tracking-[0.2em] uppercase">Controle de Equipe</p>
-                    </div>
-                </div>
+        <div className="min-h-screen w-full bg-[#0a0000] text-white flex flex-col relative overflow-hidden font-sans selection:bg-red-500/30">
+            {/* Background Gradients to match the mood */}
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-black via-red-950/20 to-black pointer-events-none" />
+            <div className="absolute -top-40 -left-40 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-red-900/10 rounded-full blur-[100px] pointer-events-none" />
 
-                <div className="flex items-center gap-4 md:gap-6">
-                    <div className="text-right">
-                        <p className="text-2xl md:text-4xl font-black font-mono leading-none tracking-tight">
-                            {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                        <p className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest mt-1 hidden md:block">
-                            {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                        </p>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1 md:hidden">
-                            {currentTime.toLocaleDateString('pt-BR', { day: 'numeric', month: 'numeric' })}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg border border-white/5">
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${labeledDescriptors.length > 0 ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-500'}`} title="Funcionários com biometria carregada">
-                            <Database size={14} />
-                            <span className="hidden md:inline">{labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}</span>
-                        </div>
-                         <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" title="Sair do Terminal">
-                            <LogOut size={18} />
-                        </button>
-                    </div>
-                </div>
-            </div>
+            {/* --- HEADER --- */}
+            <header className="relative z-10 flex flex-col items-center pt-8 px-4 w-full max-w-md mx-auto animate-in fade-in slide-in-from-top-4 duration-700">
+                {/* Logo */}
+                <img 
+                    src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
+                    className="h-16 md:h-20 w-auto object-contain drop-shadow-xl mb-8" 
+                    alt="Logo" 
+                />
 
-            {/* --- MAIN CONTENT --- */}
-            <div className="flex-1 relative flex flex-col items-center justify-center p-4 md:p-6 bg-transparent">
-                
-                {/* CAMERA CONTAINER (RESPONSIVO) */}
-                {/* Mobile: aspect-[3/4] (Portrait friendly), Desktop: aspect-video (Landscape) */}
-                {/* max-w-5xl on Desktop, w-full on mobile */}
-                <div className={`relative w-full md:max-w-5xl aspect-[3/4] md:aspect-video bg-black rounded-3xl overflow-hidden border-2 shadow-2xl transition-all duration-500 ${getStatusColor()} ${isProcessing ? 'scale-[0.98] opacity-80' : 'scale-100'}`}>
+                {/* Clock Card */}
+                <div className="w-full bg-black/40 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 text-center shadow-2xl relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"/>
                     
-                    {/* Vídeo e Canvas com object-cover para preencher todo o container responsivo sem distorção */}
-                    <video 
-                        ref={videoRef} 
-                        autoPlay 
-                        muted 
-                        onPlay={() => setIsVideoReady(true)}
-                        className="w-full h-full object-cover transform scale-x-[-1]" 
-                    />
-                    <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1] object-cover" />
+                    <p className="text-red-200/70 text-xs font-bold tracking-[0.2em] uppercase mb-2">Horário de Brasília</p>
+                    <h1 className="text-5xl md:text-6xl font-black font-mono tracking-tighter text-white drop-shadow-lg mb-2 tabular-nums">
+                        {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </h1>
+                    <p className="text-gray-400 text-xs md:text-sm font-bold capitalize tracking-wide">
+                        {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                </div>
+            </header>
 
-                    {/* OVERLAYS */}
-                    <div className="absolute inset-0 pointer-events-none">
+            {/* --- MAIN CONTENT (CAMERA CARD) --- */}
+            <main className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 w-full animate-in fade-in zoom-in-95 duration-700 delay-150">
+                
+                {/* The "Red Card" Container - Acts as Camera Frame */}
+                <div className={`relative w-full max-w-md aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(220,38,38,0.2)] border border-white/10 transition-all duration-500 group transform ${
+                    statusType === 'success' ? 'ring-4 ring-green-500 scale-[1.02]' :
+                    statusType === 'error' ? 'ring-4 ring-red-500 shake' :
+                    statusType === 'warning' ? 'ring-4 ring-yellow-500' :
+                    'hover:shadow-[0_20px_60px_rgba(220,38,38,0.3)]'
+                }`}>
+                    
+                    {/* Background Base (Red Gradient from image) */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-red-600 to-red-800 z-0"></div>
+
+                    {/* Video Layer */}
+                    <div className="absolute inset-0 z-10 mix-blend-normal">
+                        <video 
+                            ref={videoRef} 
+                            autoPlay 
+                            muted 
+                            onPlay={() => setIsVideoReady(true)}
+                            className="w-full h-full object-cover transform scale-x-[-1] opacity-90" 
+                        />
+                        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1] object-cover" />
+                    </div>
+
+                    {/* Overlay Content (Always visible to mimic the card design) */}
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-end pb-12 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent">
                         
-                        {loadingMessage && !lastLog && (
-                            <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 text-center">
-                                <Loader2 size={64} className="text-red-500 animate-spin mb-6" />
-                                <h2 className="text-xl md:text-2xl font-bold text-white tracking-widest uppercase animate-pulse">{loadingMessage}</h2>
+                        {/* Center Icon (Scan) - Pulse Animation */}
+                        {!isProcessing && !lastLog && (
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full flex items-center justify-center animate-pulse">
+                                <div className="absolute inset-0 bg-white/20 blur-2xl rounded-full"></div>
+                                <Scan size={64} className="text-white relative z-10 drop-shadow-md opacity-80" />
                             </div>
                         )}
 
-                        {/* AVISO DE BANCO VAZIO - CASO 1: SEM FUNCIONÁRIOS */}
+                        <div className="text-center transform transition-transform group-hover:-translate-y-2">
+                            <h2 className="text-3xl font-black text-white uppercase tracking-wide drop-shadow-md mb-1">
+                                Bater Ponto
+                            </h2>
+                            <p className="text-red-200/80 text-xs font-bold tracking-[0.2em] uppercase">
+                                Reconhecimento Facial
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Status Overlays */}
+                    <div className="absolute inset-0 pointer-events-none z-30">
+                        {/* Loading / Processing */}
+                        {(loadingMessage || isProcessing) && !lastLog && (
+                            <div className="absolute inset-0 bg-red-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center transition-opacity">
+                                <Loader2 size={48} className="text-white animate-spin mb-4" />
+                                <p className="text-white font-bold uppercase tracking-widest text-sm">{loadingMessage || 'Verificando...'}</p>
+                            </div>
+                        )}
+                        
+                        {/* Error State (Empty DB) */}
                         {!loadingMessage && modelsLoaded && staff.length === 0 && (
-                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 text-center">
-                                <AlertTriangle size={64} className="text-yellow-500 mb-6 animate-bounce" />
-                                <h2 className="text-xl md:text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Dados Vazio</h2>
-                                <p className="text-gray-400 max-w-md text-center">Nenhum funcionário cadastrado ou ativo.</p>
+                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center">
+                                <AlertTriangle size={48} className="text-yellow-500 mb-4" />
+                                <h3 className="text-xl font-bold text-white mb-2">Banco Vazio</h3>
+                                <p className="text-gray-400 text-xs">Cadastre funcionários com fotos no RH.</p>
                             </div>
-                        )}
-
-                        {/* AVISO DE BANCO VAZIO - CASO 2: FUNCIONÁRIOS EXISTEM, MAS SEM DESCRITORES (ERRO DE FOTO) */}
-                        {!loadingMessage && modelsLoaded && staff.length > 0 && labeledDescriptors.length === 0 && (
-                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30 p-4 text-center">
-                                <AlertTriangle size={64} className="text-red-500 mb-6 animate-pulse" />
-                                <h2 className="text-xl md:text-2xl font-bold text-red-500 tracking-widest uppercase mb-2">Erro de Biometria</h2>
-                                <p className="text-gray-400 max-w-md text-center mb-4">
-                                    {staff.length} funcionários encontrados, mas nenhuma foto pôde ser processada.
-                                    Verifique se as fotos são rostos nítidos e se o sistema tem permissão de acesso.
-                                </p>
-                                <button 
-                                    onClick={() => processStaffFaces(staff)}
-                                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold uppercase tracking-wider flex items-center gap-2 pointer-events-auto"
-                                >
-                                    <RefreshCw size={18} /> Tentar Novamente
-                                </button>
-                            </div>
-                        )}
-
-                        {!loadingMessage && !lastLog && !isProcessing && labeledDescriptors.length > 0 && (
-                            <div className="absolute inset-0 z-10 opacity-30">
-                                <div className="w-full h-1 bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-[scan_3s_ease-in-out_infinite]"></div>
-                                <div className="absolute bottom-10 left-0 right-0 text-center">
-                                    <span className="bg-black/60 backdrop-blur px-6 py-2 rounded-full text-red-400 font-bold uppercase tracking-[0.2em] text-xs md:text-sm border border-red-500/30 animate-pulse">
-                                        <Scan className="inline-block mr-2 -mt-1" size={16}/>
-                                        Aproxime-se para registrar
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {isProcessing && !lastLog && (
-                             <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px] z-20 flex items-center justify-center">
-                                 <div className="flex flex-col items-center">
-                                     <div className="h-16 w-16 border-4 border-t-transparent border-white rounded-full animate-spin mb-4"></div>
-                                     <span className="text-xl font-bold text-white tracking-widest uppercase">Validando...</span>
-                                 </div>
-                             </div>
                         )}
                     </div>
                 </div>
+            </main>
 
-                {/* RESULT CARD (POPUP) */}
-                {lastLog && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in zoom-in-95 duration-300">
-                        <div className={`w-[90%] md:w-full max-w-md bg-[#18181b] rounded-3xl p-1 shadow-2xl border-t-4 ${
-                            statusType === 'success' ? 'border-green-500 shadow-green-900/20' : 
-                            statusType === 'warning' ? 'border-yellow-500 shadow-yellow-900/20' : 
-                            'border-red-500 shadow-red-900/20'
-                        }`}>
-                            <div className="bg-[#121214] rounded-[20px] p-6 md:p-8 flex flex-col items-center text-center relative overflow-hidden">
-                                
-                                <div className={`relative h-32 w-32 md:h-40 md:w-40 rounded-full p-1 mb-4 md:mb-6 border-4 ${
-                                    statusType === 'success' ? 'border-green-500' : 
-                                    statusType === 'warning' ? 'border-yellow-500' : 
-                                    'border-red-500'
+            {/* --- RESULT POPUP (Global Overlay) --- */}
+            {lastLog && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xl p-6 animate-in fade-in zoom-in-95 duration-300">
+                    <div className={`w-full max-w-sm bg-[#18181b] rounded-[2rem] p-1 shadow-2xl border-t-4 ${
+                        statusType === 'success' ? 'border-green-500 shadow-green-900/40' : 
+                        statusType === 'warning' ? 'border-yellow-500 shadow-yellow-900/40' : 
+                        'border-red-500 shadow-red-900/40'
+                    }`}>
+                        <div className="bg-[#121214] rounded-[1.8rem] p-8 flex flex-col items-center text-center relative overflow-hidden">
+                            {/* Avatar */}
+                            <div className={`relative h-32 w-32 rounded-full p-1 mb-6 border-4 ${
+                                statusType === 'success' ? 'border-green-500' : 
+                                statusType === 'warning' ? 'border-yellow-500' : 
+                                'border-red-500'
+                            }`}>
+                                <img 
+                                    src={lastLog.staffPhotoUrl || "https://ui-avatars.com/api/?name=" + lastLog.staffName} 
+                                    alt="Funcionario" 
+                                    className="w-full h-full rounded-full object-cover bg-gray-800"
+                                />
+                                <div className={`absolute bottom-0 right-0 p-2 rounded-full text-white shadow-lg ${
+                                    statusType === 'success' ? 'bg-green-600' : 
+                                    statusType === 'warning' ? 'bg-yellow-600' : 
+                                    'bg-red-600'
                                 }`}>
-                                    <img 
-                                        src={lastLog.staffPhotoUrl || "https://ui-avatars.com/api/?name=" + lastLog.staffName} 
-                                        alt="Funcionario" 
-                                        className="w-full h-full rounded-full object-cover bg-gray-800"
-                                    />
+                                    {statusType === 'success' && <CheckCircle size={20}/>}
+                                    {statusType === 'warning' && <Clock size={20}/>}
+                                    {statusType === 'error' && <XCircle size={20}/>}
                                 </div>
-
-                                <h2 className="text-2xl md:text-3xl font-black text-white uppercase leading-tight mb-1">{lastLog.staffName}</h2>
-                                <p className="text-sm md:text-lg text-gray-400 font-medium mb-6 flex items-center gap-2">
-                                    <User size={16} /> {lastLog.staffRole}
-                                </p>
-
-                                <div className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-[0.15em] flex flex-col items-center justify-center gap-1 ${
-                                    statusType === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 
-                                    statusType === 'warning' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' : 
-                                    'bg-red-500/10 text-red-500 border border-red-500/20'
-                                }`}>
-                                    {statusMessage}
-                                    {statusSubMessage && (
-                                        <span className="text-[10px] normal-case font-normal tracking-normal opacity-80">
-                                            {statusSubMessage}
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-gray-500 text-xs mt-4">Horário: {new Date(lastLog.timestamp).toLocaleTimeString()}</p>
                             </div>
+
+                            <h2 className="text-2xl font-black text-white uppercase leading-tight mb-1">{lastLog.staffName}</h2>
+                            <p className="text-sm text-gray-400 font-bold uppercase mb-6 flex items-center gap-2 tracking-wider">
+                                {lastLog.staffRole}
+                            </p>
+
+                            <div className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-[0.15em] flex flex-col items-center justify-center gap-1 ${
+                                statusType === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 
+                                statusType === 'warning' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' : 
+                                'bg-red-500/10 text-red-500 border border-red-500/20'
+                            }`}>
+                                {statusMessage}
+                            </div>
+                            <p className="text-gray-500 text-xs mt-4 font-mono">Horário: {new Date(lastLog.timestamp).toLocaleTimeString()}</p>
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* --- FOOTER --- */}
-            <div className="h-auto py-2 md:h-12 bg-black/40 backdrop-blur-md border-t border-white/10 flex flex-col md:flex-row items-center justify-between px-4 md:px-8 text-[10px] text-gray-400 uppercase tracking-widest font-bold gap-2">
-                 <div className="flex items-center gap-4">
-                     <span className="flex items-center gap-1"><Zap size={10} className="text-red-600" /> Sistema CEMAL RH</span>
-                 </div>
-                 <div className="text-[8px] md:text-[10px] opacity-60">
-                     v2.5 Mobile/Tablet Ready
-                 </div>
-            </div>
-            <style>{`
-                @keyframes scan {
-                    0% { top: 0%; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0; }
-                }
-            `}</style>
+            <footer className="relative z-10 p-6 w-full max-w-md mx-auto flex justify-end">
+                <button 
+                    onClick={() => {
+                        if(confirm("Deseja sair do modo terminal?")) logout();
+                    }}
+                    className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all shadow-lg group"
+                    title="Configurações / Sair"
+                >
+                    <Settings size={20} className="group-hover:rotate-90 transition-transform duration-500"/>
+                </button>
+            </footer>
         </div>
     );
 };
