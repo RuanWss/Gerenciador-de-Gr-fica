@@ -162,6 +162,7 @@ export const HRDashboard: React.FC = () => {
                 photoUrl = existing?.photoUrl || '';
             }
 
+            // CORREÇÃO: Usar null em vez de undefined para campos opcionais no Firebase
             const staffData: StaffMember = {
                 id: editingId || '',
                 name: newName,
@@ -169,10 +170,9 @@ export const HRDashboard: React.FC = () => {
                 photoUrl,
                 active: true,
                 createdAt: editingId ? (staffList.find(s=>s.id === editingId)?.createdAt || Date.now()) : Date.now(),
-                // Novos campos
                 workPeriod,
                 isTeacher,
-                weeklyClasses: isTeacher ? weeklyClasses : undefined
+                weeklyClasses: isTeacher ? weeklyClasses : null as any // Envia null se não for professor
             };
 
             if (editingId) {
@@ -294,11 +294,23 @@ export const HRDashboard: React.FC = () => {
                                     {/* DADOS PESSOAIS */}
                                     <div className="col-span-2 md:col-span-1">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
-                                        <input className="w-full border p-2 rounded" value={newName} onChange={e => setNewName(e.target.value)} required placeholder="Ex: Maria da Silva" />
+                                        <input 
+                                            className="w-full border border-gray-300 p-2 rounded text-gray-900 bg-white" 
+                                            value={newName} 
+                                            onChange={e => setNewName(e.target.value)} 
+                                            required 
+                                            placeholder="Ex: Maria da Silva" 
+                                        />
                                     </div>
                                     <div className="col-span-2 md:col-span-1">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Cargo / Função</label>
-                                        <input className="w-full border p-2 rounded" value={newRole} onChange={e => setNewRole(e.target.value)} required placeholder="Ex: Auxiliar de Limpeza" />
+                                        <input 
+                                            className="w-full border border-gray-300 p-2 rounded text-gray-900 bg-white" 
+                                            value={newRole} 
+                                            onChange={e => setNewRole(e.target.value)} 
+                                            required 
+                                            placeholder="Ex: Auxiliar de Limpeza" 
+                                        />
                                     </div>
 
                                     {/* JORNADA DE TRABALHO (NOVO) */}
@@ -310,7 +322,7 @@ export const HRDashboard: React.FC = () => {
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 mb-1">Período de Trabalho</label>
                                                 <select 
-                                                    className="w-full border p-2 rounded text-sm bg-white"
+                                                    className="w-full border border-gray-300 p-2 rounded text-sm bg-white text-gray-900"
                                                     value={workPeriod}
                                                     onChange={e => setWorkPeriod(e.target.value as any)}
                                                 >
@@ -351,7 +363,7 @@ export const HRDashboard: React.FC = () => {
                                                                 type="number" 
                                                                 min="0" 
                                                                 max="10"
-                                                                className="w-full text-center border p-1 rounded font-bold text-blue-800"
+                                                                className="w-full text-center border border-gray-300 p-1 rounded font-bold text-blue-800 bg-white"
                                                                 value={weeklyClasses[day as keyof typeof weeklyClasses]}
                                                                 onChange={e => handleClassCountChange(day as any, e.target.value)}
                                                             />
@@ -366,7 +378,7 @@ export const HRDashboard: React.FC = () => {
                                     <div className="col-span-2">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Foto para Biometria</label>
                                         <div className="flex items-center gap-4">
-                                            <input type="file" onChange={handlePhotoChange} className="text-sm" accept="image/*" />
+                                            <input type="file" onChange={handlePhotoChange} className="text-sm text-gray-600" accept="image/*" />
                                             {photoStatus === 'analyzing' && <span className="text-blue-600 text-xs flex items-center"><Loader2 size={12} className="animate-spin mr-1"/> Analisando...</span>}
                                             {photoStatus === 'valid' && <span className="text-green-600 text-xs font-bold flex items-center"><CheckCircle size={12} className="mr-1"/> Foto Válida</span>}
                                             {photoStatus === 'invalid' && <span className="text-red-600 text-xs font-bold flex items-center"><AlertCircle size={12} className="mr-1"/> {photoMessage}</span>}
@@ -439,7 +451,7 @@ export const HRDashboard: React.FC = () => {
                                 <label className="text-sm font-bold text-gray-500">Data:</label>
                                 <input 
                                     type="date" 
-                                    className="border rounded p-2 text-sm" 
+                                    className="border border-gray-300 rounded p-2 text-sm text-gray-900 bg-white" 
                                     value={logFilterDate}
                                     onChange={e => setLogFilterDate(e.target.value)}
                                 />
