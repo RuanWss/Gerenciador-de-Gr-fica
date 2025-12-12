@@ -56,7 +56,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 return;
             }
 
-            setLoadingMessage('Carregando IA...');
+            setLoadingMessage('Carregando Motores de IA...');
             try {
                 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
                 await Promise.all([
@@ -77,7 +77,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
     useEffect(() => {
         const unsubscribe = listenToStaffMembers((newStaffList) => {
             // Filtra apenas quem tem foto e está ativo
-            const activeStaff = newStaffList.filter(s => s.active); 
+            const activeStaff = newStaffList.filter(s => s.active && s.photoUrl); 
+            console.log(`Carregados ${activeStaff.length} funcionários com foto.`);
             setStaff(activeStaff);
         });
 
@@ -107,7 +108,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
 
     // Helper: Process Student Photos (Create Descriptors)
     const processStaffFaces = async (staffList: StaffMember[]) => {
-        setLoadingMessage('Sincronizando...');
+        setLoadingMessage('Sincronizando Biometria...');
         
         const faceApi = (faceapi as any).default || faceapi;
         const labeledDescriptorsTemp: any[] = [];
@@ -121,6 +122,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
             try {
                 // Usa o carregador seguro com CORS
                 const img = await loadImage(member.photoUrl);
+                // Detecta com threshold padrão para garantir qualidade do descritor base
                 const detection = await faceApi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
                 
                 if (detection) {
@@ -142,6 +144,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
         
         setLabeledDescriptors(labeledDescriptorsTemp);
         setLoadingMessage('');
+        
+        if (errorCount > 0) {
+            console.log(`Finalizado com ${errorCount} erros.`);
+        }
     };
 
     // 5. Start Camera
@@ -185,10 +191,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
         // Só inicia se tudo estiver pronto
         if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0 || !faceApi) return;
 
-        // Cria o matcher
+        // Cria o matcher com threshold de 0.6 (Mais tolerante)
         let faceMatcher: any;
         try {
-            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
+            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.6);
         } catch (e) {
             console.error("Erro ao criar FaceMatcher", e);
             return;
@@ -200,10 +206,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
             if (video.paused || video.ended) return;
 
             try {
-                // SsdMobilenetv1Options com minConfidence um pouco menor para ajudar em ambientes internos
+                // minConfidence 0.35 para detectar rostos em condições difíceis
                 const detections = await faceApi.detectAllFaces(
                     video, 
-                    new faceApi.SsdMobilenetv1Options({ minConfidence: 0.45 })
+                    new faceApi.SsdMobilenetv1Options({ minConfidence: 0.35 })
                 )
                 .withFaceLandmarks()
                 .withFaceDescriptors();
@@ -218,29 +224,34 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (resizedDetections.length > 0) {
-                    // Desenha apenas a caixa delimitadora sutil
-                    const box = resizedDetections[0].detection.box;
+                    const match = resizedDetections[0];
+                    const box = match.detection.box;
+                    
+                    // Verifica correspondência
+                    let label = 'unknown';
+                    if (match.descriptor) {
+                        const bestMatch = faceMatcher.findBestMatch(match.descriptor);
+                        label = bestMatch.label;
+                    }
+
+                    // Feedback Visual
                     const drawBox = new faceApi.draw.DrawBox(box, { 
-                        label: 'Verificando...', 
-                        boxColor: '#ffffff', 
+                        label: label === 'unknown' ? 'Verificando...' : 'Identificado', 
+                        boxColor: label === 'unknown' ? '#ffffff' : '#22c55e', 
                         lineWidth: 2,
                         drawLabelOptions: { fontSize: 10 }
                     });
                     drawBox.draw(canvas);
 
-                    if (resizedDetections[0].descriptor) {
-                        const bestMatch = faceMatcher.findBestMatch(resizedDetections[0].descriptor);
-                        
-                        if (bestMatch.label !== 'unknown') {
-                            processingRef.current = true;
-                            setIsProcessing(true);
-                            await processAttendance(bestMatch.label);
-                            // Pequeno delay após sucesso para não floodar
-                            setTimeout(() => { 
-                                processingRef.current = false; 
-                                setIsProcessing(false);
-                            }, 4000); 
-                        }
+                    if (label !== 'unknown') {
+                        processingRef.current = true;
+                        setIsProcessing(true);
+                        await processAttendance(label);
+                        // Delay para evitar múltiplos registros
+                        setTimeout(() => { 
+                            processingRef.current = false; 
+                            setIsProcessing(false);
+                        }, 4000); 
                     }
                 }
             } catch (err) {
@@ -476,6 +487,11 @@ export const StaffAttendanceTerminal: React.FC = () => {
 
             {/* --- FOOTER --- */}
             <footer className="relative z-10 p-6 w-full max-w-md mx-auto flex justify-end gap-4">
+                <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider h-12 mr-auto ${labeledDescriptors.length > 0 ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                    <Database size={14} />
+                    {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces Carregadas` : 'Aguardando Faces...'}
+                </div>
+
                 <button 
                     onClick={toggleFullscreen}
                     className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all shadow-lg"
