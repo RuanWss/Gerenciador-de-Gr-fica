@@ -73,14 +73,13 @@ export const PublicSchedule: React.FC = () => {
             setCurrentTime(now);
             checkCurrentSlot(now);
             
-            // Auto-switch manual shift for table view if not interacted recently (could be added)
-            // For now, just set default on load
-            if (now.getHours() >= 13) {
-                 // Logic to stick to afternoon if auto
+            // Initial Shift Set Logic
+            if (now.getHours() >= 13 && manualShift !== 'afternoon') {
+                // Could auto-switch here if needed
             }
         }, 1000);
         
-        // Initial Shift Set
+        // Set initial shift based on time
         if (new Date().getHours() >= 13) setManualShift('afternoon');
 
         return () => clearInterval(timer);
@@ -112,7 +111,7 @@ export const PublicSchedule: React.FC = () => {
                 setCurrentSlot(foundSlot);
                 playAlert();
                 
-                // Switch view to cards on slot change to show new info
+                // Switch view to cards on slot change to show new info automatically
                 setViewMode('cards');
             }
         } else {
