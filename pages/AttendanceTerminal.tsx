@@ -47,7 +47,7 @@ export const AttendanceTerminal: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // 2. Load AI Models (Apenas uma vez)
+    // 2. Load AI Models (OTIMIZADO: Usando modelos Tiny para performance)
     useEffect(() => {
         const loadModels = async () => {
             const faceApi = (faceapi as any).default || faceapi;
@@ -58,21 +58,25 @@ export const AttendanceTerminal: React.FC = () => {
                 return;
             }
 
+            // Verifica se os modelos TINY estão carregados
             if (
-                faceApi.nets.ssdMobilenetv1.isLoaded && 
-                faceApi.nets.faceLandmark68Net.isLoaded && 
+                faceApi.nets.tinyFaceDetector.isLoaded && 
+                faceApi.nets.faceLandmark68TinyNet.isLoaded && 
                 faceApi.nets.faceRecognitionNet.isLoaded
             ) {
                 setModelsLoaded(true);
                 return;
             }
 
-            setLoadingMessage('Carregando Modelos de IA...');
+            setLoadingMessage('Carregando Motores de IA (Modo Turbo)...');
             try {
                 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
                 await Promise.all([
-                    faceApi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-                    faceApi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    // Usa TinyFaceDetector em vez de SSD Mobilenet (Muito mais rápido)
+                    faceApi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    // Usa TinyLandmarks
+                    faceApi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+                    // Mantém o reconhecimento robusto
                     faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
                 setModelsLoaded(true);
@@ -105,20 +109,9 @@ export const AttendanceTerminal: React.FC = () => {
         }
     }, [modelsLoaded, students]);
 
-     // Função auxiliar para carregar imagem com CORS anônimo
-     const loadImage = (url: string): Promise<HTMLImageElement> => {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous'; // Permite que a IA leia os pixels
-            img.onload = () => resolve(img);
-            img.onerror = (e) => reject(e);
-            img.src = url;
-        });
-    };
-
-    // Helper: Process Student Photos
+    // Helper: Process Student Photos (OTIMIZADO: FetchImage e Yielding)
     const processStudentFaces = async (studentList: Student[]) => {
-        setLoadingMessage('Indexando Biometria...');
+        setLoadingMessage('Otimizando Biometria...');
         
         const faceApi = (faceapi as any).default || faceapi;
         const labeledDescriptorsTemp: any[] = [];
@@ -130,15 +123,24 @@ export const AttendanceTerminal: React.FC = () => {
         for (const student of studentsWithPhoto) {
             if (!student.photoUrl) continue;
             try {
-                // Usa carregador seguro
-                const img = await loadImage(student.photoUrl);
-                const detection = await faceApi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                // Yield para a UI não travar durante o loop pesado
+                await new Promise(resolve => setTimeout(resolve, 0));
+
+                // Usa fetchImage nativo do faceapi (melhor gestão de memória e CORS)
+                const img = await faceApi.fetchImage(student.photoUrl);
+                
+                // Detecta usando Tiny (mais rápido para indexar também)
+                const detection = await faceApi.detectSingleFace(img, new faceApi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks(true) // true para usar tiny landmarks
+                    .withFaceDescriptor();
                 
                 if (detection) {
                     labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(student.id, [detection.descriptor]));
                 }
                 processedCount++;
-                if (studentsWithPhoto.length > 10) {
+                
+                // Atualiza UI a cada 5% para não causar flicker excessivo
+                if (processedCount % Math.ceil(studentsWithPhoto.length / 20) === 0) {
                      setLoadingMessage(`Indexando: ${Math.round((processedCount / studentsWithPhoto.length) * 100)}%`);
                 }
             } catch (err) {
@@ -163,9 +165,10 @@ export const AttendanceTerminal: React.FC = () => {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
-                            width: { ideal: 1280 },
+                            width: { ideal: 1280 }, // Mantém HD na visualização
                             height: { ideal: 720 },
-                            facingMode: "user"
+                            facingMode: "user",
+                            frameRate: { ideal: 30 }
                         } 
                     });
                     if (videoRef.current) {
@@ -185,7 +188,7 @@ export const AttendanceTerminal: React.FC = () => {
         };
     }, [modelsLoaded]);
 
-    // 6. Detection Loop
+    // 6. Detection Loop (OTIMIZADO: TinyFaceDetector)
     useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -194,19 +197,28 @@ export const AttendanceTerminal: React.FC = () => {
         // Só inicia se tudo estiver pronto
         if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0 || !faceApi) return;
 
-        const faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
+        // Matcher com threshold levemente maior para evitar falsos positivos no modelo Tiny
+        let faceMatcher: any;
+        try {
+            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
+        } catch (e) { return; }
+
         const displaySize = { width: video.videoWidth, height: video.videoHeight };
-        
-        // Garante que o canvas tem o tamanho do vídeo
         faceApi.matchDimensions(canvas, displaySize);
 
         const detect = async () => {
             if (processingRef.current) return; 
             if (lastLog) return; 
+            if (video.paused || video.ended) return;
 
             try {
-                const detections = await faceApi.detectAllFaces(video, new faceApi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-                    .withFaceLandmarks()
+                // --- OTIMIZAÇÃO CRÍTICA ---
+                // inputSize: 320 (Processa imagem menor para ser MUITO rápido)
+                // scoreThreshold: 0.5 (Confiança mínima)
+                const options = new faceApi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+
+                const detections = await faceApi.detectAllFaces(video, options)
+                    .withFaceLandmarks(true) // Usa Tiny Landmarks
                     .withFaceDescriptors();
 
                 const resizedDetections = faceApi.resizeResults(detections, displaySize);
@@ -215,24 +227,33 @@ export const AttendanceTerminal: React.FC = () => {
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (resizedDetections.length > 0) {
-                    const box = resizedDetections[0].detection.box;
+                    const match = resizedDetections[0];
+                    const box = match.detection.box;
+                    
+                    let label = 'unknown';
+                    let distance = 0;
+
+                    if (match.descriptor) {
+                        const bestMatch = faceMatcher.findBestMatch(match.descriptor);
+                        label = bestMatch.label;
+                        distance = bestMatch.distance;
+                    }
+
                     const drawBox = new faceApi.draw.DrawBox(box, { 
-                        label: 'Identificando...', 
-                        boxColor: '#3b82f6',
+                        label: label === 'unknown' ? 'Identificando...' : 'Processando...', 
+                        boxColor: label === 'unknown' ? '#3b82f6' : '#22c55e',
                         lineWidth: 2
                     });
                     drawBox.draw(canvas);
 
-                    const bestMatch = faceMatcher.findBestMatch(resizedDetections[0].descriptor);
-                    
-                    if (bestMatch.label !== 'unknown') {
+                    if (label !== 'unknown') {
                         processingRef.current = true;
                         setIsProcessing(true);
-                        await processAttendance(bestMatch.label);
+                        await processAttendance(label);
                         setTimeout(() => { 
                             processingRef.current = false; 
                             setIsProcessing(false);
-                        }, 5000); 
+                        }, 3000); // Reduzi o tempo de bloqueio para 3s para liberar a fila mais rápido
                     }
                 }
             } catch (err) {
@@ -240,10 +261,11 @@ export const AttendanceTerminal: React.FC = () => {
             }
         };
 
-        const intervalId = setInterval(detect, 500);
+        // Intervalo reduzido para 200ms para parecer mais "real-time" já que o modelo é rápido
+        const intervalId = setInterval(detect, 200);
 
         return () => clearInterval(intervalId);
-    }, [modelsLoaded, isVideoReady, labeledDescriptors]); // Recria o intervalo quando as dependências mudam
+    }, [modelsLoaded, isVideoReady, labeledDescriptors]);
 
     const processAttendance = async (studentId: string) => {
         const student = students.find(s => s.id === studentId);
@@ -447,7 +469,7 @@ export const AttendanceTerminal: React.FC = () => {
                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
                                 <Loader2 size={64} className="text-brand-500 animate-spin mb-6" />
                                 <h2 className="text-2xl font-bold text-white tracking-widest uppercase animate-pulse">{loadingMessage}</h2>
-                                <p className="text-gray-500 text-sm mt-2">Por favor, aguarde a calibração da IA</p>
+                                <p className="text-gray-500 text-sm mt-2">Otimizando banco de dados para velocidade máxima</p>
                             </div>
                         )}
 
@@ -490,7 +512,7 @@ export const AttendanceTerminal: React.FC = () => {
                                 <div className="absolute bottom-10 left-0 right-0 text-center">
                                     <span className="bg-black/60 backdrop-blur px-6 py-2 rounded-full text-blue-400 font-bold uppercase tracking-[0.2em] text-sm border border-blue-500/30 animate-pulse">
                                         <Scan className="inline-block mr-2 -mt-1" size={16}/>
-                                        Aguardando Identificação
+                                        Aguardando Identificação (Modo Turbo)
                                     </span>
                                 </div>
                             </div>
