@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -20,6 +20,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const [labeledDescriptors, setLabeledDescriptors] = useState<any[]>([]);
     const [loadingMessage, setLoadingMessage] = useState('Inicializando Sistema da Equipe...');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isVideoReady, setIsVideoReady] = useState(false); // Nova flag para sincronia
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -86,7 +87,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
             if (staffList.length > 0) {
                 await processStaffFaces(staffList);
             } else {
-                setLoadingMessage('Nenhum funcionário encontrado');
+                setLoadingMessage(''); // Limpa mensagem se não tiver staff para processar (vai cair no check de empty)
             }
         };
 
@@ -155,16 +156,19 @@ export const StaffAttendanceTerminal: React.FC = () => {
         };
     }, [modelsLoaded]);
 
-    // 5. Detection Loop
-    const handleVideoPlay = () => {
+    // 5. Detection Loop (CORRIGIDO: Agora usa useEffect para garantir acesso ao state atualizado)
+    useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         const faceApi = (faceapi as any).default || faceapi;
 
-        if (!video || !canvas || labeledDescriptors.length === 0 || !faceApi) return;
+        // Só inicia se tudo estiver pronto
+        if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0 || !faceApi) return;
 
         const faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
         const displaySize = { width: video.videoWidth, height: video.videoHeight };
+        
+        // Garante que o canvas tem o tamanho do vídeo
         faceApi.matchDimensions(canvas, displaySize);
 
         const detect = async () => {
@@ -179,13 +183,13 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 const resizedDetections = faceApi.resizeResults(detections, displaySize);
                 
                 const ctx = canvas.getContext('2d');
-                ctx?.clearRect(0, 0, canvas.width, canvas.height);
+                if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (resizedDetections.length > 0) {
                     const box = resizedDetections[0].detection.box;
                     const drawBox = new faceApi.draw.DrawBox(box, { 
                         label: 'Identificando...', 
-                        boxColor: '#dc2626', // Vermelho para combinar com o tema
+                        boxColor: '#dc2626', 
                         lineWidth: 2
                     });
                     drawBox.draw(canvas);
@@ -207,12 +211,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
             }
         };
 
-        const intervalId = setInterval(() => {
-            detect();
-        }, 500);
+        const intervalId = setInterval(detect, 500);
 
         return () => clearInterval(intervalId);
-    };
+    }, [modelsLoaded, isVideoReady, labeledDescriptors]); // Recria o intervalo quando as dependências mudam
 
     const processAttendance = async (staffId: string) => {
         const member = staff.find(s => s.id === staffId);
@@ -305,6 +307,12 @@ export const StaffAttendanceTerminal: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex items-center gap-2 bg-black/30 p-2 rounded-lg border border-white/5">
+                        {/* Indicador de Status do Banco */}
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${labeledDescriptors.length > 0 ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-500'}`} title="Funcionários com biometria carregada">
+                            <Database size={14} />
+                            {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}
+                        </div>
+                        
                          <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" title="Sair do Terminal">
                             <LogOut size={18} />
                         </button>
@@ -322,7 +330,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                         ref={videoRef} 
                         autoPlay 
                         muted 
-                        onPlay={handleVideoPlay}
+                        onPlay={() => setIsVideoReady(true)}
                         className="w-full h-full object-cover transform scale-x-[-1]" 
                     />
                     <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1]" />
@@ -337,7 +345,16 @@ export const StaffAttendanceTerminal: React.FC = () => {
                             </div>
                         )}
 
-                        {!loadingMessage && !lastLog && !isProcessing && (
+                        {/* AVISO DE BANCO VAZIO */}
+                        {!loadingMessage && modelsLoaded && labeledDescriptors.length === 0 && (
+                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
+                                <AlertTriangle size={64} className="text-yellow-500 mb-6 animate-bounce" />
+                                <h2 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Faces Vazio</h2>
+                                <p className="text-gray-400 max-w-md text-center">Nenhum funcionário com foto foi encontrado no sistema. Cadastre as fotos no Painel de RH para ativar o reconhecimento.</p>
+                            </div>
+                        )}
+
+                        {!loadingMessage && !lastLog && !isProcessing && labeledDescriptors.length > 0 && (
                             <div className="absolute inset-0 z-10 opacity-30">
                                 <div className="w-full h-1 bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-[scan_3s_ease-in-out_infinite]"></div>
                                 <div className="absolute bottom-10 left-0 right-0 text-center">
