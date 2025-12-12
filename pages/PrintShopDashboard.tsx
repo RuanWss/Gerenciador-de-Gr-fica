@@ -52,7 +52,8 @@ import {
   ClipboardCheck,
   CalendarDays,
   ArrowRight,
-  FileSpreadsheet
+  FileSpreadsheet,
+  XCircle
 } from 'lucide-react';
 
 // --- CONSTANTES DE HORÁRIOS E TURMAS (Mesmos do PublicSchedule) ---
@@ -124,7 +125,11 @@ export const PrintShopDashboard: React.FC = () => {
     // --- LOAD DATA ---
     useEffect(() => {
         if (activeTab === 'exams') loadExams();
-        if (activeTab === 'students' || activeTab === 'classes') loadStudents();
+        // Carrega alunos e frequência juntos para exibir status na lista de alunos
+        if (activeTab === 'students' || activeTab === 'classes') {
+            loadStudents();
+            loadAttendance(); 
+        }
         if (activeTab === 'attendance') loadAttendance();
         if (activeTab === 'schedule') loadSchedule();
         if (activeTab === 'planning') loadPlans();
@@ -135,7 +140,8 @@ export const PrintShopDashboard: React.FC = () => {
     }, [activeTab]);
 
     useEffect(() => {
-        if (activeTab === 'attendance') {
+        // Recarrega frequência se mudar a data (mesmo estando na aba de alunos se quiser implementar filtro de data lá depois)
+        if (activeTab === 'attendance' || activeTab === 'students') {
             loadAttendance();
         }
     }, [attendanceDate]);
@@ -213,10 +219,11 @@ export const PrintShopDashboard: React.FC = () => {
 
     // --- ACTIONS: ATTENDANCE ---
     const loadAttendance = async () => {
-        setIsLoading(true);
+        // Não ativa loading global se estiver na aba de alunos para não piscar a tela toda
+        if (activeTab === 'attendance') setIsLoading(true);
         const data = await getAttendanceLogs(attendanceDate);
         setAttendanceLogs(data);
-        setIsLoading(false);
+        if (activeTab === 'attendance') setIsLoading(false);
     };
 
     const handleExportAttendanceReport = () => {
@@ -315,12 +322,23 @@ export const PrintShopDashboard: React.FC = () => {
         return matchStatus && matchSearch;
     });
 
+    // Filtra alunos
     const filteredStudents = students.filter(s => {
         const matchesSearch = s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
                               s.className.toLowerCase().includes(studentSearch.toLowerCase());
         const matchesClass = studentFilterClass === 'ALL' || s.classId === studentFilterClass;
         return matchesSearch && matchesClass;
     });
+
+    // Set de IDs presentes para busca rápida
+    const presentStudentIds = new Set(attendanceLogs.map(log => log.studentId));
+    
+    // Contagem de presentes (apenas dos alunos filtrados atualmente ou totais?)
+    // Vamos contar quantos da lista filtrada estão presentes
+    const presentCountFiltered = filteredStudents.filter(s => presentStudentIds.has(s.id)).length;
+    
+    // Contagem total de presentes hoje (independente do filtro de busca/turma na tela)
+    const totalPresentToday = presentStudentIds.size;
 
     const filteredPlans = planFilterClass 
         ? plans.filter(p => p.className === planFilterClass)
@@ -593,40 +611,64 @@ export const PrintShopDashboard: React.FC = () => {
                         )}
 
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                            <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                                <div className="relative w-64">
+                            <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div className="relative w-full md:w-64">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                                     <input className="pl-9 pr-4 py-2 border rounded-lg text-sm w-full" placeholder="Buscar aluno..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
                                 </div>
-                                <span className="text-xs text-gray-500 font-bold">{filteredStudents.length} alunos cadastrados</span>
+                                <div className="flex flex-wrap gap-4 items-center justify-end">
+                                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
+                                        <Users size={14} /> {filteredStudents.length} cadastrados
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs font-bold text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                                        <CheckCircle size={14} /> {presentCountFiltered} presentes hoje
+                                    </div>
+                                </div>
                             </div>
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
-                                    <tr>
-                                        <th className="p-4">Foto</th>
-                                        <th className="p-4">Nome</th>
-                                        <th className="p-4">Turma</th>
-                                        <th className="p-4 text-right">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {filteredStudents.map(student => (
-                                        <tr key={student.id} className="hover:bg-gray-50">
-                                            <td className="p-4">
-                                                <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
-                                                    {student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover" /> : <Users className="p-2 text-gray-400 w-full h-full"/>}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 font-bold text-gray-800">{student.name}</td>
-                                            <td className="p-4 text-gray-500">{student.className}</td>
-                                            <td className="p-4 text-right">
-                                                <button onClick={() => handleEditStudent(student)} className="text-blue-600 hover:text-blue-800 mr-3"><Edit3 size={16}/></button>
-                                                <button onClick={() => handleDeleteStudent(student.id)} className="text-red-600 hover:text-red-800"><Trash2 size={16}/></button>
-                                            </td>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
+                                        <tr>
+                                            <th className="p-4">Foto</th>
+                                            <th className="p-4">Nome</th>
+                                            <th className="p-4">Turma</th>
+                                            <th className="p-4">Frequência</th>
+                                            <th className="p-4 text-right">Ações</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {filteredStudents.map(student => {
+                                            const isPresent = presentStudentIds.has(student.id);
+                                            return (
+                                                <tr key={student.id} className="hover:bg-gray-50">
+                                                    <td className="p-4">
+                                                        <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                                                            {student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover" /> : <Users className="p-2 text-gray-400 w-full h-full"/>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 font-bold text-gray-800">{student.name}</td>
+                                                    <td className="p-4 text-gray-500">{student.className}</td>
+                                                    <td className="p-4">
+                                                        {isPresent ? (
+                                                            <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-200">
+                                                                <CheckCircle size={12}/> PRESENTE
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-400 px-2 py-1 rounded text-xs font-bold border border-gray-200">
+                                                                <XCircle size={12}/> AUSENTE
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <button onClick={() => handleEditStudent(student)} className="text-blue-600 hover:text-blue-800 mr-3"><Edit3 size={16}/></button>
+                                                        <button onClick={() => handleDeleteStudent(student.id)} className="text-red-600 hover:text-red-800"><Trash2 size={16}/></button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
