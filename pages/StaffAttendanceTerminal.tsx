@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database, RefreshCw, Settings, XCircle } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database, RefreshCw, Settings, XCircle, Maximize, Minimize } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -23,6 +23,9 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
     
+    // UI State
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const processingRef = useRef(false);
@@ -309,6 +312,18 @@ export const StaffAttendanceTerminal: React.FC = () => {
         audio.play().catch(e => console.log(e));
     };
 
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+            setIsFullscreen(true);
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+                setIsFullscreen(false);
+            }
+        }
+    };
+
     return (
         <div className="min-h-screen w-full bg-[#0a0000] text-white flex flex-col relative overflow-hidden font-sans selection:bg-red-500/30">
             {/* Background Gradients to match the mood */}
@@ -460,7 +475,15 @@ export const StaffAttendanceTerminal: React.FC = () => {
             )}
 
             {/* --- FOOTER --- */}
-            <footer className="relative z-10 p-6 w-full max-w-md mx-auto flex justify-end">
+            <footer className="relative z-10 p-6 w-full max-w-md mx-auto flex justify-end gap-4">
+                <button 
+                    onClick={toggleFullscreen}
+                    className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all shadow-lg"
+                    title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+                >
+                    {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+                </button>
+
                 <button 
                     onClick={() => {
                         if(confirm("Deseja sair do modo terminal?")) logout();
