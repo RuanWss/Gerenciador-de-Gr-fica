@@ -162,36 +162,36 @@ export const PublicSchedule: React.FC = () => {
     const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     return (
-        <div className="min-h-screen bg-[#0f0f10] text-white overflow-hidden flex flex-col font-sans relative selection:bg-red-500 selection:text-white">
+        <div className="min-h-screen w-full bg-[#0f0f10] text-white overflow-y-auto lg:overflow-hidden flex flex-col font-sans relative selection:bg-red-500 selection:text-white">
             <audio ref={audioRef} src={ALERT_SOUND_URL} />
 
             {/* Audio overlay fix */}
             {!audioEnabled && (
                 <div onClick={enableAudio} className="fixed inset-0 z-[9999] cursor-pointer flex items-center justify-center">
-                    <div className="bg-red-600/90 backdrop-blur px-8 py-4 rounded-full animate-pulse shadow-lg flex items-center gap-4">
-                        <Volume2 size={24} />
-                        <span className="font-bold uppercase tracking-widest">Clique para ativar o som</span>
+                    <div className="bg-red-600/90 backdrop-blur px-8 py-4 rounded-full animate-pulse shadow-lg flex items-center gap-4 mx-4 text-center">
+                        <Volume2 size={24} className="shrink-0" />
+                        <span className="font-bold uppercase tracking-widest text-sm md:text-base">Toque para ativar o som</span>
                     </div>
                 </div>
             )}
 
             {/* HEADER CENTRALIZADO (CLOCK) */}
-            <div className="pt-10 pb-6 text-center z-10 flex flex-col items-center">
-                <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" alt="Logo" className="h-16 w-auto mb-6 object-contain drop-shadow-xl" />
+            <div className="pt-8 md:pt-10 pb-4 md:pb-6 text-center z-10 flex flex-col items-center px-4">
+                <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" alt="Logo" className="h-10 md:h-16 w-auto mb-4 md:mb-6 object-contain drop-shadow-xl" />
                 
-                <h1 className="text-[140px] leading-[0.8] font-['Montserrat'] font-black text-white tracking-tighter drop-shadow-2xl tabular-nums">
+                <h1 className="text-6xl sm:text-8xl md:text-9xl lg:text-[140px] leading-none font-['Montserrat'] font-black text-white tracking-tighter drop-shadow-2xl tabular-nums">
                     {timeString}
                 </h1>
                 
-                <div className="bg-[#1a1a1a] border border-white/10 px-8 py-2 rounded-full mt-8 shadow-lg">
-                    <span className="text-sm font-bold tracking-[0.2em] text-gray-400 uppercase">
+                <div className="bg-[#1a1a1a] border border-white/10 px-4 md:px-8 py-2 rounded-full mt-4 md:mt-8 shadow-lg">
+                    <span className="text-xs md:text-sm font-bold tracking-[0.1em] md:tracking-[0.2em] text-gray-400 uppercase">
                         {dateString}
                     </span>
                 </div>
             </div>
 
             {/* CONTROLES / TURNO */}
-            <div className="flex justify-center items-center gap-4 my-6 z-10">
+            <div className="flex justify-center items-center gap-4 my-4 md:my-6 z-10">
                 <button 
                     onClick={() => setManualShift(manualShift === 'morning' ? 'afternoon' : 'morning')}
                     className="group bg-black/40 border border-white/10 px-6 py-2 rounded-full flex items-center gap-3 transition-all hover:bg-white/5 hover:border-white/20 shadow-lg"
@@ -205,17 +205,17 @@ export const PublicSchedule: React.FC = () => {
 
             {/* WARNING BANNER */}
             {sysConfig?.isBannerActive && sysConfig?.showOnTV && (
-                <div className="w-full max-w-5xl mx-auto mb-8 animate-in slide-in-from-top-4">
+                <div className="w-full max-w-5xl mx-auto mb-6 md:mb-8 px-4 animate-in slide-in-from-top-4">
                     <div className={`border-l-4 ${sysConfig.bannerType === 'error' ? 'border-red-500 bg-red-900/20' : 'border-yellow-500 bg-yellow-900/20'} p-4 rounded-r-lg flex items-center gap-4 shadow-lg backdrop-blur-sm`}>
-                        <Megaphone size={24} className={sysConfig.bannerType === 'error' ? 'text-red-500' : 'text-yellow-500'} />
-                        <span className="text-lg font-bold text-white uppercase tracking-wide">{sysConfig.bannerMessage}</span>
+                        <Megaphone size={24} className={`shrink-0 ${sysConfig.bannerType === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                        <span className="text-sm md:text-lg font-bold text-white uppercase tracking-wide">{sysConfig.bannerMessage}</span>
                     </div>
                 </div>
             )}
 
             {/* GRADE DE CARDS */}
-            <div className="flex-1 w-full max-w-[1800px] mx-auto px-8 pb-8 z-10 flex flex-col justify-center">
-                <div className={`grid gap-6 w-full ${activeClasses.length === 3 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
+            <div className="flex-1 w-full max-w-[1800px] mx-auto px-4 md:px-8 pb-8 z-10 flex flex-col justify-center">
+                <div className={`grid gap-4 md:gap-6 w-full ${activeClasses.length === 3 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
                     {activeClasses.map(cls => {
                         const entry = getEntry(cls.id);
                         
@@ -237,23 +237,23 @@ export const PublicSchedule: React.FC = () => {
                         }
 
                         return (
-                            <div key={cls.id} className="bg-[#0a0a0a] border border-white/10 rounded-xl h-[35vh] flex flex-col relative overflow-hidden group shadow-2xl transition-transform hover:scale-[1.01]">
+                            <div key={cls.id} className="bg-[#0a0a0a] border border-white/10 rounded-xl min-h-[220px] lg:h-[35vh] flex flex-col relative overflow-hidden group shadow-2xl transition-transform hover:scale-[1.01]">
                                 {/* Header do Card */}
-                                <div className="bg-[#121212] py-5 text-center border-b border-white/5 shadow-sm">
-                                    <h2 className="text-2xl font-black text-white uppercase tracking-wider">{cls.name}</h2>
+                                <div className="bg-[#121212] py-4 md:py-5 text-center border-b border-white/5 shadow-sm">
+                                    <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-wider">{cls.name}</h2>
                                 </div>
                                 
                                 {/* Conteúdo do Card */}
-                                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative">
+                                <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 text-center relative">
                                     {/* Texto Principal */}
-                                    <h3 className={`text-4xl md:text-5xl font-black uppercase tracking-tight leading-none mb-3 drop-shadow-lg ${cardColor} transition-colors duration-500`}>
+                                    <h3 className={`text-3xl md:text-5xl font-black uppercase tracking-tight leading-none mb-3 drop-shadow-lg ${cardColor} transition-colors duration-500 break-words w-full`}>
                                         {statusText}
                                     </h3>
                                     
                                     {/* Subtexto (Professor) */}
                                     {statusSub && (
-                                        <div className="bg-white/5 px-6 py-2 rounded-full border border-white/5 mt-4">
-                                            <p className="text-lg font-bold text-gray-300 uppercase tracking-widest">
+                                        <div className="bg-white/5 px-4 md:px-6 py-2 rounded-full border border-white/5 mt-2 md:mt-4">
+                                            <p className="text-sm md:text-lg font-bold text-gray-300 uppercase tracking-widest truncate max-w-full">
                                                 {statusSub}
                                             </p>
                                         </div>
@@ -271,7 +271,7 @@ export const PublicSchedule: React.FC = () => {
             </div>
 
             {/* FOOTER BUTTON */}
-            <div className="absolute bottom-6 right-6 z-50">
+            <div className="fixed bottom-6 right-6 z-50 hidden md:block">
                 <button 
                     onClick={toggleFullscreen}
                     className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-gray-500 hover:text-white transition-colors"
