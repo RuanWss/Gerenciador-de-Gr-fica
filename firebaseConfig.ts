@@ -1,10 +1,11 @@
+
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 // Configuração real do projeto
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyDAKoXebsuV8kN9jZXa0md-aMUsbawusU4",
   authDomain: "area-do-adm.firebaseapp.com",
   projectId: "area-do-adm",

@@ -7,7 +7,8 @@ import {
     updateStaffMember, 
     deleteStaffMember, 
     uploadStaffPhoto,
-    listenToStaffLogs // Atualizado para Listener
+    listenToStaffLogs,
+    createTeacherAuth // Importado
 } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
 import { Button } from '../components/Button';
@@ -23,7 +24,9 @@ import {
   CheckCircle,
   AlertCircle,
   Calendar,
-  GraduationCap
+  GraduationCap,
+  Lock,
+  Mail
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
@@ -44,9 +47,10 @@ export const HRDashboard: React.FC = () => {
     const [newPhoto, setNewPhoto] = useState<File | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     
-    // Novos Estados do Form (Jornada)
+    // Novos Estados do Form (Jornada & Login)
     const [workPeriod, setWorkPeriod] = useState<'morning' | 'afternoon' | 'full'>('morning');
     const [isTeacher, setIsTeacher] = useState(false);
+    const [teacherEmail, setTeacherEmail] = useState('');
     const [weeklyClasses, setWeeklyClasses] = useState({
         monday: 0,
         tuesday: 0,
@@ -136,11 +140,36 @@ export const HRDashboard: React.FC = () => {
             return;
         }
 
+        if (isTeacher && !editingId && !teacherEmail) {
+            alert("Para cadastrar um novo professor, é obrigatório informar o E-mail de Login.");
+            return;
+        }
+
         setIsSaving(true);
         try {
+            // 1. Criar Usuário no Firebase Auth (se for novo professor e tiver email)
+            // Se for edição, assumimos que o email não muda ou é gerido separadamente por segurança
+            if (!editingId && isTeacher && teacherEmail) {
+                try {
+                    await createTeacherAuth(teacherEmail, newName);
+                } catch (authError: any) {
+                    console.error("Erro ao criar login:", authError);
+                    if (authError.code === 'auth/email-already-in-use') {
+                        const proceed = confirm("Este e-mail já está em uso no sistema. Deseja apenas cadastrar os dados do funcionário sem criar um novo login?");
+                        if (!proceed) {
+                            setIsSaving(false);
+                            return;
+                        }
+                    } else {
+                        alert("Erro ao criar login do professor: " + authError.message);
+                        setIsSaving(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Upload da Foto
             let photoUrl = '';
-            
-            // Lógica de Upload da Foto
             if (newPhoto) {
                 try {
                     photoUrl = await uploadStaffPhoto(newPhoto);
@@ -153,15 +182,13 @@ export const HRDashboard: React.FC = () => {
                         setIsSaving(false);
                         return;
                     }
-                    // Se continuar, photoUrl fica vazia
                 }
             } else if (editingId) {
-                // Mantém a foto antiga se não enviou nova
                 const existing = staffList.find(s => s.id === editingId);
                 photoUrl = existing?.photoUrl || '';
             }
 
-            // CORREÇÃO: Usar null em vez de undefined para campos opcionais no Firebase
+            // 3. Salvar Dados no Firestore
             const staffData: StaffMember = {
                 id: editingId || '',
                 name: newName,
@@ -171,7 +198,7 @@ export const HRDashboard: React.FC = () => {
                 createdAt: editingId ? (staffList.find(s=>s.id === editingId)?.createdAt || Date.now()) : Date.now(),
                 workPeriod,
                 isTeacher,
-                weeklyClasses: isTeacher ? weeklyClasses : null as any // Envia null se não for professor
+                weeklyClasses: isTeacher ? weeklyClasses : null as any
             };
 
             if (editingId) {
@@ -179,7 +206,7 @@ export const HRDashboard: React.FC = () => {
                 alert("Funcionário atualizado com sucesso!");
             } else {
                 await saveStaffMember({ ...staffData, id: '' });
-                alert("Funcionário cadastrado com sucesso!");
+                alert("Funcionário cadastrado com sucesso! Login criado (se aplicável).");
             }
             
             resetForm();
@@ -206,6 +233,7 @@ export const HRDashboard: React.FC = () => {
         // Populate new fields
         setWorkPeriod(staff.workPeriod || 'morning');
         setIsTeacher(staff.isTeacher || false);
+        setTeacherEmail(''); // Não permitimos editar email por aqui por segurança, ou deixamos vazio
         if (staff.weeklyClasses) {
             setWeeklyClasses(staff.weeklyClasses);
         } else {
@@ -237,6 +265,7 @@ export const HRDashboard: React.FC = () => {
         // Reset new fields
         setWorkPeriod('morning');
         setIsTeacher(false);
+        setTeacherEmail('');
         setWeeklyClasses({ monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0 });
         
         setShowForm(false);
@@ -340,15 +369,51 @@ export const HRDashboard: React.FC = () => {
                                                     />
                                                     <div className="flex flex-col">
                                                         <span className="text-sm font-bold text-gray-800">É Professor?</span>
-                                                        <span className="text-[10px] text-gray-500">Habilita contagem de aulas</span>
+                                                        <span className="text-[10px] text-gray-500">Habilita acesso ao sistema e contagem de aulas</span>
                                                     </div>
                                                 </label>
                                             </div>
                                         </div>
 
+                                        {/* LOGIN DO PROFESSOR (NOVO) */}
+                                        {isTeacher && (
+                                            <div className="mt-4 p-4 bg-white rounded-lg border border-purple-200 animate-in fade-in slide-in-from-top-2">
+                                                <h5 className="text-xs font-black text-purple-700 uppercase mb-3 flex items-center gap-2">
+                                                    <Lock size={14} /> Credenciais de Acesso
+                                                </h5>
+                                                
+                                                {!editingId ? (
+                                                    <div className="grid grid-cols-1 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-gray-500 mb-1">E-mail de Login</label>
+                                                            <div className="relative">
+                                                                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                                                                <input 
+                                                                    type="email"
+                                                                    required={isTeacher && !editingId}
+                                                                    className="w-full border border-purple-200 p-2 pl-9 rounded text-sm bg-purple-50 focus:bg-white transition-colors text-gray-900"
+                                                                    placeholder="professor@escola.com"
+                                                                    value={teacherEmail}
+                                                                    onChange={e => setTeacherEmail(e.target.value)}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="bg-gray-100 p-3 rounded text-xs text-gray-500 flex items-center justify-between">
+                                                            <span>Senha Padrão do Sistema:</span>
+                                                            <span className="font-mono font-bold text-gray-800 bg-gray-200 px-2 py-0.5 rounded">cemal2016</span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-xs text-gray-500 italic">
+                                                        O login do professor já foi criado. Para alterar a senha, utilize a função "Esqueci minha senha" na tela de login.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* GRADE DE AULAS */}
                                         {isTeacher && (
-                                            <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                                            <div className="mt-4 animate-in fade-in slide-in-from-top-2 border-t border-blue-100 pt-4">
                                                 <label className="block text-xs font-bold text-gray-500 mb-2 flex items-center gap-1">
                                                     <GraduationCap size={14} /> Quantidade de Aulas por Dia
                                                 </label>

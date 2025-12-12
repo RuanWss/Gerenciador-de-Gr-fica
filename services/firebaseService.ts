@@ -1,5 +1,7 @@
 
-import { db, storage } from '../firebaseConfig';
+import { db, storage, firebaseConfig } from '../firebaseConfig';
+import { initializeApp } from 'firebase/app'; // Necessário para criar usuário sem deslogar
+import { getAuth, createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
 import { 
   collection, 
   addDoc, 
@@ -44,6 +46,41 @@ const CONFIG_COLLECTION = 'systemConfig';
 const ATTENDANCE_LOGS_COLLECTION = 'attendanceLogs';
 const STAFF_COLLECTION = 'staff'; 
 const STAFF_LOGS_COLLECTION = 'staffLogs';
+
+// --- AUTH HELPER (CREATE TEACHER) ---
+
+export const createTeacherAuth = async (email: string, name: string): Promise<string> => {
+    // Inicializa uma instância secundária do Firebase App
+    // Isso permite criar um usuário sem deslogar o administrador atual (RH)
+    const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+        // Cria o usuário com a senha padrão
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, "cemal2016");
+        const user = userCredential.user;
+
+        // Atualiza o perfil com o nome
+        await updateProfile(user, { displayName: name });
+        
+        // Cria o perfil no Firestore (collection 'users') para definir a Role como TEACHER
+        await setDoc(doc(db, USERS_COLLECTION, user.uid), {
+             name: name,
+             email: email,
+             role: 'TEACHER', // Força a role de professor
+             subject: 'Geral', // Default
+             classes: []
+        });
+
+        // Desloga da instância secundária para limpar a memória
+        await signOut(secondaryAuth);
+        
+        return user.uid;
+    } catch (error: any) {
+        console.error("Erro ao criar usuário professor:", error);
+        throw error;
+    } 
+};
 
 // --- USERS ---
 
