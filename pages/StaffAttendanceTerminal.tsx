@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getStaffMembers, logStaffAttendance } from '../services/firebaseService';
+import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
 import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database } from 'lucide-react';
 // @ts-ignore
@@ -13,6 +13,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const [staff, setStaff] = useState<StaffMember[]>([]);
     const [lastLog, setLastLog] = useState<StaffAttendanceLog | null>(null);
     const [statusMessage, setStatusMessage] = useState<string>('');
+    const [statusSubMessage, setStatusSubMessage] = useState<string>('');
     const [statusType, setStatusType] = useState<'success' | 'error' | 'warning' | 'waiting'>('waiting');
     
     // AI State
@@ -20,7 +21,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const [labeledDescriptors, setLabeledDescriptors] = useState<any[]>([]);
     const [loadingMessage, setLoadingMessage] = useState('Inicializando Sistema da Equipe...');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isVideoReady, setIsVideoReady] = useState(false); // Nova flag para sincronia
+    const [isVideoReady, setIsVideoReady] = useState(false);
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,7 +33,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // 2. Load Models & Staff
+    // 2. Load AI Models (Apenas uma vez)
     useEffect(() => {
         const loadModels = async () => {
             const faceApi = (faceapi as any).default || faceapi;
@@ -49,7 +50,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 faceApi.nets.faceRecognitionNet.isLoaded
             ) {
                 setModelsLoaded(true);
-                setLoadingMessage('Sincronizando Banco de Dados...');
                 return;
             }
 
@@ -62,41 +62,39 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
                 setModelsLoaded(true);
-                setLoadingMessage('Sincronizando Banco de Dados...');
             } catch (error) {
                 console.error("Erro ao carregar modelos:", error);
                 setLoadingMessage('Erro de Conexão com IA');
             }
         };
-
-        const fetchStaff = async () => {
-            try {
-                const list = await getStaffMembers();
-                const activeList = list.filter(s => s.active); // Apenas ativos
-                setStaff(activeList);
-                return activeList;
-            } catch (error) {
-                console.error("Erro ao buscar equipe:", error);
-                return [];
-            }
-        };
-
-        const init = async () => {
-            await loadModels();
-            const staffList = await fetchStaff();
-            if (staffList.length > 0) {
-                await processStaffFaces(staffList);
-            } else {
-                setLoadingMessage(''); // Limpa mensagem se não tiver staff para processar (vai cair no check de empty)
-            }
-        };
-
-        init();
+        loadModels();
     }, []);
 
-    // 3. Process Faces
+    // 3. Listen to Staff Data (Tempo Real)
+    useEffect(() => {
+        // Inscreve no listener do Firestore
+        const unsubscribe = listenToStaffMembers((newStaffList) => {
+            console.log("Lista de funcionários atualizada:", newStaffList.length);
+            const activeStaff = newStaffList.filter(s => s.active); // Apenas ativos
+            setStaff(activeStaff);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // 4. Process Faces (Sempre que Staff ou Models mudarem)
+    useEffect(() => {
+        if (modelsLoaded && staff.length > 0) {
+            processStaffFaces(staff);
+        } else if (modelsLoaded && staff.length === 0) {
+            setLoadingMessage(''); // Limpa msg se carregou mas não tem ninguém
+            setLabeledDescriptors([]);
+        }
+    }, [modelsLoaded, staff]);
+
+    // Helper: Process Student Photos (Create Descriptors)
     const processStaffFaces = async (staffList: StaffMember[]) => {
-        setLoadingMessage('Indexando Biometria...');
+        setLoadingMessage('Sincronizando Biometria...');
         
         const faceApi = (faceapi as any).default || faceapi;
         const labeledDescriptorsTemp: any[] = [];
@@ -114,8 +112,9 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(member.id, [detection.descriptor]));
                 }
                 processedCount++;
-                if (processedCount % 5 === 0) {
-                     setLoadingMessage(`Indexando: ${Math.round((processedCount / staffWithPhoto.length) * 100)}%`);
+                // Atualiza progresso visualmente apenas se houver muitos
+                if (staffWithPhoto.length > 5) {
+                     setLoadingMessage(`Sincronizando: ${Math.round((processedCount / staffWithPhoto.length) * 100)}%`);
                 }
             } catch (err) {
                 console.warn(`Erro ao processar foto de ${member.name}`, err);
@@ -124,9 +123,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
         
         setLabeledDescriptors(labeledDescriptorsTemp);
         setLoadingMessage('');
+        console.log("Biometria atualizada para", labeledDescriptorsTemp.length, "funcionários.");
     };
 
-    // 4. Start Camera
+    // 5. Start Camera
     useEffect(() => {
         let stream: MediaStream | null = null;
         const startCamera = async () => {
@@ -156,7 +156,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
         };
     }, [modelsLoaded]);
 
-    // 5. Detection Loop (CORRIGIDO: Agora usa useEffect para garantir acesso ao state atualizado)
+    // 6. Detection Loop
     useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -262,6 +262,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
         setLastLog(null);
         setStatusType('waiting');
         setStatusMessage('');
+        setStatusSubMessage('');
         setIsProcessing(false);
     };
 
@@ -404,12 +405,17 @@ export const StaffAttendanceTerminal: React.FC = () => {
                                     <User size={16} /> {lastLog.staffRole}
                                 </p>
 
-                                <div className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-[0.15em] flex items-center justify-center gap-2 ${
+                                <div className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-[0.15em] flex flex-col items-center justify-center gap-1 ${
                                     statusType === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 
                                     statusType === 'warning' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' : 
                                     'bg-red-500/10 text-red-500 border border-red-500/20'
                                 }`}>
                                     {statusMessage}
+                                    {statusSubMessage && (
+                                        <span className="text-[10px] normal-case font-normal tracking-normal opacity-80">
+                                            {statusSubMessage}
+                                        </span>
+                                    )}
                                 </div>
                                 <p className="text-gray-500 text-xs mt-4">Horário: {new Date(lastLog.timestamp).toLocaleTimeString()}</p>
                             </div>

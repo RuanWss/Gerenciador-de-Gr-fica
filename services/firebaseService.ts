@@ -444,6 +444,17 @@ export const getStaffMembers = async (): Promise<StaffMember[]> => {
     }
 };
 
+// Listener em tempo real para equipe
+export const listenToStaffMembers = (onUpdate: (staff: StaffMember[]) => void) => {
+    const q = collection(db, STAFF_COLLECTION);
+    return onSnapshot(q, (snapshot) => {
+        const staff = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffMember));
+        onUpdate(staff);
+    }, (error) => {
+        console.error("Erro ao ouvir equipe:", error);
+    });
+};
+
 export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
     try {
         const { id, ...data } = staff;
