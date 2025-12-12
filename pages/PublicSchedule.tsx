@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
@@ -211,30 +212,32 @@ export const PublicSchedule: React.FC = () => {
 
     // Warning Visibility Logic (ROBUSTO)
     const isWarningVisible = () => {
-        // Checagem básica: Configuração existe, aviso está ativo e tem mensagem
-        if (!sysConfig?.isBannerActive || !sysConfig?.showOnTV || !sysConfig?.bannerMessage) {
-            return false;
-        }
+        if (!sysConfig) return false;
+        
+        // 1. O aviso deve estar ativo no painel
+        if (!sysConfig.isBannerActive) return false;
+
+        // 2. O aviso deve ter um texto
+        if (!sysConfig.bannerMessage || sysConfig.bannerMessage.trim() === '') return false;
         
         const now = new Date();
         
-        // Validação da Data de Início
-        if (sysConfig.tvStart && sysConfig.tvStart.trim() !== '') {
+        // 3. Validação da Data de Início (Se existir)
+        if (sysConfig.tvStart && sysConfig.tvStart !== '') {
             const startDate = new Date(sysConfig.tvStart);
             if (!isNaN(startDate.getTime())) {
                 if (now < startDate) return false; // Ainda não chegou a hora
             }
         }
 
-        // Validação da Data de Fim
-        if (sysConfig.tvEnd && sysConfig.tvEnd.trim() !== '') {
+        // 4. Validação da Data de Fim (Se existir)
+        if (sysConfig.tvEnd && sysConfig.tvEnd !== '') {
             const endDate = new Date(sysConfig.tvEnd);
             if (!isNaN(endDate.getTime())) {
                 if (now > endDate) return false; // Já passou da hora
             }
         }
 
-        // Se passou por todas as verificações (ou se as datas estavam vazias), mostra o aviso
         return true;
     };
 
@@ -266,7 +269,7 @@ export const PublicSchedule: React.FC = () => {
                     Se tiver aviso: 65% width + borda direita
                     Se NÃO tiver aviso: 100% width (centralizado)
                 */}
-                <div className={`${showWarning ? 'w-[65%] border-r border-white/10' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-700`}>
+                <div className={`${showWarning ? 'w-[65%] border-r border-white/10' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-700 shrink-0`}>
                     {/* Logo */}
                     <img 
                         src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
@@ -292,11 +295,23 @@ export const PublicSchedule: React.FC = () => {
                     Renderizado condicionalmente
                 */}
                 {showWarning && (
-                    <div className="w-[35%] h-full flex items-center justify-center p-8 animate-in fade-in slide-in-from-right duration-700">
+                    <div className="w-[35%] h-full flex items-center justify-center p-8 animate-in fade-in slide-in-from-right duration-700 shrink-0 bg-black/40">
                         {/* Box - h-auto to fit text */}
-                        <div className="w-full h-auto min-h-[150px] bg-black/80 backdrop-blur-xl border-[6px] border-yellow-500 rounded-3xl p-8 shadow-[0_0_50px_rgba(234,179,8,0.4)] animate-pulse flex flex-col items-center justify-center gap-6">
-                            <Megaphone size={50} className="text-yellow-400 shrink-0" />
-                            <p className="text-[3.5vh] font-bold text-yellow-50 uppercase text-center leading-tight break-words w-full">
+                        <div className={`w-full h-auto min-h-[150px] backdrop-blur-xl border-[6px] rounded-3xl p-8 shadow-2xl animate-pulse flex flex-col items-center justify-center gap-6 ${
+                            sysConfig?.bannerType === 'error' ? 'border-red-600 bg-red-900/20 shadow-red-900/50' :
+                            sysConfig?.bannerType === 'warning' ? 'border-yellow-500 bg-yellow-900/20 shadow-yellow-900/50' :
+                            'border-blue-600 bg-blue-900/20 shadow-blue-900/50'
+                        }`}>
+                            <Megaphone size={50} className={`${
+                                sysConfig?.bannerType === 'error' ? 'text-red-500' :
+                                sysConfig?.bannerType === 'warning' ? 'text-yellow-500' :
+                                'text-blue-500'
+                            } shrink-0`} />
+                            <p className={`text-[3.5vh] font-bold uppercase text-center leading-tight break-words w-full ${
+                                sysConfig?.bannerType === 'error' ? 'text-red-100' :
+                                sysConfig?.bannerType === 'warning' ? 'text-yellow-100' :
+                                'text-blue-100'
+                            }`}>
                                 {sysConfig?.bannerMessage}
                             </p>
                         </div>
