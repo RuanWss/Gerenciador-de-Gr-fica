@@ -14,7 +14,8 @@ import {
     getLessonPlans,
     listenToSystemConfig,
     updateSystemConfig,
-    listenToAttendanceLogs // Atualizado para listener
+    listenToAttendanceLogs,
+    getStaffMembers // Importado para buscar equipe
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -23,7 +24,8 @@ import {
     ScheduleEntry, 
     LessonPlan, 
     SystemConfig,
-    AttendanceLog
+    AttendanceLog,
+    StaffMember // Importado tipo Staff
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -53,7 +55,8 @@ import {
   CalendarDays,
   ArrowRight,
   FileSpreadsheet,
-  XCircle
+  XCircle,
+  Briefcase // Icone novo
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
@@ -90,7 +93,7 @@ const CLASSES = [
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'classes' | 'attendance' | 'schedule' | 'planning' | 'config'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'classes' | 'attendance' | 'schedule' | 'planning' | 'config' | 'staff_board'>('exams');
     const [isLoading, setIsLoading] = useState(false);
 
     // --- STATES: EXAMS ---
@@ -125,6 +128,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [plans, setPlans] = useState<LessonPlan[]>([]);
     const [planFilterClass, setPlanFilterClass] = useState('');
 
+    // --- STATES: STAFF BOARD ---
+    const [staffList, setStaffList] = useState<StaffMember[]>([]);
+    const [staffSearch, setStaffSearch] = useState('');
+
     // --- STATES: CONFIG ---
     const [config, setConfig] = useState<SystemConfig>({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
 
@@ -138,6 +145,7 @@ export const PrintShopDashboard: React.FC = () => {
         }
         if (activeTab === 'schedule') loadSchedule();
         if (activeTab === 'planning') loadPlans();
+        if (activeTab === 'staff_board') loadStaff(); // Carrega equipe
         if (activeTab === 'config') {
             const unsub = listenToSystemConfig((c) => setConfig(c));
             return () => unsub();
@@ -353,6 +361,14 @@ export const PrintShopDashboard: React.FC = () => {
         setIsLoading(false);
     };
 
+    // --- ACTIONS: STAFF ---
+    const loadStaff = async () => {
+        setIsLoading(true);
+        const data = await getStaffMembers();
+        setStaffList(data.sort((a,b) => a.name.localeCompare(b.name)));
+        setIsLoading(false);
+    };
+
     // --- ACTIONS: CONFIG ---
     const handleSaveConfig = async () => {
         await updateSystemConfig(config);
@@ -395,6 +411,12 @@ export const PrintShopDashboard: React.FC = () => {
         return matchesSearch && matchesClass;
     });
 
+    // Filtra Equipe
+    const filteredStaff = staffList.filter(s => 
+        s.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
+        s.role.toLowerCase().includes(staffSearch.toLowerCase())
+    );
+
     // Set de IDs presentes para busca rápida (atualizado em tempo real pelo listener)
     const presentStudentIds = new Set(attendanceLogs.map(log => log.studentId));
     
@@ -418,6 +440,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="attendance" label="Frequência" icon={ClipboardCheck} />
                     <SidebarItem id="schedule" label="Quadro de Horários" icon={Calendar} />
                     <SidebarItem id="planning" label="Planejamento" icon={BookOpen} />
+                    <SidebarItem id="staff_board" label="Quadro de Equipe" icon={Briefcase} />
                     <div className="my-4 border-t border-white/10"></div>
                     <SidebarItem id="config" label="Configurações & TV" icon={Settings} />
                 </div>
@@ -942,6 +965,78 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                             ))}
                             {filteredPlans.length === 0 && <div className="col-span-3 text-center text-gray-300 py-10 bg-white/10 backdrop-blur rounded-xl border border-white/20">Nenhum planejamento encontrado.</div>}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB: STAFF BOARD (NOVO) --- */}
+                {activeTab === 'staff_board' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="flex justify-between items-center mb-8">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Briefcase className="text-red-500"/> Quadro de Equipe / Professores</h1>
+                                <p className="text-gray-400">Visualização de todos os colaboradores cadastrados no RH</p>
+                            </div>
+                             <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                                <input 
+                                    className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm w-64 bg-gray-50 focus:bg-white transition-colors" 
+                                    placeholder="Buscar funcionário..."
+                                    value={staffSearch}
+                                    onChange={e => setStaffSearch(e.target.value)}
+                                />
+                            </div>
+                        </header>
+
+                        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 uppercase text-xs">
+                                        <tr>
+                                            <th className="p-4">Colaborador</th>
+                                            <th className="p-4">Cargo / Função</th>
+                                            <th className="p-4">Jornada</th>
+                                            <th className="p-4 text-center">Situação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {staffList.filter(s => 
+                                            s.name.toLowerCase().includes(staffSearch.toLowerCase()) || 
+                                            s.role.toLowerCase().includes(staffSearch.toLowerCase())
+                                        ).map(staff => (
+                                            <tr key={staff.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="p-4 flex items-center gap-3">
+                                                    <div className="h-10 w-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                                                        {staff.photoUrl ? <img src={staff.photoUrl} className="h-full w-full object-cover" alt={staff.name} /> : <Users className="p-2 text-gray-400 w-full h-full"/>}
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-bold text-gray-800 block">{staff.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-gray-700">
+                                                    <div className="flex items-center gap-2">
+                                                        {staff.role}
+                                                        {staff.isTeacher && <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold border border-blue-200">PROFESSOR</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-gray-500 text-xs font-medium">
+                                                    {staff.workPeriod === 'morning' ? 'Matutino' : staff.workPeriod === 'afternoon' ? 'Vespertino' : 'Integral'}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${staff.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                        {staff.active ? 'Ativo' : 'Desligado'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {staffList.length === 0 && (
+                                            <tr>
+                                                <td colSpan={4} className="p-10 text-center text-gray-400">Nenhum colaborador encontrado.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
