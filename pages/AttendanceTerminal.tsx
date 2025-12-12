@@ -7,7 +7,6 @@ import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, Us
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
-// Definição das turmas e seus turnos para validação
 const CLASSES_CONFIG = [
     { id: '6efaf', name: '6º ANO EFAF', shift: 'morning' },
     { id: '7efaf', name: '7º ANO EFAF', shift: 'morning' },
@@ -40,66 +39,48 @@ export const AttendanceTerminal: React.FC = () => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const processingRef = useRef(false);
+    const processedCache = useRef<Map<string, string>>(new Map());
 
-    // 1. Clock
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // 2. Load AI Models (OTIMIZADO: Usando modelos Tiny para performance)
     useEffect(() => {
         const loadModels = async () => {
             const faceApi = (faceapi as any).default || faceapi;
+            if (!faceApi || !faceApi.nets) return;
 
-            if (!faceApi || !faceApi.nets) {
-                console.error("Biblioteca FaceAPI não inicializada corretamente.");
-                setLoadingMessage("Erro Fatal: FaceAPI não carregada");
-                return;
-            }
-
-            // Verifica se os modelos TINY estão carregados
-            if (
-                faceApi.nets.tinyFaceDetector.isLoaded && 
-                faceApi.nets.faceLandmark68TinyNet.isLoaded && 
-                faceApi.nets.faceRecognitionNet.isLoaded
-            ) {
+            if (faceApi.nets.tinyFaceDetector.isLoaded && faceApi.nets.faceLandmark68TinyNet.isLoaded) {
                 setModelsLoaded(true);
                 return;
             }
 
-            setLoadingMessage('Carregando Motores de IA (Modo Turbo)...');
+            setLoadingMessage('Carregando Motores de IA...');
             try {
                 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
                 await Promise.all([
-                    // Usa TinyFaceDetector em vez de SSD Mobilenet (Muito mais rápido)
                     faceApi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                    // Usa TinyLandmarks
                     faceApi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-                    // Mantém o reconhecimento robusto
                     faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
                 setModelsLoaded(true);
             } catch (error) {
-                console.error("Erro ao carregar modelos:", error);
+                console.error("Erro AI:", error);
                 setLoadingMessage('Erro de Conexão com IA');
             }
         };
         loadModels();
     }, []);
 
-    // 3. Listen to Students Data (Tempo Real)
     useEffect(() => {
-        // Inscreve no listener do Firestore
         const unsubscribe = listenToStudents((newStudents) => {
-            console.log("Lista de alunos atualizada:", newStudents.length);
             setStudents(newStudents);
         });
-
         return () => unsubscribe();
     }, []);
 
-    // 4. Process Faces (Reage a mudanças na lista ou nos modelos)
+    // Otimização de Processamento (Cache)
     useEffect(() => {
         if (modelsLoaded && students.length > 0) {
             processStudentFaces(students);
@@ -109,55 +90,55 @@ export const AttendanceTerminal: React.FC = () => {
         }
     }, [modelsLoaded, students]);
 
-    // Helper: Process Student Photos (OTIMIZADO: FetchImage e Yielding)
     const processStudentFaces = async (studentList: Student[]) => {
-        setLoadingMessage('Otimizando Biometria...');
-        
         const faceApi = (faceapi as any).default || faceapi;
-        const labeledDescriptorsTemp: any[] = [];
         
-        const studentsWithPhoto = studentList.filter(s => s.photoUrl);
-        let processedCount = 0;
-        let errorCount = 0;
+        const validStudents = studentList.filter(s => s.photoUrl);
+        const toProcess = validStudents.filter(s => {
+            const cachedUrl = processedCache.current.get(s.id);
+            return cachedUrl !== s.photoUrl && s.photoUrl;
+        });
 
-        for (const student of studentsWithPhoto) {
+        if (toProcess.length === 0) {
+            const currentIds = new Set(validStudents.map(s => s.id));
+            if (labeledDescriptors.length !== validStudents.length) {
+                const validDescriptors = labeledDescriptors.filter(ld => currentIds.has(ld.label));
+                setLabeledDescriptors(validDescriptors);
+            }
+            setLoadingMessage('');
+            return;
+        }
+
+        setLoadingMessage(`Otimizando Biometria (${toProcess.length})...`);
+        const newDescriptors: any[] = [];
+
+        for (const student of toProcess) {
             if (!student.photoUrl) continue;
             try {
-                // Yield para a UI não travar durante o loop pesado
-                await new Promise(resolve => setTimeout(resolve, 0));
-
-                // Usa fetchImage nativo do faceapi (melhor gestão de memória e CORS)
+                await new Promise(resolve => setTimeout(resolve, 10));
                 const img = await faceApi.fetchImage(student.photoUrl);
-                
-                // Detecta usando Tiny (mais rápido para indexar também)
                 const detection = await faceApi.detectSingleFace(img, new faceApi.TinyFaceDetectorOptions())
-                    .withFaceLandmarks(true) // true para usar tiny landmarks
+                    .withFaceLandmarks(true)
                     .withFaceDescriptor();
                 
                 if (detection) {
-                    labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(student.id, [detection.descriptor]));
-                }
-                processedCount++;
-                
-                // Atualiza UI a cada 5% para não causar flicker excessivo
-                if (processedCount % Math.ceil(studentsWithPhoto.length / 20) === 0) {
-                     setLoadingMessage(`Indexando: ${Math.round((processedCount / studentsWithPhoto.length) * 100)}%`);
+                    newDescriptors.push(new faceApi.LabeledFaceDescriptors(student.id, [detection.descriptor]));
+                    processedCache.current.set(student.id, student.photoUrl);
                 }
             } catch (err) {
-                console.warn(`Erro ao processar foto de ${student.name}`, err);
-                errorCount++;
+                console.warn(`Erro ao processar ${student.name}`);
             }
         }
         
-        setLabeledDescriptors(labeledDescriptorsTemp);
+        setLabeledDescriptors(prev => {
+            const updatedIds = new Set(newDescriptors.map(d => d.label));
+            const currentIds = new Set(validStudents.map(s => s.id));
+            const kept = prev.filter(d => !updatedIds.has(d.label) && currentIds.has(d.label));
+            return [...kept, ...newDescriptors];
+        });
         setLoadingMessage('');
-        
-        if (errorCount > 0) {
-            console.log(`Finalizado com ${errorCount} erros de imagem.`);
-        }
     };
 
-    // 5. Start Camera
     useEffect(() => {
         let stream: MediaStream | null = null;
         const startCamera = async () => {
@@ -165,17 +146,16 @@ export const AttendanceTerminal: React.FC = () => {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
-                            width: { ideal: 1280 }, // Mantém HD na visualização
+                            width: { ideal: 1280 },
                             height: { ideal: 720 },
-                            facingMode: "user",
-                            frameRate: { ideal: 30 }
+                            facingMode: "user"
                         } 
                     });
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
+                        videoRef.current.setAttribute("playsinline", "true");
                     }
                 } catch (err) {
-                    console.error("Erro ao acessar câmera:", err);
                     setLoadingMessage('Câmera não detectada');
                 }
             }
@@ -188,55 +168,44 @@ export const AttendanceTerminal: React.FC = () => {
         };
     }, [modelsLoaded]);
 
-    // 6. Detection Loop (OTIMIZADO: TinyFaceDetector)
     useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         const faceApi = (faceapi as any).default || faceapi;
 
-        // Só inicia se tudo estiver pronto
-        if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0 || !faceApi) return;
+        if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0) return;
 
-        // Matcher com threshold levemente maior para evitar falsos positivos no modelo Tiny
         let faceMatcher: any;
         try {
             faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
         } catch (e) { return; }
 
-        const displaySize = { width: video.videoWidth, height: video.videoHeight };
-        faceApi.matchDimensions(canvas, displaySize);
-
         const detect = async () => {
-            if (processingRef.current) return; 
-            if (lastLog) return; 
-            if (video.paused || video.ended) return;
+            if (processingRef.current || lastLog || video.paused || video.ended) return;
 
             try {
-                // --- OTIMIZAÇÃO CRÍTICA ---
-                // inputSize: 320 (Processa imagem menor para ser MUITO rápido)
-                // scoreThreshold: 0.5 (Confiança mínima)
-                const options = new faceApi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
-
+                const options = new faceApi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
                 const detections = await faceApi.detectAllFaces(video, options)
-                    .withFaceLandmarks(true) // Usa Tiny Landmarks
+                    .withFaceLandmarks(true)
                     .withFaceDescriptors();
 
+                const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                if (canvas.width !== displaySize.width || canvas.height !== displaySize.height) {
+                    faceApi.matchDimensions(canvas, displaySize);
+                }
+
                 const resizedDetections = faceApi.resizeResults(detections, displaySize);
-                
                 const ctx = canvas.getContext('2d');
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (resizedDetections.length > 0) {
                     const match = resizedDetections[0];
                     const box = match.detection.box;
-                    
                     let label = 'unknown';
-                    let distance = 0;
 
                     if (match.descriptor) {
                         const bestMatch = faceMatcher.findBestMatch(match.descriptor);
                         label = bestMatch.label;
-                        distance = bestMatch.distance;
                     }
 
                     const drawBox = new faceApi.draw.DrawBox(box, { 
@@ -253,17 +222,13 @@ export const AttendanceTerminal: React.FC = () => {
                         setTimeout(() => { 
                             processingRef.current = false; 
                             setIsProcessing(false);
-                        }, 3000); // Reduzi o tempo de bloqueio para 3s para liberar a fila mais rápido
+                        }, 3000);
                     }
                 }
-            } catch (err) {
-                // Silently handle
-            }
+            } catch (err) {}
         };
 
-        // Intervalo reduzido para 200ms para parecer mais "real-time" já que o modelo é rápido
         const intervalId = setInterval(detect, 200);
-
         return () => clearInterval(intervalId);
     }, [modelsLoaded, isVideoReady, labeledDescriptors]);
 
@@ -272,17 +237,13 @@ export const AttendanceTerminal: React.FC = () => {
 
         if (student) {
             const now = new Date();
-            const dateString = now.toISOString().split('T')[0];
             const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-            // --- VALIDAÇÃO DE TURNO ---
             const classConfig = CLASSES_CONFIG.find(c => c.id === student.classId);
             
             const MORNING_START = 6 * 60;
             const MORNING_END = 12 * 60 + 20;
             const AFTERNOON_START = 12 * 60 + 30;
             const AFTERNOON_END = 19 * 60;
-
             const MORNING_LATE_LIMIT = 7 * 60 + 20;
             const AFTERNOON_LATE_LIMIT = 13 * 60 + 15;
 
@@ -306,16 +267,7 @@ export const AttendanceTerminal: React.FC = () => {
             }
 
             if (!isShiftValid) {
-                setLastLog({
-                    id: '',
-                    studentId: student.id,
-                    studentName: student.name,
-                    className: student.className,
-                    studentPhotoUrl: student.photoUrl,
-                    timestamp: now.getTime(),
-                    type: 'entry',
-                    dateString
-                });
+                setLastLog({ id: '', studentId: student.id, studentName: student.name, className: student.className, studentPhotoUrl: student.photoUrl, timestamp: now.getTime(), type: 'entry', dateString: now.toISOString().split('T')[0] });
                 setStatusType('error');
                 setStatusMessage('FORA DO TURNO');
                 setStatusSubMessage('');
@@ -332,11 +284,10 @@ export const AttendanceTerminal: React.FC = () => {
                 studentPhotoUrl: student.photoUrl,
                 timestamp: now.getTime(),
                 type: 'entry',
-                dateString: dateString
+                dateString: now.toISOString().split('T')[0]
             };
 
             const success = await logAttendance(log);
-
             setLastLog(log);
 
             if (success) {
@@ -403,8 +354,7 @@ export const AttendanceTerminal: React.FC = () => {
 
     return (
         <div className="h-screen w-screen bg-[#09090b] text-white overflow-hidden flex flex-col font-sans selection:bg-brand-500/30">
-            
-            {/* --- HEADER --- */}
+            {/* HEADER */}
             <div className="h-[15vh] bg-[#121214] border-b border-white/5 flex items-center justify-between px-8 z-20 shadow-lg relative">
                 <div className="flex items-center gap-6">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 w-auto drop-shadow-md" alt="Logo" />
@@ -429,96 +379,46 @@ export const AttendanceTerminal: React.FC = () => {
                             <Database size={14} />
                             {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}
                         </div>
-                        
-                        <button 
-                            onClick={toggleFullscreen} 
-                            className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" 
-                            title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
-                        >
+                        <button onClick={toggleFullscreen} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors">
                             {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
                         </button>
-
-                         <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" title="Sair do Terminal">
+                         <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors">
                             <LogOut size={18} />
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* --- MAIN CONTENT --- */}
+            {/* MAIN CONTENT */}
             <div className="flex-1 relative flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-800/20 via-[#09090b] to-[#09090b]">
-                
-                {/* CAMERA CONTAINER */}
                 <div className={`relative w-full max-w-5xl aspect-video bg-black rounded-3xl overflow-hidden border-2 shadow-2xl transition-all duration-500 ${getStatusColor()} ${isProcessing ? 'scale-[0.98] opacity-80' : 'scale-100'}`}>
-                    
-                    {/* VIDEO FEED */}
-                    <video 
-                        ref={videoRef} 
-                        autoPlay 
-                        muted 
-                        onPlay={() => setIsVideoReady(true)}
-                        className="w-full h-full object-cover transform scale-x-[-1]" 
-                    />
+                    <video ref={videoRef} autoPlay muted onPlay={() => setIsVideoReady(true)} className="w-full h-full object-cover transform scale-x-[-1]" />
                     <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1]" />
 
-                    {/* OVERLAYS */}
                     <div className="absolute inset-0 pointer-events-none">
-                        
-                        {/* LOADING OVERLAY */}
                         {loadingMessage && !lastLog && (
                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
                                 <Loader2 size={64} className="text-brand-500 animate-spin mb-6" />
                                 <h2 className="text-2xl font-bold text-white tracking-widest uppercase animate-pulse">{loadingMessage}</h2>
-                                <p className="text-gray-500 text-sm mt-2">Otimizando banco de dados para velocidade máxima</p>
                             </div>
                         )}
-
-                        {/* AVISO DE BANCO VAZIO */}
                         {!loadingMessage && modelsLoaded && students.length === 0 && (
                              <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
                                 <AlertTriangle size={64} className="text-yellow-500 mb-6 animate-bounce" />
                                 <h2 className="text-2xl font-bold text-yellow-500 tracking-widest uppercase mb-2">Banco de Faces Vazio</h2>
-                                <p className="text-gray-400 max-w-md text-center">Nenhum aluno com foto foi encontrado no sistema. Cadastre as fotos no Painel Escolar para ativar o reconhecimento.</p>
                             </div>
                         )}
-
-                         {/* AVISO DE ERRO NAS FOTOS */}
-                         {!loadingMessage && modelsLoaded && students.length > 0 && labeledDescriptors.length === 0 && (
-                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
-                                <AlertTriangle size={64} className="text-red-500 mb-6 animate-pulse" />
-                                <h2 className="text-2xl font-bold text-red-500 tracking-widest uppercase mb-2">Erro de Biometria</h2>
-                                <p className="text-gray-400 max-w-md text-center mb-4">
-                                    {students.length} alunos encontrados, mas as fotos falharam ao carregar.
-                                    Verifique a conexão ou as permissões de acesso.
-                                </p>
-                                <button 
-                                    onClick={() => processStudentFaces(students)}
-                                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold uppercase tracking-wider flex items-center gap-2 pointer-events-auto"
-                                >
-                                    <RefreshCw size={18} /> Tentar Novamente
-                                </button>
-                            </div>
-                        )}
-
-                        {/* SCANNING LINE (IDLE) */}
                         {!loadingMessage && !lastLog && !isProcessing && labeledDescriptors.length > 0 && (
                             <div className="absolute inset-0 z-10 opacity-30">
                                 <div className="w-full h-1 bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.8)] animate-[scan_3s_ease-in-out_infinite]"></div>
-                                <div className="absolute top-8 left-8 p-2 border-l-4 border-t-4 border-blue-500 w-16 h-16 rounded-tl-xl opacity-60"></div>
-                                <div className="absolute top-8 right-8 p-2 border-r-4 border-t-4 border-blue-500 w-16 h-16 rounded-tr-xl opacity-60"></div>
-                                <div className="absolute bottom-8 left-8 p-2 border-l-4 border-b-4 border-blue-500 w-16 h-16 rounded-bl-xl opacity-60"></div>
-                                <div className="absolute bottom-8 right-8 p-2 border-r-4 border-b-4 border-blue-500 w-16 h-16 rounded-br-xl opacity-60"></div>
-                                
                                 <div className="absolute bottom-10 left-0 right-0 text-center">
                                     <span className="bg-black/60 backdrop-blur px-6 py-2 rounded-full text-blue-400 font-bold uppercase tracking-[0.2em] text-sm border border-blue-500/30 animate-pulse">
                                         <Scan className="inline-block mr-2 -mt-1" size={16}/>
-                                        Aguardando Identificação (Modo Turbo)
+                                        Aguardando Identificação
                                     </span>
                                 </div>
                             </div>
                         )}
-                        
-                        {/* PROCESSING INDICATOR */}
                         {isProcessing && !lastLog && (
                              <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px] z-20 flex items-center justify-center">
                                  <div className="flex flex-col items-center">
@@ -530,7 +430,6 @@ export const AttendanceTerminal: React.FC = () => {
                     </div>
                 </div>
 
-                {/* RESULT CARD (POPUP) */}
                 {lastLog && (
                     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-6 animate-in fade-in zoom-in-95 duration-300">
                         <div className={`w-full max-w-md bg-[#18181b] rounded-3xl p-1 shadow-2xl border-t-4 ${
@@ -539,54 +438,22 @@ export const AttendanceTerminal: React.FC = () => {
                             'border-red-500 shadow-red-900/20'
                         }`}>
                             <div className="bg-[#121214] rounded-[20px] p-8 flex flex-col items-center text-center relative overflow-hidden">
-                                
-                                {/* Background glow */}
-                                <div className={`absolute top-0 inset-x-0 h-32 opacity-10 blur-3xl ${
-                                    statusType === 'success' ? 'bg-green-500' : 
-                                    statusType === 'warning' ? 'bg-yellow-500' : 
-                                    'bg-red-500'
-                                }`}></div>
-
-                                {/* Avatar */}
                                 <div className={`relative h-40 w-40 rounded-full p-1 mb-6 border-4 ${
                                     statusType === 'success' ? 'border-green-500' : 
                                     statusType === 'warning' ? 'border-yellow-500' : 
                                     'border-red-500'
                                 }`}>
-                                    <img 
-                                        src={lastLog.studentPhotoUrl || "https://ui-avatars.com/api/?name=" + lastLog.studentName} 
-                                        alt="Aluno" 
-                                        className="w-full h-full rounded-full object-cover bg-gray-800"
-                                    />
-                                    <div className={`absolute bottom-1 right-1 p-2 rounded-full text-white shadow-lg ${
-                                        statusType === 'success' ? 'bg-green-600' : 
-                                        statusType === 'warning' ? 'bg-yellow-600' : 
-                                        'bg-red-600'
-                                    }`}>
-                                        {statusType === 'success' && <CheckCircle size={20}/>}
-                                        {statusType === 'warning' && <Clock size={20}/>}
-                                        {statusType === 'error' && <ShieldAlert size={20}/>}
-                                    </div>
+                                    <img src={lastLog.studentPhotoUrl || "https://ui-avatars.com/api/?name=" + lastLog.studentName} alt="Aluno" className="w-full h-full rounded-full object-cover bg-gray-800"/>
                                 </div>
-
-                                {/* Info */}
                                 <h2 className="text-3xl font-black text-white uppercase leading-tight mb-1">{lastLog.studentName}</h2>
-                                <p className="text-lg text-gray-400 font-medium mb-8 flex items-center gap-2">
-                                    <User size={16} /> {lastLog.className}
-                                </p>
-
-                                {/* Status Badge */}
+                                <p className="text-lg text-gray-400 font-medium mb-8 flex items-center gap-2"><User size={16} /> {lastLog.className}</p>
                                 <div className={`w-full py-4 rounded-xl font-black text-lg uppercase tracking-[0.15em] flex flex-col items-center justify-center gap-1 ${
-                                    statusType === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 
-                                    statusType === 'warning' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' : 
-                                    'bg-red-500/10 text-red-500 border border-red-500/20'
+                                    statusType === 'success' ? 'bg-green-500/10 text-green-500' : 
+                                    statusType === 'warning' ? 'bg-yellow-500/10 text-yellow-500' : 
+                                    'bg-red-500/10 text-red-500'
                                 }`}>
                                     {statusMessage}
-                                    {statusSubMessage && (
-                                        <span className="text-[10px] normal-case font-normal tracking-normal opacity-80">
-                                            {statusSubMessage}
-                                        </span>
-                                    )}
+                                    {statusSubMessage && <span className="text-[10px] normal-case font-normal tracking-normal opacity-80">{statusSubMessage}</span>}
                                 </div>
                             </div>
                         </div>
@@ -594,26 +461,13 @@ export const AttendanceTerminal: React.FC = () => {
                 )}
             </div>
 
-            {/* --- FOOTER --- */}
             <div className="h-12 bg-[#09090b] border-t border-white/5 flex items-center justify-between px-8 text-[10px] text-gray-600 uppercase tracking-widest font-bold">
                  <div className="flex items-center gap-4">
                      <span className="flex items-center gap-1"><Zap size={10} className="text-brand-600" /> Sistema CEMAL v2.5</span>
-                     <span className="hidden md:inline">|</span>
-                     <span className="hidden md:inline">Terminal ID: T-01</span>
                  </div>
-                 <div>
-                     Desenvolvido pela Equipe de TI
-                 </div>
+                 <div>Desenvolvido pela Equipe de TI</div>
             </div>
-
-            <style>{`
-                @keyframes scan {
-                    0% { top: 0%; opacity: 0; }
-                    10% { opacity: 1; }
-                    90% { opacity: 1; }
-                    100% { top: 100%; opacity: 0; }
-                }
-            `}</style>
+            <style>{`@keyframes scan { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }`}</style>
         </div>
     );
 };
