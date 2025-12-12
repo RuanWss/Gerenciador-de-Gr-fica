@@ -25,13 +25,15 @@ import {
   getDownloadURL 
 } from 'firebase/storage';
 import { db, auth, storage } from '../firebaseConfig';
-import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog, ClassMaterial, LessonPlan } from '../types';
+import { ExamRequest, ExamStatus, User, UserRole, SchoolClass, Student, StaffMember, StaffAttendanceLog, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, AttendanceLog, ClassMaterial, LessonPlan } from '../types';
 
 // Nome das coleções no Firestore
 const EXAMS_COLLECTION = 'exams';
 const USERS_COLLECTION = 'users';
 const CLASSES_COLLECTION = 'classes';
 const STUDENTS_COLLECTION = 'students';
+const STAFF_COLLECTION = 'staff_members'; // Nova coleção para funcionários
+const STAFF_LOGS_COLLECTION = 'staff_attendance_logs'; // Nova coleção para logs de ponto
 const ANSWER_KEYS_COLLECTION = 'answer_keys';
 const CORRECTIONS_COLLECTION = 'corrections';
 const CONFIG_COLLECTION = 'config';
@@ -80,6 +82,18 @@ export const uploadStudentPhoto = async (file: File): Promise<string> => {
     return await getDownloadURL(snapshot.ref);
   } catch (error) {
     console.error("Erro ao fazer upload da foto:", error);
+    throw error;
+  }
+};
+
+export const uploadStaffPhoto = async (file: File): Promise<string> => {
+  if (!file) return '';
+  try {
+    const storageRef = ref(storage, `staff/${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+  } catch (error) {
+    console.error("Erro ao fazer upload da foto do funcionário:", error);
     throw error;
   }
 };
@@ -417,7 +431,108 @@ export const deleteStudent = async (id: string): Promise<void> => {
     }
 };
 
-// --- ATTENDANCE ---
+// --- STAFF (FUNCIONÁRIOS) ---
+
+export const getStaffMembers = async (): Promise<StaffMember[]> => {
+    try {
+        const q = collection(db, STAFF_COLLECTION);
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffMember));
+    } catch (error: any) {
+        console.error("Erro ao buscar funcionários:", error);
+        return [];
+    }
+};
+
+export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
+    try {
+        const { id, ...data } = staff;
+        const cleanedData = cleanData(data);
+        await addDoc(collection(db, STAFF_COLLECTION), cleanedData);
+    } catch (error) {
+        console.error("Erro ao salvar funcionário:", error);
+        throw error;
+    }
+};
+
+export const updateStaffMember = async (staff: StaffMember): Promise<void> => {
+    try {
+        const { id, ...data } = staff;
+        const staffRef = doc(db, STAFF_COLLECTION, id);
+        const cleanedData = cleanData(data);
+        await updateDoc(staffRef, cleanedData);
+    } catch (error) {
+        console.error("Erro ao atualizar funcionário:", error);
+        throw error;
+    }
+};
+
+export const deleteStaffMember = async (id: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, STAFF_COLLECTION, id));
+    } catch (error) {
+        console.error("Erro ao deletar funcionário:", error);
+        throw error;
+    }
+};
+
+// --- STAFF ATTENDANCE (PONTO) ---
+
+export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
+    try {
+        // 1. Verificar último registro deste funcionário
+        const q = query(
+            collection(db, STAFF_LOGS_COLLECTION),
+            where("staffId", "==", log.staffId),
+            orderBy("timestamp", "desc"),
+            limit(1)
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+            const lastLogData = snapshot.docs[0].data() as StaffAttendanceLog;
+            const timeDiff = log.timestamp - lastLogData.timestamp;
+            const twoMinutes = 2 * 60 * 1000;
+
+            // Se faz menos de 2 minutos do último ponto, rejeita
+            if (timeDiff < twoMinutes) {
+                return 'too_soon';
+            }
+        }
+
+        // 2. Salva o novo registro
+        const { id, ...data } = log;
+        const cleanedData = cleanData(data);
+        await addDoc(collection(db, STAFF_LOGS_COLLECTION), cleanedData);
+        return 'success';
+
+    } catch (error) {
+        console.error("Erro ao registrar ponto da equipe:", error);
+        return 'error';
+    }
+};
+
+export const getStaffLogs = async (dateString?: string): Promise<StaffAttendanceLog[]> => {
+    try {
+        let q;
+        if (dateString) {
+             q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
+        } else {
+             // Busca logs recentes se não passar data
+             q = query(collection(db, STAFF_LOGS_COLLECTION), orderBy("timestamp", "desc"), limit(100));
+        }
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffAttendanceLog))
+            .sort((a,b) => b.timestamp - a.timestamp); // Garante ordenação local
+    } catch (error) {
+        console.error("Erro ao buscar logs da equipe:", error);
+        return [];
+    }
+};
+
+// --- ATTENDANCE (STUDENTS) ---
 
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     try {

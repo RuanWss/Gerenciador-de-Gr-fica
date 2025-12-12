@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { auth } from '../firebaseConfig';
@@ -21,7 +22,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // VERIFICAÇÃO DE LOGIN DE FREQUÊNCIA (TERMINAL)
+        // 1. TERMINAL DE ALUNOS
         if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
              setUser({
                 id: firebaseUser.uid,
@@ -35,7 +36,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return;
         }
 
-        // VERIFICAÇÃO DE ADMIN (GRÁFICA)
+        // 2. TERMINAL DE EQUIPE (PONTO)
+        if (firebaseUser.email === 'pontoequipecemal@ceprofmal.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Terminal de Ponto',
+                email: firebaseUser.email,
+                role: UserRole.STAFF_TERMINAL,
+                subject: '',
+                classes: []
+              });
+              setLoading(false);
+              return;
+        }
+
+        // 3. PAINEL DE RH
+        if (firebaseUser.email === 'rh@ceprofmal.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Recursos Humanos',
+                email: firebaseUser.email,
+                role: UserRole.HR,
+                subject: '',
+                classes: []
+              });
+              setLoading(false);
+              return;
+        }
+
+        // 4. ADMIN (GRÁFICA/ESCOLA)
         if (
              firebaseUser.uid === 'QX1GxorHhxU3jPUVXAJVLRndb7E2' || 
              firebaseUser.email === 'graficacemal@gmail.com'
@@ -52,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return;
         }
 
-        // Busca dados adicionais do Firestore (Role, Disciplina, Turmas)
+        // 5. PROFESSORES / OUTROS
         const userProfile = await getUserProfile(firebaseUser.uid);
         if (userProfile) {
           setUser(userProfile);
@@ -83,8 +112,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     } catch (error: any) {
       console.warn("Falha no login:", error.code);
-      // Removida tentativa automática de criação para evitar erros de "email-already-in-use"
-      // e loops de autenticação.
       return false;
     }
   };

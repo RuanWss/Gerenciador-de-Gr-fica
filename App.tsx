@@ -6,6 +6,8 @@ import { TeacherDashboard } from './pages/TeacherDashboard';
 import { PrintShopDashboard } from './pages/PrintShopDashboard';
 import { PublicSchedule } from './pages/PublicSchedule';
 import { AttendanceTerminal } from './pages/AttendanceTerminal';
+import { StaffAttendanceTerminal } from './pages/StaffAttendanceTerminal';
+import { HRDashboard } from './pages/HRDashboard';
 import { ClassroomFiles } from './pages/ClassroomFiles';
 import { UserRole } from './types';
 import { LogOut, LayoutGrid, Printer } from 'lucide-react';
@@ -51,13 +53,20 @@ const AppContent: React.FC = () => {
     return <Login />;
   }
 
-  // Se for o login do terminal, mostra a tela Kiosk
+  // Roteamento baseado no Role
   if (user?.role === UserRole.ATTENDANCE_TERMINAL) {
       return <AttendanceTerminal />;
   }
+  
+  if (user?.role === UserRole.STAFF_TERMINAL) {
+      return <StaffAttendanceTerminal />;
+  }
+  
+  if (user?.role === UserRole.HR) {
+      return <HRDashboard />;
+  }
 
   // VERIFICAÇÃO DE MÚLTIPLOS ROLES
-  // Se o usuário tem mais de uma role e ainda não escolheu uma para a sessão
   if (user?.roles && user.roles.length > 1 && !sessionRole) {
       return (
           <div className="fixed inset-0 z-50 bg-[#0f0f10] flex flex-col items-center justify-center p-4">
@@ -110,7 +119,6 @@ const AppContent: React.FC = () => {
       );
   }
 
-  // Define qual role usar: a da sessão (se escolhida) ou a padrão do usuário
   const activeRole = sessionRole || user?.role;
 
   return (
@@ -131,7 +139,6 @@ const AppContent: React.FC = () => {
             <div className="flex items-center gap-4">
                <span className="text-sm text-gray-300 hidden sm:block">{user?.email}</span>
                
-               {/* Se o usuário tem múltiplas roles, permite trocar de painel */}
                {user?.roles && user.roles.length > 1 && (
                    <button 
                     onClick={() => setSessionRole(null)}

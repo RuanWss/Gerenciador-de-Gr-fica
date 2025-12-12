@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -105,7 +106,7 @@ export const PrintShopDashboard: React.FC = () => {
   const [hasPendingExams, setHasPendingExams] = useState(false);
 
   // Filter State (Printing View)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
 
   // --- FORMS STATES ---
   
@@ -281,7 +282,8 @@ export const PrintShopDashboard: React.FC = () => {
     // 2. Exams
     try {
         const allExams = await getExams();
-        const sorted = allExams.sort((a,b) => a.createdAt - b.createdAt);
+        // Ordena por data de criação decrescente (mais novos primeiro)
+        const sorted = allExams.sort((a,b) => b.createdAt - a.createdAt);
         setExams(sorted);
         setHasPendingExams(sorted.some(e => e.status === ExamStatus.PENDING));
     } catch (e) {
@@ -587,7 +589,8 @@ export const PrintShopDashboard: React.FC = () => {
   );
 
   const filteredExams = exams.filter(exam => {
-    if (filter === 'pending') return exam.status !== ExamStatus.PENDING;
+    if (filter === 'pending') return exam.status === ExamStatus.PENDING;
+    if (filter === 'in_progress') return exam.status === ExamStatus.IN_PROGRESS;
     if (filter === 'completed') return exam.status === ExamStatus.COMPLETED;
     return true;
   });
@@ -734,10 +737,11 @@ export const PrintShopDashboard: React.FC = () => {
                 <div className="max-w-6xl mx-auto space-y-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Printer className="text-brand-500" /> Central de Impressão</h2>
-                        <div className="flex bg-gray-900/50 p-1 rounded-lg backdrop-blur-sm border border-white/10">
-                            <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Todas</button>
-                            <button onClick={() => setFilter('pending')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'pending' ? 'bg-white text-brand-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Fila</button>
-                            <button onClick={() => setFilter('completed')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${filter === 'completed' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Concluídas</button>
+                        <div className="flex bg-gray-900/50 p-1 rounded-lg backdrop-blur-sm border border-white/10 overflow-x-auto">
+                            <button onClick={() => setFilter('all')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Todas</button>
+                            <button onClick={() => setFilter('pending')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${filter === 'pending' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Em Aberto</button>
+                            <button onClick={() => setFilter('in_progress')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${filter === 'in_progress' ? 'bg-white text-yellow-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Em Andamento</button>
+                            <button onClick={() => setFilter('completed')} className={`px-3 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${filter === 'completed' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-300 hover:text-white hover:bg-white/10'}`}>Concluídas</button>
                         </div>
                     </div>
 

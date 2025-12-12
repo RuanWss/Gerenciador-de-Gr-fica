@@ -2,7 +2,9 @@
 export enum UserRole {
   TEACHER = 'TEACHER',
   PRINTSHOP = 'PRINTSHOP',
-  ATTENDANCE_TERMINAL = 'ATTENDANCE_TERMINAL' // Novo papel para o quiosque
+  ATTENDANCE_TERMINAL = 'ATTENDANCE_TERMINAL',
+  STAFF_TERMINAL = 'STAFF_TERMINAL', // Novo: Quiosque de Ponto da Equipe
+  HR = 'HR' // Novo: Recursos Humanos
 }
 
 export interface User {
@@ -84,6 +86,16 @@ export interface Student {
   photoUrl?: string; // Foto para reconhecimento facial
 }
 
+// Interface para Funcionários (Equipe)
+export interface StaffMember {
+  id: string;
+  name: string;
+  role: string; // Cargo (Prof, Limpeza, Secretaria, etc)
+  photoUrl?: string;
+  active: boolean;
+  createdAt: number;
+}
+
 export interface AnswerKey {
   id: string;
   title: string;
@@ -139,6 +151,17 @@ export interface AttendanceLog {
   timestamp: number;
   type: 'entry' | 'exit';
   dateString: string;
+}
+
+// Log de Ponto da Equipe
+export interface StaffAttendanceLog {
+  id: string;
+  staffId: string;
+  staffName: string;
+  staffRole: string;
+  staffPhotoUrl?: string;
+  timestamp: number;
+  dateString: string; // YYYY-MM-DD para agrupar
 }
 
 export type LessonPlanType = 'daily' | 'semester';
