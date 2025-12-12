@@ -281,6 +281,15 @@ export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
     }
 };
 
+export const deleteExamRequest = async (examId: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, EXAMS_COLLECTION, examId));
+    } catch (error) {
+        console.error("Erro ao deletar prova:", error);
+        throw error;
+    }
+};
+
 // --- SYSTEM CONFIG ---
 
 export const listenToSystemConfig = (onUpdate: (config: SystemConfig) => void) => {

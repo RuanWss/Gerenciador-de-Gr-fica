@@ -12,7 +12,8 @@ import {
     deleteClassMaterial,
     saveLessonPlan,
     getLessonPlans,
-    ensureUserProfile
+    ensureUserProfile,
+    deleteExamRequest
 } from '../services/firebaseService';
 import { digitizeMaterial } from '../services/geminiService';
 import { ExamRequest, ExamStatus, MaterialType, ClassMaterial, LessonPlan, LessonPlanType } from '../types';
@@ -302,6 +303,23 @@ export const TeacherDashboard: React.FC = () => {
       // Se tiver header data, assume que foi criado no estúdio, senão, upload direto
       setCreationMode(exam.headerData ? 'create' : 'upload');
       setActiveTab('create');
+  };
+
+  const handleDeleteExam = async (id: string) => {
+      if (!window.confirm("Tem certeza que deseja cancelar esta solicitação? Esta ação não pode ser desfeita.")) return;
+      
+      try {
+          await deleteExamRequest(id);
+          setExams(exams.filter(e => e.id !== id));
+          alert("Solicitação removida com sucesso.");
+      } catch (error: any) {
+          console.error("Erro ao deletar", error);
+          if (error.code === 'permission-denied') {
+              alert("Erro de Permissão: Você não pode excluir esta solicitação.");
+          } else {
+              alert("Erro ao excluir solicitação.");
+          }
+      }
   };
 
   const handleSaveExam = async () => {
@@ -611,7 +629,7 @@ export const TeacherDashboard: React.FC = () => {
                         <h1 className="text-3xl font-bold text-gray-800">Meus Pedidos</h1>
                         <p className="text-gray-500">Acompanhe o status das suas impressões na gráfica.</p>
                     </header>
-                    {/* (Conteúdo de Requests mantido como está) */}
+                    
                     <Card>
                         {exams.length === 0 ? (
                             <div className="text-center py-16">
@@ -664,9 +682,22 @@ export const TeacherDashboard: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
                                                     {e.status === ExamStatus.PENDING ? (
-                                                        <button onClick={() => handleEditExam(e)} className="text-blue-600 hover:text-blue-800 font-bold text-xs flex items-center justify-end w-full transition-colors">
-                                                            <Edit3 size={14} className="mr-1"/> Editar
-                                                        </button>
+                                                        <div className="flex items-center justify-end gap-3">
+                                                            <button 
+                                                                onClick={() => handleEditExam(e)} 
+                                                                className="text-blue-600 hover:text-blue-800 font-bold text-xs flex items-center transition-colors"
+                                                                title="Editar Solicitação"
+                                                            >
+                                                                <Edit3 size={14} className="mr-1"/> Editar
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteExam(e.id)} 
+                                                                className="text-red-500 hover:text-red-700 font-bold text-xs flex items-center transition-colors"
+                                                                title="Cancelar Solicitação"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
                                                     ) : (
                                                         <div className="flex items-center justify-end text-gray-400 text-xs" title="Não é possível editar após o início da impressão">
                                                             <Lock size={14} className="mr-1"/> Bloqueado
