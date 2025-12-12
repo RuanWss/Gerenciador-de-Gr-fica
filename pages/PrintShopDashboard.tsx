@@ -56,7 +56,8 @@ import {
   ArrowRight,
   FileSpreadsheet,
   XCircle,
-  Briefcase // Icone novo
+  Briefcase,
+  ListPlus // Icone novo
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
@@ -110,6 +111,12 @@ export const PrintShopDashboard: React.FC = () => {
     const [studentName, setStudentName] = useState('');
     const [studentClassId, setStudentClassId] = useState('');
     const [studentPhoto, setStudentPhoto] = useState<File | null>(null);
+
+    // --- BATCH STUDENTS STATE ---
+    const [showBatchForm, setShowBatchForm] = useState(false);
+    const [batchNames, setBatchNames] = useState('');
+    const [batchClassId, setBatchClassId] = useState(CLASSES[0].id);
+    const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
     // --- PHOTO ANALYSIS STATE ---
     const [photoStatus, setPhotoStatus] = useState<'idle' | 'analyzing' | 'valid' | 'invalid'>('idle');
@@ -281,6 +288,48 @@ export const PrintShopDashboard: React.FC = () => {
         }
     };
 
+    // BATCH SAVE
+    const handleBatchSave = async () => {
+        if (!batchNames.trim()) {
+            alert("Cole a lista de nomes primeiro.");
+            return;
+        }
+
+        const names = batchNames.split('\n').filter(n => n.trim().length > 0);
+        if (names.length === 0) return;
+
+        if(!confirm(`Confirma o cadastro de ${names.length} alunos na turma selecionada?`)) return;
+
+        setIsBatchProcessing(true);
+        try {
+            const className = CLASSES.find(c => c.id === batchClassId)?.name || '';
+            
+            // Processa em paralelo
+            const promises = names.map(name => {
+                const studentData: Student = {
+                    id: '',
+                    name: name.trim(),
+                    classId: batchClassId,
+                    className,
+                    photoUrl: '' // Sem foto no lote
+                };
+                return saveStudent(studentData);
+            });
+
+            await Promise.all(promises);
+            
+            alert(`${names.length} alunos cadastrados com sucesso!`);
+            setBatchNames('');
+            setShowBatchForm(false);
+            loadStudents();
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao processar lote. Alguns alunos podem não ter sido salvos.");
+        } finally {
+            setIsBatchProcessing(false);
+        }
+    };
+
     const handleEditStudent = (student: Student) => {
         setEditingStudent(student);
         setStudentName(student.name);
@@ -289,6 +338,7 @@ export const PrintShopDashboard: React.FC = () => {
         setPhotoStatus('idle');
         setPhotoMessage('');
         setShowStudentForm(true);
+        setShowBatchForm(false); // Fecha o form de lote se estiver aberto
     };
 
     const handleDeleteStudent = async (id: string) => {
@@ -643,9 +693,14 @@ export const PrintShopDashboard: React.FC = () => {
                                 <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Users className="text-red-500"/> Gestão de Alunos</h1>
                                 <p className="text-gray-400">Cadastro e controle de fotos para reconhecimento facial</p>
                             </div>
-                            <Button onClick={() => { setEditingStudent(null); setStudentName(''); setStudentClassId(CLASSES[0].id); setStudentPhoto(null); setPhotoStatus('idle'); setShowStudentForm(true); }}>
-                                <Plus size={16} className="mr-2"/> Novo Aluno
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" onClick={() => { setShowBatchForm(!showBatchForm); setShowStudentForm(false); }}>
+                                    <ListPlus size={16} className="mr-2"/> Importar Lista
+                                </Button>
+                                <Button onClick={() => { setEditingStudent(null); setStudentName(''); setStudentClassId(CLASSES[0].id); setStudentPhoto(null); setPhotoStatus('idle'); setShowStudentForm(true); setShowBatchForm(false); }}>
+                                    <Plus size={16} className="mr-2"/> Novo Aluno
+                                </Button>
+                            </div>
                         </header>
 
                         {/* CLASS FILTERS */}
@@ -667,6 +722,7 @@ export const PrintShopDashboard: React.FC = () => {
                             ))}
                         </div>
 
+                        {/* FORM: CADASTRO INDIVIDUAL */}
                         {showStudentForm && (
                             <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-lg mb-6 animate-in slide-in-from-top-4">
                                 <h3 className="font-bold text-lg mb-4 text-gray-800">{editingStudent ? 'Editar Aluno' : 'Cadastrar Novo Aluno'}</h3>
@@ -706,6 +762,39 @@ export const PrintShopDashboard: React.FC = () => {
                                         <Button type="submit" isLoading={isLoading} disabled={photoStatus === 'analyzing'}>Salvar</Button>
                                     </div>
                                 </form>
+                            </div>
+                        )}
+
+                        {/* FORM: CADASTRO EM LOTE */}
+                        {showBatchForm && (
+                            <div className="bg-white p-6 rounded-xl border border-purple-200 shadow-lg mb-6 animate-in slide-in-from-top-4">
+                                <h3 className="font-bold text-lg mb-4 text-purple-800 flex items-center gap-2"><ListPlus size={20}/> Cadastro em Lote (Importar Lista)</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Turma Destino</label>
+                                        <select 
+                                            className="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 text-gray-900 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all" 
+                                            value={batchClassId} 
+                                            onChange={e => setBatchClassId(e.target.value)}
+                                        >
+                                            {CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Lista de Nomes (Um por linha)</label>
+                                        <textarea 
+                                            className="w-full h-40 border border-gray-300 p-3 rounded-lg bg-gray-50 text-gray-900 text-sm focus:ring-2 focus:ring-purple-500"
+                                            placeholder="Cole aqui a lista de nomes..."
+                                            value={batchNames}
+                                            onChange={e => setBatchNames(e.target.value)}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Copie do Excel/Word e cole aqui. Cada linha será um novo aluno.</p>
+                                    </div>
+                                    <div className="flex justify-end gap-2">
+                                        <Button type="button" variant="outline" onClick={() => setShowBatchForm(false)}>Cancelar</Button>
+                                        <Button onClick={handleBatchSave} isLoading={isBatchProcessing} className="bg-purple-600 hover:bg-purple-700">Processar Lista</Button>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
