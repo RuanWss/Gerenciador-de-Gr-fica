@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listenToStudents, logAttendance } from '../services/firebaseService';
 import { Student, AttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban, ShieldAlert, Database, RefreshCw } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban, ShieldAlert, Database, RefreshCw, Maximize, Minimize } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -33,6 +33,9 @@ export const AttendanceTerminal: React.FC = () => {
     const [loadingMessage, setLoadingMessage] = useState('Inicializando Sistema...');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
+    
+    // UI State
+    const [isFullscreen, setIsFullscreen] = useState(false);
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -364,6 +367,18 @@ export const AttendanceTerminal: React.FC = () => {
         }
     };
 
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+            setIsFullscreen(true);
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+                setIsFullscreen(false);
+            }
+        }
+    };
+
     return (
         <div className="h-screen w-screen bg-[#09090b] text-white overflow-hidden flex flex-col font-sans selection:bg-brand-500/30">
             
@@ -392,6 +407,15 @@ export const AttendanceTerminal: React.FC = () => {
                             <Database size={14} />
                             {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces` : 'Sem Dados'}
                         </div>
+                        
+                        <button 
+                            onClick={toggleFullscreen} 
+                            className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" 
+                            title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+                        >
+                            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                        </button>
+
                          <button onClick={logout} className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors" title="Sair do Terminal">
                             <LogOut size={18} />
                         </button>
