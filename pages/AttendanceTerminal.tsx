@@ -3,9 +3,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getStudents, logAttendance } from '../services/firebaseService';
 import { Student, AttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
+
+// Definição das turmas e seus turnos para validação
+const CLASSES_CONFIG = [
+    { id: '6efaf', name: '6º ANO EFAF', shift: 'morning' },
+    { id: '7efaf', name: '7º ANO EFAF', shift: 'morning' },
+    { id: '8efaf', name: '8º ANO EFAF', shift: 'morning' },
+    { id: '9efaf', name: '9º ANO EFAF', shift: 'morning' },
+    { id: '1em', name: '1ª SÉRIE EM', shift: 'afternoon' },
+    { id: '2em', name: '2ª SÉRIE EM', shift: 'afternoon' },
+    { id: '3em', name: '3ª SÉRIE EM', shift: 'afternoon' },
+];
 
 export const AttendanceTerminal: React.FC = () => {
     const { logout } = useAuth();
@@ -233,7 +244,57 @@ export const AttendanceTerminal: React.FC = () => {
         if (student) {
             const now = new Date();
             const dateString = now.toISOString().split('T')[0];
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+            // --- VALIDAÇÃO DE TURNO ---
+            // 1. Identificar o turno da turma do aluno
+            const classConfig = CLASSES_CONFIG.find(c => c.id === student.classId);
             
+            // Definição dos horários limites (em minutos do dia)
+            const MORNING_START = 6 * 60;        // 06:00
+            const MORNING_END = 12 * 60 + 20;    // 12:20
+            const AFTERNOON_START = 12 * 60 + 30; // 12:30
+            const AFTERNOON_END = 19 * 60;       // 19:00
+
+            let isShiftValid = false;
+
+            if (classConfig) {
+                if (classConfig.shift === 'morning') {
+                    if (currentMinutes >= MORNING_START && currentMinutes <= MORNING_END) {
+                        isShiftValid = true;
+                    }
+                } else if (classConfig.shift === 'afternoon') {
+                    if (currentMinutes >= AFTERNOON_START && currentMinutes <= AFTERNOON_END) {
+                        isShiftValid = true;
+                    }
+                }
+            } else {
+                // Se a turma não estiver na config, permite (fallback) ou bloqueia. 
+                // Assumindo permissão para evitar bloqueio indevido em turmas não mapeadas
+                isShiftValid = true; 
+            }
+
+            // Se o horário for inválido para o turno
+            if (!isShiftValid) {
+                setLastLog({
+                    id: '',
+                    studentId: student.id,
+                    studentName: student.name,
+                    className: student.className,
+                    studentPhotoUrl: student.photoUrl,
+                    timestamp: now.getTime(),
+                    type: 'entry',
+                    dateString
+                });
+                setStatusType('error');
+                setStatusMessage('FORA DO TURNO');
+                playSound('error');
+                setTimeout(() => resetState(), 4000);
+                return;
+            }
+
+            // --- FIM VALIDAÇÃO DE TURNO ---
+
             const log: AttendanceLog = {
                 id: '',
                 studentId: student.id,
@@ -253,15 +314,15 @@ export const AttendanceTerminal: React.FC = () => {
                 setStatusMessage('PRESENÇA CONFIRMADA');
                 playSound('success');
 
-                const minutes = now.getHours() * 60 + now.getMinutes();
-                const morningLimit = 7 * 60 + 20; 
-                const afternoonLimit = 13 * 60 + 15;
+                // Lógica de Atraso
+                const morningLimit = 7 * 60 + 20; // 07:20
+                const afternoonLimit = 13 * 60 + 15; // 13:15
                 
                 let isLate = false;
-                if (now.getHours() < 12) {
-                    if (minutes > morningLimit) isLate = true;
-                } else {
-                    if (minutes > afternoonLimit) isLate = true;
+                if (classConfig?.shift === 'morning') {
+                    if (currentMinutes > morningLimit) isLate = true;
+                } else if (classConfig?.shift === 'afternoon') {
+                    if (currentMinutes > afternoonLimit) isLate = true;
                 }
 
                 if (isLate) {
@@ -439,7 +500,7 @@ export const AttendanceTerminal: React.FC = () => {
                                     }`}>
                                         {statusType === 'success' && <CheckCircle size={20}/>}
                                         {statusType === 'warning' && <Clock size={20}/>}
-                                        {statusType === 'error' && <AlertTriangle size={20}/>}
+                                        {statusType === 'error' && <Ban size={20}/>}
                                     </div>
                                 </div>
 
