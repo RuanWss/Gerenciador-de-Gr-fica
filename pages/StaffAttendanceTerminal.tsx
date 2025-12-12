@@ -76,8 +76,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
     // 3. Listen to Staff Data (Tempo Real)
     useEffect(() => {
         const unsubscribe = listenToStaffMembers((newStaffList) => {
-            // Filtra apenas quem tem foto e está ativo
-            const activeStaff = newStaffList.filter(s => s.active && s.photoUrl); 
+            // Filtro relaxado: se active for undefined, considera true. Garante que tenha foto.
+            const activeStaff = newStaffList.filter(s => s.photoUrl && (s.active !== false)); 
             console.log(`Carregados ${activeStaff.length} funcionários com foto.`);
             setStaff(activeStaff);
         });
@@ -95,58 +95,68 @@ export const StaffAttendanceTerminal: React.FC = () => {
         }
     }, [modelsLoaded, staff]);
 
-    // Função auxiliar para carregar imagem com CORS anônimo
-    const loadImage = (url: string): Promise<HTMLImageElement> => {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous'; // Permite que a IA leia os pixels
-            img.onload = () => resolve(img);
-            img.onerror = (e) => reject(e);
-            img.src = url;
-        });
-    };
-
-    // Helper: Process Student Photos (Create Descriptors)
+    // Helper: Process Staff Photos (Create Descriptors)
     const processStaffFaces = async (staffList: StaffMember[]) => {
-        setLoadingMessage('Sincronizando Biometria...');
-        
         const faceApi = (faceapi as any).default || faceapi;
-        const labeledDescriptorsTemp: any[] = [];
+        setLoadingMessage(`Analisando ${staffList.length} fotos...`);
         
-        const staffWithPhoto = staffList.filter(s => s.photoUrl);
+        const labeledDescriptorsTemp: any[] = [];
         let processedCount = 0;
         let errorCount = 0;
+        let successCount = 0;
 
-        for (const member of staffWithPhoto) {
+        for (const member of staffList) {
             if (!member.photoUrl) continue;
             try {
-                // Usa o carregador seguro com CORS
-                const img = await loadImage(member.photoUrl);
-                // Detecta com threshold padrão para garantir qualidade do descritor base
+                // Tenta usar o fetchImage nativo do faceapi primeiro, pois ele lida bem com CORS/Blobs
+                let img;
+                try {
+                    img = await faceApi.fetchImage(member.photoUrl);
+                } catch (fetchErr) {
+                    console.warn(`Fetch nativo falhou para ${member.name}, tentando fallback...`);
+                    // Fallback para Image object manual se o fetch falhar
+                    img = await new Promise((resolve, reject) => {
+                        const image = new Image();
+                        image.crossOrigin = "anonymous";
+                        image.src = member.photoUrl!;
+                        image.onload = () => resolve(image);
+                        image.onerror = reject;
+                    });
+                }
+
+                // Detecta com threshold padrão
                 const detection = await faceApi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
                 
                 if (detection) {
                     labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(member.id, [detection.descriptor]));
+                    successCount++;
                 } else {
                     console.warn(`Rosto não detectado na foto de: ${member.name}`);
                     errorCount++;
                 }
-                
-                processedCount++;
-                if (staffWithPhoto.length > 5) {
-                     setLoadingMessage(`Sincronizando: ${Math.round((processedCount / staffWithPhoto.length) * 100)}%`);
-                }
             } catch (err) {
                 console.error(`Erro crítico ao processar foto de ${member.name}:`, err);
                 errorCount++;
+            }
+            
+            processedCount++;
+            // Atualiza status a cada 2 fotos para não spammar render
+            if (processedCount % 2 === 0 || processedCount === staffList.length) {
+                 setLoadingMessage(`Indexando: ${processedCount}/${staffList.length}`);
             }
         }
         
         setLabeledDescriptors(labeledDescriptorsTemp);
         setLoadingMessage('');
         
-        if (errorCount > 0) {
-            console.log(`Finalizado com ${errorCount} erros.`);
+        console.log(`Finalizado: ${successCount} sucessos, ${errorCount} erros.`);
+        
+        if (successCount === 0 && staffList.length > 0) {
+             // Se falhou tudo, avisa o usuário
+             setStatusType('error');
+             setStatusMessage("ERRO NAS FOTOS");
+             setStatusSubMessage("Nenhum rosto válido detectado nas fotos cadastradas.");
+             setTimeout(() => resetState(), 5000);
         }
     };
 
@@ -356,7 +366,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"/>
                     
                     <p className="text-red-200/70 text-xs font-bold tracking-[0.2em] uppercase mb-2">Horário de Brasília</p>
-                    {/* FONTE ATUALIZADA PARA MONTSERRAT EXTRABOLD */}
                     <h1 className="text-5xl md:text-6xl font-clock font-extrabold tracking-tighter text-white drop-shadow-lg mb-2 tabular-nums">
                         {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </h1>
@@ -487,9 +496,12 @@ export const StaffAttendanceTerminal: React.FC = () => {
 
             {/* --- FOOTER --- */}
             <footer className="relative z-10 p-6 w-full max-w-md mx-auto flex justify-end gap-4">
-                <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider h-12 mr-auto ${labeledDescriptors.length > 0 ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                <div className={`flex items-center gap-2 px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider h-12 mr-auto ${labeledDescriptors.length > 0 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
                     <Database size={14} />
-                    {labeledDescriptors.length > 0 ? `${labeledDescriptors.length} Faces Carregadas` : 'Aguardando Faces...'}
+                    {/* Status detalhado no rodapé */}
+                    {labeledDescriptors.length > 0 
+                        ? `${labeledDescriptors.length} Faces Carregadas` 
+                        : (staff.length > 0 ? 'Processando Fotos...' : 'Aguardando Faces...')}
                 </div>
 
                 <button 
