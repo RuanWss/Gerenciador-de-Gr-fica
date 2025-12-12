@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   addDoc, 
@@ -39,15 +40,22 @@ const ATTENDANCE_COLLECTION = 'attendance_logs';
 const MATERIALS_COLLECTION = 'class_materials';
 const PLANS_COLLECTION = 'lesson_plans';
 
-// --- HELPER: Clean Data ---
-const cleanData = (data: any) => {
-    const cleaned = { ...data };
-    Object.keys(cleaned).forEach(key => {
-        if (cleaned[key] === undefined) {
-            delete cleaned[key];
-        }
-    });
-    return cleaned;
+// --- HELPER: Clean Data (Recursive) ---
+// Remove campos undefined para evitar erros no Firestore
+const cleanData = (data: any): any => {
+    if (Array.isArray(data)) {
+        return data.map(item => cleanData(item));
+    } else if (data !== null && typeof data === 'object') {
+        const cleaned: any = {};
+        Object.keys(data).forEach(key => {
+            const value = data[key];
+            if (value !== undefined) {
+                cleaned[key] = cleanData(value);
+            }
+        });
+        return cleaned;
+    }
+    return data;
 };
 
 // --- STORAGE ---
@@ -169,6 +177,32 @@ export const getUserProfile = async (userId: string): Promise<User | null> => {
     console.error("Erro ao buscar perfil:", error);
     return null;
   }
+};
+
+// Função para garantir que o usuário tenha um perfil no banco (Self-healing)
+export const ensureUserProfile = async (user: User): Promise<void> => {
+    if (!user || !user.id) return;
+    try {
+        const docRef = doc(db, USERS_COLLECTION, user.id);
+        const docSnap = await getDoc(docRef);
+        
+        if (!docSnap.exists()) {
+            console.log("Perfil de usuário não encontrado no Firestore. Criando perfil automático...");
+            const { id, ...userData } = user;
+            // Garante que tenha pelo menos a role de professor se não tiver nenhuma
+            const dataToSave = {
+                ...userData,
+                role: userData.role || UserRole.TEACHER,
+                roles: userData.roles || [UserRole.TEACHER],
+                createdAt: Date.now()
+            };
+            const cleaned = cleanData(dataToSave);
+            await setDoc(docRef, cleaned);
+        }
+    } catch (error) {
+        console.error("Erro ao garantir perfil de usuário:", error);
+        // Não relança o erro para tentar prosseguir, mas loga
+    }
 };
 
 export const createTeamMember = async (userData: User, password: string): Promise<void> => {

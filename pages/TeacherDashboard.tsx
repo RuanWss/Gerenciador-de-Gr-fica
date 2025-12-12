@@ -11,7 +11,8 @@ import {
     getClassMaterials,
     deleteClassMaterial,
     saveLessonPlan,
-    getLessonPlans
+    getLessonPlans,
+    ensureUserProfile
 } from '../services/firebaseService';
 import { digitizeMaterial } from '../services/geminiService';
 import { ExamRequest, ExamStatus, MaterialType, ClassMaterial, LessonPlan, LessonPlanType } from '../types';
@@ -316,6 +317,9 @@ export const TeacherDashboard: React.FC = () => {
 
     setIsSaving(true);
     try {
+        // Tenta garantir que o usuário tenha um perfil no banco para passar nas Regras de Segurança
+        await ensureUserProfile(user);
+
         let finalFileUrl = existingFileUrl;
         let finalFileName = existingFileUrl ? "Arquivo Existente" : "";
 
@@ -338,7 +342,7 @@ export const TeacherDashboard: React.FC = () => {
             teacherName: user.name,
             subject: user.subject || 'Geral',
             title: docTitle,
-            quantity: printQuantity,
+            quantity: Number(printQuantity), // Garante que é número
             gradeLevel: selectedClassForExam || (user.classes?.[0] || 'Geral'),
             instructions: docSubtitle,
             fileName: finalFileName,
@@ -347,8 +351,8 @@ export const TeacherDashboard: React.FC = () => {
             createdAt: Date.now(),
             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
             // Campos de diagramação
-            materialType, // Agora garantido que está no state
-            columns: docColumns,
+            materialType: materialType || 'exam',
+            columns: docColumns || 2,
             headerData: creationMode === 'create' ? {
                 schoolName: 'CEMAL EQUIPE',
                 showStudentName,
@@ -356,6 +360,8 @@ export const TeacherDashboard: React.FC = () => {
                 maxScore
             } : undefined
         };
+
+        console.log("Tentando salvar:", examData); // Debug Log
 
         if (editingExamId) {
             await updateExamRequest({ ...examData, id: editingExamId });
@@ -372,7 +378,7 @@ export const TeacherDashboard: React.FC = () => {
     } catch (error: any) {
         console.error("Erro Geral SaveExam:", error);
         if (error.code === 'permission-denied') {
-            alert("Erro de Permissão (Firestore): Você não tem permissão para salvar solicitações.");
+            alert("Erro de Permissão (Firestore): As regras de segurança bloquearam o envio. É possível que seu usuário não esteja cadastrado corretamente como 'Professor' no banco de dados. Contate a administração.");
         } else {
             alert("Erro ao processar: " + (error.message || "Erro desconhecido"));
         }
@@ -456,6 +462,8 @@ export const TeacherDashboard: React.FC = () => {
 
       setIsSavingPlan(true);
       try {
+          await ensureUserProfile(user);
+
           const newPlan: LessonPlan = {
               id: '',
               teacherId: user.id,
