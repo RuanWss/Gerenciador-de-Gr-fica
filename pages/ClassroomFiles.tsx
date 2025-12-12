@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToClassMaterials } from '../services/firebaseService';
 import { ClassMaterial } from '../types';
-import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle } from 'lucide-react';
+import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle, ArrowLeft, Folder } from 'lucide-react';
 
 const CLASSES_LIST = [
     { id: '6efaf', name: '6º ANO EFAF' },
@@ -14,6 +14,22 @@ const CLASSES_LIST = [
     { id: '3em', name: '3ª SÉRIE EM' },
 ];
 
+const EFAF_SUBJECTS = [
+    "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
+    "MATEMÁTICA", "MATEMÁTICA II", "BIOLOGIA", "LÍNGUA ESTRANGEIRA MODERNA - INGLÊS", 
+    "REDAÇÃO", "FILOSOFIA", "QUÍMICA", "PROJETO DE VIDA", "EDUCAÇÃO FINANCEIRA", 
+    "PENSAMENTO COMPUTACIONAL", "FÍSICA", "DINÂMICAS DE LEITURA"
+];
+
+const EM_SUBJECTS = [
+    "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
+    "SOCIOLOGIA", "FILOSOFIA", "BIOLOGIA", "FÍSICA", "QUÍMICA", "MATEMÁTICA", 
+    "LITERATURA", "PRODUÇÃO TEXTUAL", "LÍNGUA ESTRANGEIRA MODERNA - INGLÊS", 
+    "MATEMÁTICA II", "BIOLOGIA II", "QUÍMICA II", 
+    "ELETIVA 03: EMPREENDEDORISMO CRIATIVO", "ELETIVA 04: PROJETO DE VIDA", 
+    "ITINERÁRIO FORMATIVO"
+];
+
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 export const ClassroomFiles: React.FC = () => {
@@ -23,9 +39,18 @@ export const ClassroomFiles: React.FC = () => {
     const [autoOpen, setAutoOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    // Controlar primeira carga para não tocar som em arquivos antigos
+    // Novo Estado para navegação por pastas
+    const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+    
     const isFirstLoad = useRef(true);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // Determina a lista de disciplinas com base na turma selecionada
+    const currentSubjectsList = React.useMemo(() => {
+        if (!selectedClassName) return [];
+        if (selectedClassName.includes('SÉRIE')) return EM_SUBJECTS;
+        return EFAF_SUBJECTS;
+    }, [selectedClassName]);
 
     useEffect(() => {
         // Carregar seleção salva
@@ -38,7 +63,8 @@ export const ClassroomFiles: React.FC = () => {
 
         setIsLoading(true);
         setError(null);
-        // Salvar seleção
+        setSelectedSubject(null); // Reseta a pasta ao mudar de turma
+        
         localStorage.setItem('classroom_selected_class', selectedClassName);
 
         const unsubscribe = listenToClassMaterials(
@@ -50,20 +76,14 @@ export const ClassroomFiles: React.FC = () => {
                 // Ordena os materiais localmente (mais recentes primeiro)
                 newMaterials.sort((a, b) => b.createdAt - a.createdAt);
                 
-                // Detectar novo arquivo (se a lista aumentou ou o ID do topo mudou)
+                // Lógica de notificação (apenas para arquivos novos gerais)
                 if (!isFirstLoad.current && newMaterials.length > 0) {
                      const latestFile = newMaterials[0];
                      const currentLatestId = materials.length > 0 ? materials[0].id : null;
 
-                     // Apenas toca se for realmente um arquivo novo e diferente do que já está na tela
                      if (latestFile.id !== currentLatestId && latestFile.id) {
-                         // Novo arquivo detectado!
                          playNotification();
-                         
-                         if (autoOpen) {
-                             // Tenta abrir em nova aba (pode ser bloqueado pelo browser)
-                             window.open(latestFile.fileUrl, '_blank');
-                         }
+                         if (autoOpen) window.open(latestFile.fileUrl, '_blank');
                      }
                 }
 
@@ -74,7 +94,7 @@ export const ClassroomFiles: React.FC = () => {
                 console.error("Erro no listener:", err);
                 setIsLoading(false);
                 if (err.code === 'permission-denied') {
-                    setError("Acesso Negado: Regras de Segurança do Firebase bloqueando leitura. Configure as permissões no Console.");
+                    setError("Acesso Negado: Regras de Segurança do Firebase bloqueando leitura.");
                 } else {
                     setError("Erro de conexão ao buscar arquivos.");
                 }
@@ -104,11 +124,24 @@ export const ClassroomFiles: React.FC = () => {
         return <FolderOpen size={40} className="text-yellow-500" />;
     };
 
+    // Filtra os materiais para a pasta selecionada
+    const filteredMaterials = React.useMemo(() => {
+        if (!selectedSubject) return [];
+        // Filtra arquivos que batem com a disciplina exata OU arquivos sem disciplina que vão para uma pasta "Geral" (se implementado)
+        // Por hora, strict match
+        return materials.filter(m => m.subject === selectedSubject);
+    }, [materials, selectedSubject]);
+
+    // Conta quantos arquivos existem em cada disciplina para exibir na pasta
+    const getFileCountForSubject = (subject: string) => {
+        return materials.filter(m => m.subject === subject).length;
+    };
+
     return (
         <div className="min-h-screen bg-[#0f0f10] text-gray-100 font-sans p-6 md:p-12">
             <audio ref={audioRef} src={NOTIFICATION_SOUND} />
 
-            <header className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 border-b border-gray-800 pb-6">
+            <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-6 border-b border-gray-800 pb-6">
                 <div className="flex items-center gap-4">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 w-auto" alt="Logo" />
                     <div className="h-10 w-px bg-gray-800 hidden md:block"></div>
@@ -165,56 +198,109 @@ export const ClassroomFiles: React.FC = () => {
                              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce"></div>
                              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce delay-100"></div>
                              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce delay-200"></div>
-                             <span className="text-xs font-bold uppercase tracking-widest ml-2">Conectando...</span>
+                             <span className="text-xs font-bold uppercase tracking-widest ml-2">Carregando Pastas...</span>
                          </div>
                      )}
 
-                     {!isLoading && !error && materials.length === 0 && (
-                         <div className="text-center py-20 bg-gray-900/50 rounded-3xl border border-gray-800 border-dashed">
-                             <p className="text-gray-500 font-medium">Nenhum arquivo enviado para a turma <span className="text-white font-bold">{selectedClassName}</span> recentemente.</p>
-                         </div>
+                     {!isLoading && !error && (
+                         <>
+                            {/* NAVEGAÇÃO: VOLTAR PARA PASTAS */}
+                            {selectedSubject && (
+                                <button 
+                                    onClick={() => setSelectedSubject(null)}
+                                    className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-bold uppercase tracking-wider text-sm"
+                                >
+                                    <ArrowLeft size={18} /> Voltar para Disciplinas
+                                </button>
+                            )}
+
+                            {/* VIEW 1: PASTAS DAS DISCIPLINAS */}
+                            {!selectedSubject && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 animate-in fade-in slide-in-from-bottom-4">
+                                    {currentSubjectsList.map(subject => {
+                                        const count = getFileCountForSubject(subject);
+                                        return (
+                                            <button 
+                                                key={subject}
+                                                onClick={() => setSelectedSubject(subject)}
+                                                className="bg-[#18181b] p-6 rounded-2xl border border-gray-800 hover:border-brand-600 hover:bg-[#202024] transition-all group text-left flex flex-col justify-between min-h-[160px]"
+                                            >
+                                                <div className="flex justify-between items-start w-full">
+                                                    <Folder size={40} className="text-yellow-500 group-hover:scale-110 transition-transform" />
+                                                    {count > 0 && (
+                                                        <span className="bg-brand-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">{count}</span>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-sm font-bold text-white mt-4 line-clamp-2 uppercase leading-tight group-hover:text-brand-500 transition-colors">
+                                                        {subject}
+                                                    </h3>
+                                                    <p className="text-[10px] text-gray-500 mt-1 font-mono">{count} arquivos</p>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* VIEW 2: ARQUIVOS DENTRO DA PASTA */}
+                            {selectedSubject && (
+                                <div className="animate-in fade-in slide-in-from-right-4">
+                                    <h2 className="text-xl font-bold text-brand-500 mb-6 flex items-center gap-2 uppercase">
+                                        <Folder className="text-yellow-500" /> {selectedSubject}
+                                    </h2>
+
+                                    {filteredMaterials.length === 0 ? (
+                                        <div className="text-center py-20 bg-gray-900/50 rounded-3xl border border-gray-800 border-dashed">
+                                            <p className="text-gray-500 font-medium">Pasta vazia.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                            {filteredMaterials.map((file, index) => (
+                                                <div 
+                                                    key={file.id} 
+                                                    className={`bg-[#18181b] rounded-2xl p-6 border border-gray-800 hover:border-brand-500/50 transition-all group relative overflow-hidden`}
+                                                >
+                                                    {/* Badge de Novo (se for recente - menos de 24h) */}
+                                                    {(Date.now() - file.createdAt) < 86400000 && (
+                                                        <div className="absolute top-0 right-0 bg-brand-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider flex items-center gap-1">
+                                                            <Bell size={10} className="animate-pulse" /> Novo
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex items-start justify-between mb-4">
+                                                        <div className="p-3 bg-black/40 rounded-xl border border-gray-800 group-hover:bg-brand-900/20 group-hover:border-brand-500/30 transition-colors">
+                                                            {getFileIcon(file.fileType)}
+                                                        </div>
+                                                        <span className="text-[10px] font-mono text-gray-500 bg-gray-900 px-2 py-1 rounded border border-gray-800">
+                                                            {new Date(file.createdAt).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+
+                                                    <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 leading-tight" title={file.title}>
+                                                        {file.title}
+                                                    </h3>
+                                                    <p className="text-xs text-gray-400 mb-6 flex items-center gap-1">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
+                                                        Prof. {file.teacherName}
+                                                    </p>
+
+                                                    <a 
+                                                        href={file.fileUrl} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center justify-center gap-2 w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+                                                    >
+                                                        <Download size={18} /> Baixar Arquivo
+                                                    </a>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                         </>
                      )}
-
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                         {materials.map((file, index) => (
-                             <div 
-                                key={file.id} 
-                                className={`bg-[#18181b] rounded-2xl p-6 border border-gray-800 hover:border-brand-500/50 transition-all group relative overflow-hidden ${index === 0 ? 'ring-2 ring-brand-500 shadow-[0_0_30px_rgba(220,38,38,0.2)] scale-[1.02]' : 'hover:-translate-y-1'}`}
-                             >
-                                 {index === 0 && (
-                                     <div className="absolute top-0 right-0 bg-brand-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider flex items-center gap-1">
-                                         <Bell size={10} className="animate-pulse" /> Novo
-                                     </div>
-                                 )}
-
-                                 <div className="flex items-start justify-between mb-4">
-                                     <div className="p-3 bg-black/40 rounded-xl border border-gray-800 group-hover:bg-brand-900/20 group-hover:border-brand-500/30 transition-colors">
-                                         {getFileIcon(file.fileType)}
-                                     </div>
-                                     <span className="text-[10px] font-mono text-gray-500 bg-gray-900 px-2 py-1 rounded border border-gray-800">
-                                         {new Date(file.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                     </span>
-                                 </div>
-
-                                 <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 leading-tight" title={file.title}>
-                                     {file.title}
-                                 </h3>
-                                 <p className="text-xs text-gray-400 mb-6 flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
-                                    Prof. {file.teacherName}
-                                 </p>
-
-                                 <a 
-                                    href={file.fileUrl} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="flex items-center justify-center gap-2 w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
-                                 >
-                                     <Download size={18} /> Baixar Arquivo
-                                 </a>
-                             </div>
-                         ))}
-                     </div>
                 </div>
             )}
         </div>

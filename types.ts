@@ -55,6 +55,7 @@ export interface ClassMaterial {
   teacherId: string;
   teacherName: string;
   className: string;
+  subject?: string; // Disciplina da pasta
   title: string;
   description?: string;
   fileUrl: string;
