@@ -55,6 +55,8 @@ import {
   FileSpreadsheet,
   XCircle
 } from 'lucide-react';
+// @ts-ignore
+import * as faceapi from 'face-api.js';
 
 // --- CONSTANTES DE HORÁRIOS E TURMAS (Mesmos do PublicSchedule) ---
 const MORNING_SLOTS = [
@@ -106,6 +108,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [studentClassId, setStudentClassId] = useState('');
     const [studentPhoto, setStudentPhoto] = useState<File | null>(null);
 
+    // --- PHOTO ANALYSIS STATE ---
+    const [photoStatus, setPhotoStatus] = useState<'idle' | 'analyzing' | 'valid' | 'invalid'>('idle');
+    const [photoMessage, setPhotoMessage] = useState('');
+
     // --- STATES: ATTENDANCE ---
     const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
     const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -129,6 +135,7 @@ export const PrintShopDashboard: React.FC = () => {
         if (activeTab === 'students' || activeTab === 'classes') {
             loadStudents();
             loadAttendance(); 
+            loadFaceModels(); // Carrega modelos de IA
         }
         if (activeTab === 'attendance') loadAttendance();
         if (activeTab === 'schedule') loadSchedule();
@@ -145,6 +152,55 @@ export const PrintShopDashboard: React.FC = () => {
             loadAttendance();
         }
     }, [attendanceDate]);
+
+    // --- AI FACE MODELS ---
+    const loadFaceModels = async () => {
+        const faceApi = (faceapi as any).default || faceapi;
+        // Verifica se já carregou para não carregar duas vezes
+        if (faceApi.nets && !faceApi.nets.ssdMobilenetv1.isLoaded) {
+            try {
+                await faceApi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+                console.log("Modelos de Face carregados no PrintShop");
+            } catch (e) {
+                console.warn("Aviso ao carregar modelos FaceAPI:", e);
+            }
+        }
+    };
+
+    const analyzePhoto = async (file: File) => {
+        setPhotoStatus('analyzing');
+        setPhotoMessage('Verificando rosto...');
+        try {
+            const faceApi = (faceapi as any).default || faceapi;
+            // Cria um objeto de imagem HTML a partir do arquivo
+            const img = await faceApi.fetchImage(URL.createObjectURL(file));
+            // Detecta todos os rostos
+            const detections = await faceApi.detectAllFaces(img, new faceApi.SsdMobilenetv1Options({ minConfidence: 0.5 }));
+            
+            if (detections.length === 1) {
+                setPhotoStatus('valid');
+                setPhotoMessage('Foto aprovada para biometria.');
+            } else if (detections.length === 0) {
+                setPhotoStatus('invalid');
+                setPhotoMessage('Nenhum rosto detectado. Use uma foto clara.');
+            } else {
+                setPhotoStatus('invalid');
+                setPhotoMessage('Múltiplos rostos detectados. Use uma foto individual.');
+            }
+        } catch (e) {
+            console.error(e);
+            setPhotoStatus('invalid');
+            setPhotoMessage('Erro na análise (IA não carregada ou imagem inválida).');
+        }
+    };
+
+    const handleStudentPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setStudentPhoto(file);
+            analyzePhoto(file);
+        }
+    };
 
     // --- ACTIONS: EXAMS ---
     const loadExams = async () => {
@@ -170,6 +226,13 @@ export const PrintShopDashboard: React.FC = () => {
 
     const handleSaveStudent = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validação extra antes de salvar
+        if (studentPhoto && photoStatus !== 'valid') {
+            const proceed = confirm("A foto selecionada não foi validada ou foi rejeitada pela IA. Isso pode impedir o reconhecimento facial. Deseja salvar mesmo assim?");
+            if (!proceed) return;
+        }
+
         setIsLoading(true);
         try {
             let photoUrl = editingStudent?.photoUrl;
@@ -196,9 +259,13 @@ export const PrintShopDashboard: React.FC = () => {
             setEditingStudent(null);
             setStudentName('');
             setStudentPhoto(null);
+            setPhotoStatus('idle');
+            setPhotoMessage('');
             loadStudents();
+            alert("Aluno salvo com sucesso!");
         } catch (error) {
-            alert("Erro ao salvar aluno");
+            console.error(error);
+            alert("Erro ao salvar aluno. Verifique permissões.");
         } finally {
             setIsLoading(false);
         }
@@ -208,6 +275,9 @@ export const PrintShopDashboard: React.FC = () => {
         setEditingStudent(student);
         setStudentName(student.name);
         setStudentClassId(student.classId);
+        setStudentPhoto(null);
+        setPhotoStatus('idle');
+        setPhotoMessage('');
         setShowStudentForm(true);
     };
 
@@ -559,7 +629,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 <h1 className="text-3xl font-bold text-white flex items-center gap-2"><Users className="text-red-500"/> Gestão de Alunos</h1>
                                 <p className="text-gray-400">Cadastro e controle de fotos para reconhecimento facial</p>
                             </div>
-                            <Button onClick={() => { setEditingStudent(null); setStudentName(''); setStudentClassId(CLASSES[0].id); setShowStudentForm(true); }}>
+                            <Button onClick={() => { setEditingStudent(null); setStudentName(''); setStudentClassId(CLASSES[0].id); setStudentPhoto(null); setPhotoStatus('idle'); setShowStudentForm(true); }}>
                                 <Plus size={16} className="mr-2"/> Novo Aluno
                             </Button>
                         </header>
@@ -608,12 +678,18 @@ export const PrintShopDashboard: React.FC = () => {
                                     </div>
                                     <div className="col-span-2">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Foto (Reconhecimento Facial)</label>
-                                        <input type="file" accept="image/*" onChange={e => setStudentPhoto(e.target.files?.[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-                                        <p className="text-xs text-gray-400 mt-1">Apenas rosto, fundo claro, sem óculos escuros.</p>
+                                        <div className="flex items-center gap-4">
+                                            <input type="file" accept="image/*" onChange={handleStudentPhotoChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                                            
+                                            {photoStatus === 'analyzing' && <span className="text-blue-600 text-xs flex items-center font-bold whitespace-nowrap"><Loader2 size={12} className="animate-spin mr-1"/> Analisando...</span>}
+                                            {photoStatus === 'valid' && <span className="text-green-600 text-xs font-bold flex items-center whitespace-nowrap"><CheckCircle size={12} className="mr-1"/> Foto Válida</span>}
+                                            {photoStatus === 'invalid' && <span className="text-red-600 text-xs font-bold flex items-center whitespace-nowrap"><AlertCircle size={12} className="mr-1"/> {photoMessage}</span>}
+                                        </div>
+                                        <p className="text-xs text-gray-400 mt-1">A foto deve conter apenas o rosto do aluno, sem óculos escuros ou máscara. O sistema valida automaticamente.</p>
                                     </div>
                                     <div className="col-span-2 flex justify-end gap-2 mt-2">
                                         <Button type="button" variant="outline" onClick={() => setShowStudentForm(false)}>Cancelar</Button>
-                                        <Button type="submit" isLoading={isLoading}>Salvar</Button>
+                                        <Button type="submit" isLoading={isLoading} disabled={photoStatus === 'analyzing'}>Salvar</Button>
                                     </div>
                                 </form>
                             </div>
