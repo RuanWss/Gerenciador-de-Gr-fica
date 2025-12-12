@@ -254,17 +254,17 @@ export const HRDashboard: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-12 font-sans">
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-red-900 to-black p-6 md:p-12 font-sans">
             <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                        <Briefcase className="text-blue-600" size={32} />
+                    <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                        <Briefcase className="text-blue-500" size={32} />
                         Recursos Humanos
                     </h1>
-                    <p className="text-gray-500 mt-1">Gerenciamento de Equipe e Ponto Eletrônico</p>
+                    <p className="text-gray-300 mt-1">Gerenciamento de Equipe e Ponto Eletrônico</p>
                 </div>
                 <div className="flex gap-4 items-center">
-                     <span className="text-sm bg-gray-200 px-3 py-1 rounded-full text-gray-600 font-bold hidden md:flex items-center">
+                     <span className="text-sm bg-white/10 text-gray-200 px-3 py-1 rounded-full font-bold hidden md:flex items-center">
                          {user?.email}
                      </span>
                      <Button onClick={logout} className="bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-2">
@@ -275,16 +275,16 @@ export const HRDashboard: React.FC = () => {
 
             <div>
                 {/* TABS */}
-                <div className="flex gap-4 mb-6 border-b border-gray-200 pb-1">
+                <div className="flex gap-4 mb-6 border-b border-white/10 pb-1">
                     <button 
                         onClick={() => setActiveTab('employees')}
-                        className={`px-6 py-3 font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'employees' ? 'bg-white border-x border-t border-gray-200 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                        className={`px-6 py-3 font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'employees' ? 'bg-white text-blue-600' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
                     >
                         <Users size={18} /> Gestão de Funcionários
                     </button>
                     <button 
                         onClick={() => setActiveTab('timesheet')}
-                        className={`px-6 py-3 font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'timesheet' ? 'bg-white border-x border-t border-gray-200 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                        className={`px-6 py-3 font-bold rounded-t-lg transition-colors flex items-center gap-2 ${activeTab === 'timesheet' ? 'bg-white text-blue-600' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
                     >
                         <Clock size={18} /> Relatórios de Ponto
                     </button>
