@@ -1,7 +1,28 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getExams, updateExamStatus } from '../services/firebaseService';
-import { ExamRequest, ExamStatus } from '../types';
+import { 
+    getExams, 
+    updateExamStatus, 
+    getStudents, 
+    saveStudent, 
+    updateStudent, 
+    deleteStudent, 
+    uploadStudentPhoto,
+    getFullSchedule,
+    saveScheduleEntry,
+    getLessonPlans,
+    listenToSystemConfig,
+    updateSystemConfig
+} from '../services/firebaseService';
+import { 
+    ExamRequest, 
+    ExamStatus, 
+    Student, 
+    ScheduleEntry, 
+    LessonPlan, 
+    SystemConfig 
+} from '../types';
 import { Button } from '../components/Button';
 import { 
   Printer, 
@@ -13,205 +34,603 @@ import {
   Search, 
   BookOpen, 
   Loader2,
-  Filter
+  Users,
+  Calendar,
+  Settings,
+  Tv,
+  Trash2,
+  Edit3,
+  Plus,
+  Save,
+  Upload,
+  Layout,
+  GraduationCap,
+  Megaphone
 } from 'lucide-react';
+
+// --- CONSTANTES DE HORÁRIOS E TURMAS (Mesmos do PublicSchedule) ---
+const MORNING_SLOTS = [
+    { id: 'm1', label: '1º Horário (07:20)' },
+    { id: 'm2', label: '2º Horário (08:10)' },
+    { id: 'm3', label: '3º Horário (09:20)' },
+    { id: 'm4', label: '4º Horário (10:10)' },
+    { id: 'm5', label: '5º Horário (11:00)' },
+];
+
+const AFTERNOON_SLOTS = [
+    { id: 'a1', label: '1º Horário (13:00)' },
+    { id: 'a2', label: '2º Horário (13:50)' },
+    { id: 'a3', label: '3º Horário (14:40)' },
+    { id: 'a4', label: '4º Horário (16:00)' },
+    { id: 'a5', label: '5º Horário (16:50)' },
+    { id: 'a6', label: '6º Horário (17:40)' },
+    { id: 'a7', label: '7º Horário (18:30)' },
+    { id: 'a8', label: '8º Horário (19:20)' },
+];
+
+const CLASSES = [
+    { id: '6efaf', name: '6º ANO EFAF', shift: 'morning' },
+    { id: '7efaf', name: '7º ANO EFAF', shift: 'morning' },
+    { id: '8efaf', name: '8º ANO EFAF', shift: 'morning' },
+    { id: '9efaf', name: '9º ANO EFAF', shift: 'morning' },
+    { id: '1em', name: '1ª SÉRIE EM', shift: 'afternoon' },
+    { id: '2em', name: '2ª SÉRIE EM', shift: 'afternoon' },
+    { id: '3em', name: '3ª SÉRIE EM', shift: 'afternoon' },
+];
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [exams, setExams] = useState<ExamRequest[]>([]);
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'schedule' | 'planning' | 'config'>('exams');
     const [isLoading, setIsLoading] = useState(false);
-    const [filter, setFilter] = useState<ExamStatus | 'ALL'>('ALL');
-    const [searchTerm, setSearchTerm] = useState('');
 
+    // --- STATES: EXAMS ---
+    const [exams, setExams] = useState<ExamRequest[]>([]);
+    const [examFilter, setExamFilter] = useState<ExamStatus | 'ALL'>('ALL');
+    const [examSearch, setExamSearch] = useState('');
+
+    // --- STATES: STUDENTS ---
+    const [students, setStudents] = useState<Student[]>([]);
+    const [studentSearch, setStudentSearch] = useState('');
+    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+    const [showStudentForm, setShowStudentForm] = useState(false);
+    const [studentName, setStudentName] = useState('');
+    const [studentClassId, setStudentClassId] = useState('');
+    const [studentPhoto, setStudentPhoto] = useState<File | null>(null);
+
+    // --- STATES: SCHEDULE ---
+    const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+    const [selectedScheduleClass, setSelectedScheduleClass] = useState(CLASSES[0].id);
+    const [selectedDay, setSelectedDay] = useState(1); // 1 = Segunda
+
+    // --- STATES: PLANNING ---
+    const [plans, setPlans] = useState<LessonPlan[]>([]);
+    const [planFilterClass, setPlanFilterClass] = useState('');
+
+    // --- STATES: CONFIG ---
+    const [config, setConfig] = useState<SystemConfig>({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
+
+    // --- LOAD DATA ---
     useEffect(() => {
-        loadExams();
-    }, []);
+        if (activeTab === 'exams') loadExams();
+        if (activeTab === 'students') loadStudents();
+        if (activeTab === 'schedule') loadSchedule();
+        if (activeTab === 'planning') loadPlans();
+        if (activeTab === 'config') {
+            const unsub = listenToSystemConfig((c) => setConfig(c));
+            return () => unsub();
+        }
+    }, [activeTab]);
 
+    // --- ACTIONS: EXAMS ---
     const loadExams = async () => {
         setIsLoading(true);
+        const data = await getExams();
+        setExams(data.sort((a,b) => b.createdAt - a.createdAt));
+        setIsLoading(false);
+    };
+
+    const handleStatusUpdate = async (examId: string, newStatus: ExamStatus) => {
+        if (!confirm("Confirmar alteração de status?")) return;
+        await updateExamStatus(examId, newStatus);
+        loadExams();
+    };
+
+    // --- ACTIONS: STUDENTS ---
+    const loadStudents = async () => {
+        setIsLoading(true);
+        const data = await getStudents();
+        setStudents(data.sort((a,b) => a.name.localeCompare(b.name)));
+        setIsLoading(false);
+    };
+
+    const handleSaveStudent = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
         try {
-            const allExams = await getExams();
-            setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
+            let photoUrl = editingStudent?.photoUrl;
+            if (studentPhoto) {
+                photoUrl = await uploadStudentPhoto(studentPhoto);
+            }
+
+            const className = CLASSES.find(c => c.id === studentClassId)?.name || '';
+
+            const studentData: Student = {
+                id: editingStudent ? editingStudent.id : '',
+                name: studentName,
+                classId: studentClassId,
+                className,
+                photoUrl
+            };
+
+            if (editingStudent) {
+                await updateStudent(studentData);
+            } else {
+                await saveStudent(studentData);
+            }
+            setShowStudentForm(false);
+            setEditingStudent(null);
+            setStudentName('');
+            setStudentPhoto(null);
+            loadStudents();
         } catch (error) {
-            console.error("Erro ao carregar exames", error);
+            alert("Erro ao salvar aluno");
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleStatusUpdate = async (examId: string, newStatus: ExamStatus) => {
-        if (!confirm("Confirmar alteração de status?")) return;
-        try {
-            await updateExamStatus(examId, newStatus);
-            setExams(exams.map(e => e.id === examId ? { ...e, status: newStatus } : e));
-        } catch (error) {
-            alert("Erro ao atualizar status.");
-            console.error(error);
-        }
+    const handleEditStudent = (student: Student) => {
+        setEditingStudent(student);
+        setStudentName(student.name);
+        setStudentClassId(student.classId);
+        setShowStudentForm(true);
     };
 
-    const filteredExams = exams.filter(exam => {
-        const matchesFilter = filter === 'ALL' || exam.status === filter;
-        const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = exam.title.toLowerCase().includes(searchLower) || 
-                              exam.teacherName.toLowerCase().includes(searchLower) ||
-                              exam.gradeLevel.toLowerCase().includes(searchLower);
-        return matchesFilter && matchesSearch;
+    const handleDeleteStudent = async (id: string) => {
+        if (!confirm("Tem certeza que deseja excluir este aluno?")) return;
+        await deleteStudent(id);
+        loadStudents();
+    };
+
+    // --- ACTIONS: SCHEDULE ---
+    const loadSchedule = async () => {
+        const data = await getFullSchedule();
+        setSchedule(data);
+    };
+
+    const handleScheduleChange = async (slotId: string, field: 'subject' | 'professor', value: string) => {
+        const currentClass = CLASSES.find(c => c.id === selectedScheduleClass);
+        if (!currentClass) return;
+
+        const existingEntry = schedule.find(s => 
+            s.classId === selectedScheduleClass && 
+            s.dayOfWeek === selectedDay && 
+            s.slotId === slotId
+        );
+
+        const newEntry: ScheduleEntry = {
+            id: existingEntry ? existingEntry.id : `${selectedScheduleClass}_${selectedDay}_${slotId}`,
+            classId: selectedScheduleClass,
+            className: currentClass.name,
+            dayOfWeek: selectedDay,
+            slotId: slotId,
+            subject: field === 'subject' ? value : (existingEntry?.subject || ''),
+            professor: field === 'professor' ? value : (existingEntry?.professor || '')
+        };
+
+        // Update local state immediately for UI responsiveness
+        const newSchedule = schedule.filter(s => s.id !== newEntry.id);
+        newSchedule.push(newEntry);
+        setSchedule(newSchedule);
+
+        // Save to DB (debounce could be better here, but direct save for simplicity)
+        await saveScheduleEntry(newEntry);
+    };
+
+    // --- ACTIONS: PLANNING ---
+    const loadPlans = async () => {
+        setIsLoading(true);
+        const data = await getLessonPlans();
+        setPlans(data.sort((a,b) => b.createdAt - a.createdAt));
+        setIsLoading(false);
+    };
+
+    // --- ACTIONS: CONFIG ---
+    const handleSaveConfig = async () => {
+        await updateSystemConfig(config);
+        alert("Configurações atualizadas com sucesso!");
+    };
+
+    // --- RENDER HELPERS ---
+    const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
+        <button
+            onClick={() => setActiveTab(id as any)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' : 'text-gray-500 hover:bg-white'}`}
+        >
+            <Icon size={18} />
+            <span>{label}</span>
+        </button>
+    );
+
+    const filteredExams = exams.filter(e => {
+        const matchStatus = examFilter === 'ALL' || e.status === examFilter;
+        const matchSearch = e.title.toLowerCase().includes(examSearch.toLowerCase()) || e.teacherName.toLowerCase().includes(examSearch.toLowerCase());
+        return matchStatus && matchSearch;
     });
 
+    const filteredStudents = students.filter(s => 
+        s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
+        s.className.toLowerCase().includes(studentSearch.toLowerCase())
+    );
+
+    const filteredPlans = planFilterClass 
+        ? plans.filter(p => p.className === planFilterClass)
+        : plans;
+
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-12 font-sans">
-             <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                        <Printer className="text-blue-600" size={32} />
-                        Central de Cópias
-                    </h1>
-                    <p className="text-gray-500 mt-1">Gerenciamento de solicitações de impressão</p>
+        <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-gray-50">
+            
+            {/* SIDEBAR */}
+            <div className="w-64 bg-gray-50 border-r border-gray-200 p-6 flex flex-col h-full z-20">
+                <div className="mb-6">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Painel Escolar</p>
+                    <SidebarItem id="exams" label="Gráfica / Impressão" icon={Printer} />
+                    <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
+                    <SidebarItem id="schedule" label="Quadro de Horários" icon={Calendar} />
+                    <SidebarItem id="planning" label="Planejamento" icon={BookOpen} />
+                    <div className="my-4 border-t border-gray-200"></div>
+                    <SidebarItem id="config" label="Configurações & TV" icon={Settings} />
                 </div>
-                <div className="flex gap-4">
-                     <Button onClick={loadExams} variant="outline" title="Atualizar Lista">
-                        Atualizar
-                     </Button>
-                </div>
-             </header>
+            </div>
 
-             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1 overflow-x-auto max-w-full">
-                    {(['ALL', ExamStatus.PENDING, ExamStatus.IN_PROGRESS, ExamStatus.COMPLETED] as const).map((s) => (
-                        <button
-                            key={s}
-                            onClick={() => setFilter(s)}
-                            className={`px-4 py-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${filter === s ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            {s === 'ALL' ? 'Todos' : s === ExamStatus.PENDING ? 'Pendentes' : s === ExamStatus.IN_PROGRESS ? 'Em Produção' : 'Concluídos'}
-                        </button>
-                    ))}
-                </div>
+            {/* MAIN CONTENT */}
+            <div className="flex-1 overflow-y-auto p-8">
+                
+                {/* --- TAB: EXAMS (GRÁFICA) --- */}
+                {activeTab === 'exams' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="flex justify-between items-center mb-8">
+                            <div>
+                                <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Printer className="text-blue-600"/> Central de Cópias</h1>
+                                <p className="text-gray-500">Gerenciamento de solicitações de impressão</p>
+                            </div>
+                            <Button onClick={loadExams} variant="outline" size="sm"><Loader2 size={16} className={isLoading ? "animate-spin" : ""}/> Atualizar</Button>
+                        </header>
 
-                <div className="relative w-full md:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input 
-                        type="text" 
-                        placeholder="Buscar pedido..." 
-                        className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
-                </div>
-             </div>
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 justify-between">
+                            <div className="flex gap-2">
+                                {['ALL', 'PENDING', 'IN_PROGRESS', 'COMPLETED'].map(s => (
+                                    <button 
+                                        key={s} 
+                                        onClick={() => setExamFilter(s as any)}
+                                        className={`px-3 py-1 rounded-md text-xs font-bold ${examFilter === s ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}
+                                    >
+                                        {s === 'ALL' ? 'Todos' : s === 'PENDING' ? 'Pendentes' : s === 'IN_PROGRESS' ? 'Em Produção' : 'Concluídos'}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                                <input 
+                                    className="pl-9 pr-4 py-2 border rounded-lg text-sm w-64" 
+                                    placeholder="Buscar por título ou professor..."
+                                    value={examSearch}
+                                    onChange={e => setExamSearch(e.target.value)}
+                                />
+                            </div>
+                        </div>
 
-             {isLoading ? (
-                 <div className="text-center py-20 text-gray-500">
-                     <Loader2 className="animate-spin mx-auto mb-2 text-blue-600" size={32} />
-                     <p>Carregando pedidos...</p>
-                 </div>
-             ) : (
-                 <div className="grid grid-cols-1 gap-4">
-                     {filteredExams.length === 0 ? (
-                         <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
-                             <p className="text-gray-500 font-medium">Nenhum pedido encontrado.</p>
-                         </div>
-                     ) : (
-                         filteredExams.map(exam => (
-                             <div key={exam.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row gap-6 hover:shadow-md transition-shadow relative overflow-hidden">
-                                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-                                     exam.status === ExamStatus.PENDING ? 'bg-yellow-400' : 
-                                     exam.status === ExamStatus.IN_PROGRESS ? 'bg-blue-500' : 
-                                     'bg-green-500'
-                                 }`}></div>
+                        <div className="grid gap-4">
+                            {filteredExams.map(exam => (
+                                <div key={exam.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex justify-between items-start">
+                                    <div className="flex gap-4">
+                                        <div className={`w-1 self-stretch rounded-full ${exam.status === 'PENDING' ? 'bg-yellow-400' : exam.status === 'IN_PROGRESS' ? 'bg-blue-500' : 'bg-green-500'}`}></div>
+                                        <div>
+                                            <h3 className="font-bold text-gray-800 text-lg">{exam.title}</h3>
+                                            <p className="text-sm text-gray-500 mb-2">Prof. {exam.teacherName} • {exam.gradeLevel}</p>
+                                            <div className="flex gap-2 mb-3">
+                                                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">{exam.quantity} cópias</span>
+                                                <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-xs font-bold">{exam.materialType === 'handout' ? 'Apostila' : 'Prova'}</span>
+                                            </div>
+                                            {exam.instructions && <div className="bg-yellow-50 p-2 rounded text-xs text-yellow-800 border border-yellow-100"><span className="font-bold">Nota:</span> {exam.instructions}</div>}
+                                            {exam.fileUrl && (
+                                                <a href={exam.fileUrl} target="_blank" className="inline-flex items-center gap-2 mt-3 text-sm font-bold text-blue-600 hover:underline">
+                                                    <Download size={14} /> Baixar Arquivo
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        {exam.status === 'PENDING' && <Button size="sm" onClick={() => handleStatusUpdate(exam.id, ExamStatus.IN_PROGRESS)}><Printer size={14} className="mr-2"/> Imprimir</Button>}
+                                        {exam.status === 'IN_PROGRESS' && <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleStatusUpdate(exam.id, ExamStatus.COMPLETED)}><CheckCircle size={14} className="mr-2"/> Concluir</Button>}
+                                        {exam.status === 'COMPLETED' && <span className="text-green-600 font-bold text-sm flex items-center gap-1"><CheckCircle size={16}/> Entregue</span>}
+                                    </div>
+                                </div>
+                            ))}
+                            {filteredExams.length === 0 && <p className="text-center text-gray-500 py-10">Nenhum pedido encontrado.</p>}
+                        </div>
+                    </div>
+                )}
 
-                                 <div className="flex-1 pl-2">
-                                     <div className="flex flex-col md:flex-row md:items-center justify-between mb-2">
-                                         <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                             {exam.title}
-                                             {exam.status === ExamStatus.PENDING && <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full uppercase tracking-wider">Novo</span>}
-                                         </h3>
-                                         <span className="text-xs font-mono text-gray-400 flex items-center gap-1">
-                                             <Clock size={12} />
-                                             {new Date(exam.createdAt).toLocaleString()}
-                                         </span>
+                {/* --- TAB: STUDENTS (ALUNOS) --- */}
+                {activeTab === 'students' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="flex justify-between items-center mb-8">
+                            <div>
+                                <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Users className="text-blue-600"/> Gestão de Alunos</h1>
+                                <p className="text-gray-500">Cadastro e controle de fotos para reconhecimento facial</p>
+                            </div>
+                            <Button onClick={() => { setEditingStudent(null); setStudentName(''); setStudentClassId(CLASSES[0].id); setShowStudentForm(true); }}>
+                                <Plus size={16} className="mr-2"/> Novo Aluno
+                            </Button>
+                        </header>
+
+                        {showStudentForm && (
+                            <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-lg mb-6 animate-in slide-in-from-top-4">
+                                <h3 className="font-bold text-lg mb-4">{editingStudent ? 'Editar Aluno' : 'Cadastrar Novo Aluno'}</h3>
+                                <form onSubmit={handleSaveStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="col-span-2 md:col-span-1">
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
+                                        <input className="w-full border p-2 rounded" value={studentName} onChange={e => setStudentName(e.target.value)} required />
+                                    </div>
+                                    <div className="col-span-2 md:col-span-1">
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Turma</label>
+                                        <select className="w-full border p-2 rounded" value={studentClassId} onChange={e => setStudentClassId(e.target.value)}>
+                                            {CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">Foto (Reconhecimento Facial)</label>
+                                        <input type="file" accept="image/*" onChange={e => setStudentPhoto(e.target.files?.[0] || null)} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                                        <p className="text-xs text-gray-400 mt-1">Apenas rosto, fundo claro, sem óculos escuros.</p>
+                                    </div>
+                                    <div className="col-span-2 flex justify-end gap-2 mt-2">
+                                        <Button type="button" variant="outline" onClick={() => setShowStudentForm(false)}>Cancelar</Button>
+                                        <Button type="submit" isLoading={isLoading}>Salvar</Button>
+                                    </div>
+                                </form>
+                            </div>
+                        )}
+
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                                <div className="relative w-64">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                                    <input className="pl-9 pr-4 py-2 border rounded-lg text-sm w-full" placeholder="Buscar aluno..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+                                </div>
+                                <span className="text-xs text-gray-500 font-bold">{filteredStudents.length} alunos cadastrados</span>
+                            </div>
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
+                                    <tr>
+                                        <th className="p-4">Foto</th>
+                                        <th className="p-4">Nome</th>
+                                        <th className="p-4">Turma</th>
+                                        <th className="p-4 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {filteredStudents.map(student => (
+                                        <tr key={student.id} className="hover:bg-gray-50">
+                                            <td className="p-4">
+                                                <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                                                    {student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover" /> : <Users className="p-2 text-gray-400 w-full h-full"/>}
+                                                </div>
+                                            </td>
+                                            <td className="p-4 font-bold text-gray-800">{student.name}</td>
+                                            <td className="p-4 text-gray-500">{student.className}</td>
+                                            <td className="p-4 text-right">
+                                                <button onClick={() => handleEditStudent(student)} className="text-blue-600 hover:text-blue-800 mr-3"><Edit3 size={16}/></button>
+                                                <button onClick={() => handleDeleteStudent(student.id)} className="text-red-600 hover:text-red-800"><Trash2 size={16}/></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB: SCHEDULE (HORÁRIOS) --- */}
+                {activeTab === 'schedule' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8">
+                            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Layout className="text-blue-600"/> Quadro de Horários</h1>
+                            <p className="text-gray-500">Edição da grade exibida no painel público</p>
+                        </header>
+
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                            <div className="flex gap-4 mb-6">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Turma</label>
+                                    <select 
+                                        className="border p-2 rounded-lg font-bold text-gray-800"
+                                        value={selectedScheduleClass} 
+                                        onChange={e => setSelectedScheduleClass(e.target.value)}
+                                    >
+                                        {CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Dia da Semana</label>
+                                    <select 
+                                        className="border p-2 rounded-lg font-bold text-gray-800"
+                                        value={selectedDay} 
+                                        onChange={e => setSelectedDay(Number(e.target.value))}
+                                    >
+                                        <option value={1}>Segunda-feira</option>
+                                        <option value={2}>Terça-feira</option>
+                                        <option value={3}>Quarta-feira</option>
+                                        <option value={4}>Quinta-feira</option>
+                                        <option value={5}>Sexta-feira</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-100 text-gray-500 border-b border-gray-200">
+                                        <tr>
+                                            <th className="p-3 text-left w-32">Horário</th>
+                                            <th className="p-3 text-left">Disciplina</th>
+                                            <th className="p-3 text-left">Professor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 bg-white">
+                                        {(CLASSES.find(c => c.id === selectedScheduleClass)?.shift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => {
+                                            const entry = schedule.find(s => s.classId === selectedScheduleClass && s.dayOfWeek === selectedDay && s.slotId === slot.id);
+                                            return (
+                                                <tr key={slot.id} className="group hover:bg-blue-50">
+                                                    <td className="p-3 font-mono text-xs font-bold text-gray-500 border-r border-gray-100">{slot.label}</td>
+                                                    <td className="p-3">
+                                                        <input 
+                                                            className="w-full bg-transparent border-none focus:ring-0 p-0 font-bold text-gray-800 group-hover:bg-white rounded px-2 transition-colors"
+                                                            placeholder="Vazio"
+                                                            value={entry?.subject || ''}
+                                                            onChange={e => handleScheduleChange(slot.id, 'subject', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="p-3">
+                                                        <input 
+                                                            className="w-full bg-transparent border-none focus:ring-0 p-0 text-gray-600 group-hover:bg-white rounded px-2 transition-colors"
+                                                            placeholder="-"
+                                                            value={entry?.professor || ''}
+                                                            onChange={e => handleScheduleChange(slot.id, 'professor', e.target.value)}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2 flex items-center gap-1"><Save size={12}/> Alterações salvas automaticamente ao digitar.</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB: PLANNING (PLANEJAMENTO) --- */}
+                {activeTab === 'planning' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8">
+                            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><BookOpen className="text-blue-600"/> Planejamentos de Aula</h1>
+                            <p className="text-gray-500">Acompanhamento dos envios dos professores</p>
+                        </header>
+
+                        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+                            <button onClick={() => setPlanFilterClass('')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${planFilterClass === '' ? 'bg-blue-600 text-white' : 'bg-white border text-gray-600'}`}>Todos</button>
+                            {CLASSES.map(c => (
+                                <button key={c.id} onClick={() => setPlanFilterClass(c.name)} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap ${planFilterClass === c.name ? 'bg-blue-600 text-white' : 'bg-white border text-gray-600'}`}>{c.name}</button>
+                            ))}
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                            {filteredPlans.map(plan => (
+                                <div key={plan.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold">
+                                                {plan.teacherName.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-gray-800 text-sm">{plan.teacherName}</h4>
+                                                <p className="text-xs text-gray-500">{plan.subject}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${plan.type === 'daily' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>
+                                            {plan.type === 'daily' ? 'Diário' : 'Semestral'}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                        <p className="text-xs font-bold text-gray-500 uppercase mb-1">Turma</p>
+                                        <p className="font-bold text-gray-800">{plan.className}</p>
+                                    </div>
+
+                                    {plan.type === 'daily' ? (
+                                        <div className="space-y-2">
+                                            <p className="text-sm"><span className="font-bold text-gray-600">Data:</span> {plan.date}</p>
+                                            <p className="text-sm line-clamp-2"><span className="font-bold text-gray-600">Tema:</span> {plan.topic}</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <p className="text-sm"><span className="font-bold text-gray-600">Semestre:</span> {plan.semester}</p>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400">
+                                        <Clock size={12} className="mr-1"/> Enviado em {new Date(plan.createdAt).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            ))}
+                            {filteredPlans.length === 0 && <p className="col-span-3 text-center text-gray-400 py-10">Nenhum planejamento encontrado.</p>}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- TAB: CONFIG (TV) --- */}
+                {activeTab === 'config' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
+                        <header className="mb-8">
+                            <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2"><Tv className="text-blue-600"/> Configuração da TV</h1>
+                            <p className="text-gray-500">Controle de avisos e exibição pública</p>
+                        </header>
+
+                        <div className="bg-white p-8 rounded-xl border border-gray-200 shadow-lg relative overflow-hidden">
+                             {config.isBannerActive && (
+                                 <div className={`absolute top-0 left-0 right-0 h-2 ${config.bannerType === 'warning' ? 'bg-yellow-500' : config.bannerType === 'error' ? 'bg-red-600' : 'bg-blue-600'}`}></div>
+                             )}
+                             
+                             <div className="mb-6">
+                                 <label className="flex items-center gap-3 cursor-pointer">
+                                     <div className={`w-12 h-6 rounded-full p-1 transition-colors ${config.isBannerActive ? 'bg-green-500' : 'bg-gray-300'}`} onClick={() => setConfig({...config, isBannerActive: !config.isBannerActive})}>
+                                         <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${config.isBannerActive ? 'translate-x-6' : ''}`}></div>
                                      </div>
-                                     
-                                     <div className="flex flex-wrap gap-2 mb-4">
-                                         <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 text-xs font-bold flex items-center gap-1">
-                                             <FileText size={12}/> Prof. {exam.teacherName}
-                                         </span>
-                                         <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 text-xs font-bold flex items-center gap-1">
-                                             {exam.gradeLevel}
-                                         </span>
-                                         <span className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-bold flex items-center gap-1">
-                                             {exam.quantity} cópias
-                                         </span>
-                                         {exam.materialType === 'handout' ? (
-                                             <span className="px-2 py-1 rounded bg-purple-100 text-purple-700 text-xs font-bold flex items-center gap-1">
-                                                 <BookOpen size={12}/> Apostila
-                                             </span>
-                                         ) : (
-                                            <span className="px-2 py-1 rounded bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1">
-                                                 <FileText size={12}/> Prova
-                                             </span>
-                                         )}
-                                         {exam.columns === 1 && (
-                                              <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 text-xs font-bold">1 Coluna</span>
-                                         )}
-                                     </div>
+                                     <span className="font-bold text-gray-700">Ativar Aviso na TV</span>
+                                 </label>
+                             </div>
 
-                                     {exam.instructions && (
-                                         <div className="bg-yellow-50 border border-yellow-100 p-3 rounded-lg mb-4">
-                                             <p className="text-xs text-yellow-800 font-bold uppercase mb-1 flex items-center gap-1"><AlertCircle size={10}/> Instruções:</p>
-                                             <p className="text-sm text-yellow-900">{exam.instructions}</p>
-                                         </div>
-                                     )}
-
-                                     <div className="flex items-center gap-4 mt-4">
-                                         {exam.fileUrl ? (
-                                             <a 
-                                                 href={exam.fileUrl} 
-                                                 target="_blank" 
-                                                 rel="noopener noreferrer"
-                                                 className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-bold bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition-colors"
-                                             >
-                                                 <Download size={16} /> Baixar Arquivo
-                                             </a>
-                                         ) : (
-                                             <span className="text-sm text-gray-400 italic">Arquivo não disponível</span>
-                                         )}
-                                     </div>
+                             <div className={`space-y-6 transition-opacity ${config.isBannerActive ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                                 <div>
+                                     <label className="block text-sm font-bold text-gray-700 mb-1">Mensagem do Aviso</label>
+                                     <textarea 
+                                         className="w-full border border-gray-300 rounded-lg p-3 text-lg" 
+                                         rows={3}
+                                         placeholder="Ex: Reunião de Pais hoje às 19h"
+                                         value={config.bannerMessage}
+                                         onChange={e => setConfig({...config, bannerMessage: e.target.value})}
+                                     />
                                  </div>
 
-                                 <div className="flex flex-row md:flex-col justify-center gap-2 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-6 min-w-[180px]">
-                                     <p className="text-xs font-bold text-gray-400 uppercase text-center md:text-left mb-2 hidden md:block">Ações</p>
-                                     
-                                     {exam.status === ExamStatus.PENDING && (
-                                         <button 
-                                             onClick={() => handleStatusUpdate(exam.id, ExamStatus.IN_PROGRESS)}
-                                             className="flex-1 md:w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
-                                         >
-                                             <Printer size={16} /> Imprimir
-                                         </button>
-                                     )}
-                                     
-                                     {exam.status === ExamStatus.IN_PROGRESS && (
-                                         <button 
-                                             onClick={() => handleStatusUpdate(exam.id, ExamStatus.COMPLETED)}
-                                             className="flex-1 md:w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
-                                         >
-                                             <CheckCircle size={16} /> Concluir
-                                         </button>
-                                     )}
-
-                                     {exam.status === ExamStatus.COMPLETED && (
-                                         <div className="flex-1 md:w-full flex items-center justify-center gap-2 text-green-600 font-bold bg-green-50 py-2 rounded-lg border border-green-100 cursor-default">
-                                             <CheckCircle size={16} /> Entregue
-                                         </div>
-                                     )}
+                                 <div>
+                                     <label className="block text-sm font-bold text-gray-700 mb-2">Tipo de Alerta (Cor)</label>
+                                     <div className="flex gap-4">
+                                         <button onClick={() => setConfig({...config, bannerType: 'info'})} className={`flex-1 py-3 rounded-lg border-2 font-bold ${config.bannerType === 'info' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-transparent bg-gray-100 text-gray-500'}`}>Informativo (Azul)</button>
+                                         <button onClick={() => setConfig({...config, bannerType: 'warning'})} className={`flex-1 py-3 rounded-lg border-2 font-bold ${config.bannerType === 'warning' ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-transparent bg-gray-100 text-gray-500'}`}>Atenção (Amarelo)</button>
+                                         <button onClick={() => setConfig({...config, bannerType: 'error'})} className={`flex-1 py-3 rounded-lg border-2 font-bold ${config.bannerType === 'error' ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent bg-gray-100 text-gray-500'}`}>Urgente (Vermelho)</button>
+                                     </div>
+                                 </div>
+                                 
+                                 <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                                     <div>
+                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Início da Exibição</label>
+                                         <input type="datetime-local" className="w-full border p-2 rounded" value={config.tvStart || ''} onChange={e => setConfig({...config, tvStart: e.target.value})} />
+                                     </div>
+                                     <div>
+                                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fim da Exibição</label>
+                                         <input type="datetime-local" className="w-full border p-2 rounded" value={config.tvEnd || ''} onChange={e => setConfig({...config, tvEnd: e.target.value})} />
+                                     </div>
                                  </div>
                              </div>
-                         ))
-                     )}
-                 </div>
-             )}
+
+                             <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+                                 <Button onClick={handleSaveConfig} className="bg-blue-600 hover:bg-blue-700 shadow-lg"><Save size={18} className="mr-2"/> Salvar Configuração</Button>
+                             </div>
+                        </div>
+                    </div>
+                )}
+
+            </div>
         </div>
     );
 };
