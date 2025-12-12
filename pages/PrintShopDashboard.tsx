@@ -589,11 +589,20 @@ export const PrintShopDashboard: React.FC = () => {
                                 <form onSubmit={handleSaveStudent} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="col-span-2 md:col-span-1">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
-                                        <input className="w-full border p-2 rounded" value={studentName} onChange={e => setStudentName(e.target.value)} required />
+                                        <input 
+                                            className="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 text-gray-900 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all" 
+                                            value={studentName} 
+                                            onChange={e => setStudentName(e.target.value)} 
+                                            required 
+                                        />
                                     </div>
                                     <div className="col-span-2 md:col-span-1">
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Turma</label>
-                                        <select className="w-full border p-2 rounded" value={studentClassId} onChange={e => setStudentClassId(e.target.value)}>
+                                        <select 
+                                            className="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 text-gray-900 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all" 
+                                            value={studentClassId} 
+                                            onChange={e => setStudentClassId(e.target.value)}
+                                        >
                                             {CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                         </select>
                                     </div>
@@ -614,7 +623,12 @@ export const PrintShopDashboard: React.FC = () => {
                             <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
                                 <div className="relative w-full md:w-64">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                                    <input className="pl-9 pr-4 py-2 border rounded-lg text-sm w-full" placeholder="Buscar aluno..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+                                    <input 
+                                        className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-full bg-gray-50 text-gray-900 focus:ring-2 focus:ring-brand-500 outline-none" 
+                                        placeholder="Buscar aluno..." 
+                                        value={studentSearch} 
+                                        onChange={e => setStudentSearch(e.target.value)} 
+                                    />
                                 </div>
                                 <div className="flex flex-wrap gap-4 items-center justify-end">
                                     <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
