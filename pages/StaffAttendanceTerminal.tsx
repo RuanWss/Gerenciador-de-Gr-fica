@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Database, RefreshCw, Settings, XCircle, Maximize, Minimize } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, Loader2, Scan, Database, Settings, XCircle, Maximize, Minimize } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -36,7 +36,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // 2. Load AI Models (Apenas uma vez)
+    // 2. Load AI Models (OTIMIZADO: Tiny Models)
     useEffect(() => {
         const loadModels = async () => {
             const faceApi = (faceapi as any).default || faceapi;
@@ -47,21 +47,25 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 return;
             }
 
+            // Verifica se os modelos TINY estão carregados
             if (
-                faceApi.nets.ssdMobilenetv1.isLoaded && 
-                faceApi.nets.faceLandmark68Net.isLoaded && 
+                faceApi.nets.tinyFaceDetector.isLoaded && 
+                faceApi.nets.faceLandmark68TinyNet.isLoaded && 
                 faceApi.nets.faceRecognitionNet.isLoaded
             ) {
                 setModelsLoaded(true);
                 return;
             }
 
-            setLoadingMessage('Carregando Motores de IA...');
+            setLoadingMessage('Carregando Motores de IA (Modo Leve)...');
             try {
                 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
                 await Promise.all([
-                    faceApi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-                    faceApi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    // Usa TinyFaceDetector (Mais leve e rápido)
+                    faceApi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    // Usa TinyLandmarks
+                    faceApi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+                    // Mantém o reconhecimento robusto
                     faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
                 setModelsLoaded(true);
@@ -98,7 +102,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
     // Helper: Process Staff Photos (Create Descriptors)
     const processStaffFaces = async (staffList: StaffMember[]) => {
         const faceApi = (faceapi as any).default || faceapi;
-        setLoadingMessage(`Analisando ${staffList.length} fotos...`);
+        setLoadingMessage(`Otimizando ${staffList.length} registros...`);
         
         const labeledDescriptorsTemp: any[] = [];
         let processedCount = 0;
@@ -108,13 +112,14 @@ export const StaffAttendanceTerminal: React.FC = () => {
         for (const member of staffList) {
             if (!member.photoUrl) continue;
             try {
-                // Tenta usar o fetchImage nativo do faceapi primeiro, pois ele lida bem com CORS/Blobs
+                // Yield para a UI não travar (importante em listas grandes)
+                await new Promise(resolve => setTimeout(resolve, 0));
+
                 let img;
                 try {
                     img = await faceApi.fetchImage(member.photoUrl);
                 } catch (fetchErr) {
                     console.warn(`Fetch nativo falhou para ${member.name}, tentando fallback...`);
-                    // Fallback para Image object manual se o fetch falhar
                     img = await new Promise((resolve, reject) => {
                         const image = new Image();
                         image.crossOrigin = "anonymous";
@@ -124,8 +129,11 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     });
                 }
 
-                // Detecta com threshold padrão
-                const detection = await faceApi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                // Detecta com TinyFaceDetectorOptions
+                const detection = await faceApi.detectSingleFace(
+                    img, 
+                    new faceApi.TinyFaceDetectorOptions()
+                ).withFaceLandmarks(true).withFaceDescriptor(); // true para tiny landmarks
                 
                 if (detection) {
                     labeledDescriptorsTemp.push(new faceApi.LabeledFaceDescriptors(member.id, [detection.descriptor]));
@@ -140,9 +148,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
             }
             
             processedCount++;
-            // Atualiza status a cada 2 fotos para não spammar render
             if (processedCount % 2 === 0 || processedCount === staffList.length) {
-                 setLoadingMessage(`Indexando: ${processedCount}/${staffList.length}`);
+                 setLoadingMessage(`Indexando: ${Math.round((processedCount / staffList.length) * 100)}%`);
             }
         }
         
@@ -152,10 +159,9 @@ export const StaffAttendanceTerminal: React.FC = () => {
         console.log(`Finalizado: ${successCount} sucessos, ${errorCount} erros.`);
         
         if (successCount === 0 && staffList.length > 0) {
-             // Se falhou tudo, avisa o usuário
              setStatusType('error');
              setStatusMessage("ERRO NAS FOTOS");
-             setStatusSubMessage("Nenhum rosto válido detectado nas fotos cadastradas.");
+             setStatusSubMessage("Nenhum rosto válido detectado.");
              setTimeout(() => resetState(), 5000);
         }
     };
@@ -175,7 +181,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     });
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
-                        // Força play para garantir em mobile
                         videoRef.current.play().catch(e => console.log("Auto-play blocked:", e));
                     }
                 } catch (err) {
@@ -198,15 +203,13 @@ export const StaffAttendanceTerminal: React.FC = () => {
         const canvas = canvasRef.current;
         const faceApi = (faceapi as any).default || faceapi;
 
-        // Só inicia se tudo estiver pronto
         if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0 || !faceApi) return;
 
-        // Cria o matcher com threshold de 0.6 (Mais tolerante)
+        // FaceMatcher com threshold levemente maior para evitar falsos positivos com TinyModel
         let faceMatcher: any;
         try {
-            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.6);
+            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
         } catch (e) {
-            console.error("Erro ao criar FaceMatcher", e);
             return;
         }
 
@@ -216,15 +219,13 @@ export const StaffAttendanceTerminal: React.FC = () => {
             if (video.paused || video.ended) return;
 
             try {
-                // minConfidence 0.35 para detectar rostos em condições difíceis
-                const detections = await faceApi.detectAllFaces(
-                    video, 
-                    new faceApi.SsdMobilenetv1Options({ minConfidence: 0.35 })
-                )
-                .withFaceLandmarks()
+                // --- OTIMIZAÇÃO: InputSize menor para performance ---
+                const options = new faceApi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
+                
+                const detections = await faceApi.detectAllFaces(video, options)
+                .withFaceLandmarks(true) // tiny landmarks
                 .withFaceDescriptors();
 
-                // Tamanho atual do vídeo
                 const displaySize = { width: video.videoWidth, height: video.videoHeight };
                 faceApi.matchDimensions(canvas, displaySize);
 
@@ -237,14 +238,12 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     const match = resizedDetections[0];
                     const box = match.detection.box;
                     
-                    // Verifica correspondência
                     let label = 'unknown';
                     if (match.descriptor) {
                         const bestMatch = faceMatcher.findBestMatch(match.descriptor);
                         label = bestMatch.label;
                     }
 
-                    // Feedback Visual
                     const drawBox = new faceApi.draw.DrawBox(box, { 
                         label: label === 'unknown' ? 'Verificando...' : 'Identificado', 
                         boxColor: label === 'unknown' ? '#ffffff' : '#22c55e', 
@@ -257,7 +256,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
                         processingRef.current = true;
                         setIsProcessing(true);
                         await processAttendance(label);
-                        // Delay para evitar múltiplos registros
                         setTimeout(() => { 
                             processingRef.current = false; 
                             setIsProcessing(false);
@@ -265,12 +263,11 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     }
                 }
             } catch (err) {
-                // Silently handle errors in loop
                 console.warn("Detection Loop Warning:", err);
             }
         };
 
-        const intervalId = setInterval(detect, 500);
+        const intervalId = setInterval(detect, 200); // 200ms = 5 FPS de check (suficiente)
 
         return () => clearInterval(intervalId);
     }, [modelsLoaded, isVideoReady, labeledDescriptors]); 
