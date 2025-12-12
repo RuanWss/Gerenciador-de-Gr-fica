@@ -77,8 +77,12 @@ export const HRDashboard: React.FC = () => {
 
     const loadFaceModels = async () => {
         const faceApi = (faceapi as any).default || faceapi;
-        if (!faceApi.nets.ssdMobilenetv1.isLoaded) {
-            await faceApi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+        if (faceApi.nets && !faceApi.nets.ssdMobilenetv1.isLoaded) {
+            try {
+                await faceApi.nets.ssdMobilenetv1.loadFromUri('https://justadudewhohacks.github.io/face-api.js/models');
+            } catch (e) {
+                console.warn("FaceAPI Models warning:", e);
+            }
         }
     };
 
@@ -103,7 +107,7 @@ export const HRDashboard: React.FC = () => {
         } catch (e) {
             console.error(e);
             setPhotoStatus('invalid');
-            setPhotoMessage('Erro na análise.');
+            setPhotoMessage('Erro na análise (IA não carregada ou imagem inválida).');
         }
     };
 
@@ -116,17 +120,35 @@ export const HRDashboard: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (!newName || !newRole) {
+            alert("Preencha todos os campos obrigatórios.");
+            return;
+        }
+
         setIsSaving(true);
         try {
             let photoUrl = '';
             
-            // Se estiver editando e não enviou nova foto, mantém a antiga (lógica implícita no backend se não enviar url nova, mas aqui vamos buscar a antiga se necessário, ou apenas não atualizar o campo)
-            // Simulação: Se editando e sem foto nova, pega do objeto existente
-            if (editingId && !newPhoto) {
+            // Lógica de Upload da Foto
+            if (newPhoto) {
+                try {
+                    photoUrl = await uploadStaffPhoto(newPhoto);
+                } catch (uploadError: any) {
+                    console.error("Erro upload:", uploadError);
+                    const confirmContinue = window.confirm(
+                        "Falha ao enviar a foto (Erro de Upload/Permissão). Deseja salvar o funcionário SEM foto?"
+                    );
+                    if (!confirmContinue) {
+                        setIsSaving(false);
+                        return;
+                    }
+                    // Se continuar, photoUrl fica vazia
+                }
+            } else if (editingId) {
+                // Mantém a foto antiga se não enviou nova
                 const existing = staffList.find(s => s.id === editingId);
                 photoUrl = existing?.photoUrl || '';
-            } else if (newPhoto) {
-                photoUrl = await uploadStaffPhoto(newPhoto);
             }
 
             const staffData: StaffMember = {
@@ -140,17 +162,21 @@ export const HRDashboard: React.FC = () => {
 
             if (editingId) {
                 await updateStaffMember(staffData);
-                alert("Funcionário atualizado!");
+                alert("Funcionário atualizado com sucesso!");
             } else {
-                await saveStaffMember({ ...staffData, id: '' }); // ID gerado pelo firestore
-                alert("Funcionário cadastrado!");
+                await saveStaffMember({ ...staffData, id: '' });
+                alert("Funcionário cadastrado com sucesso!");
             }
             
             resetForm();
             loadData();
-        } catch (error) {
-            alert("Erro ao salvar.");
-            console.error(error);
+        } catch (error: any) {
+            console.error("Erro ao salvar:", error);
+            let msg = "Erro desconhecido.";
+            if (error.code === 'permission-denied') msg = "Permissão Negada: Você não tem permissão para alterar o banco de dados.";
+            if (error.message) msg = error.message;
+            
+            alert(`Erro ao salvar: ${msg}`);
         } finally {
             setIsSaving(false);
         }
@@ -166,9 +192,13 @@ export const HRDashboard: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm("Deseja realmente desligar este funcionário? Isso removerá o acesso ao ponto, mas manterá o histórico.")) {
-            await deleteStaffMember(id); // Ou apenas marcar active: false
-            loadData();
+        if (confirm("Deseja realmente desligar este funcionário? Isso removerá o acesso ao ponto.")) {
+            try {
+                await deleteStaffMember(id);
+                loadData();
+            } catch (error: any) {
+                alert("Erro ao excluir: " + (error.message || "Permissão negada"));
+            }
         }
     };
 
@@ -231,7 +261,7 @@ export const HRDashboard: React.FC = () => {
                                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
-                                        <input className="w-full border p-2 rounded" value={newName} onChange={e => setNewName(e.target.value)} required />
+                                        <input className="w-full border p-2 rounded" value={newName} onChange={e => setNewName(e.target.value)} required placeholder="Ex: Maria da Silva" />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-bold text-gray-700 mb-1">Cargo / Função</label>
@@ -248,7 +278,7 @@ export const HRDashboard: React.FC = () => {
                                         <p className="text-xs text-gray-500 mt-1">A foto deve conter apenas o rosto do funcionário, sem óculos escuros ou máscara.</p>
                                     </div>
                                     <div className="col-span-2 flex gap-3">
-                                        <Button type="submit" isLoading={isSaving} disabled={photoStatus === 'invalid' || photoStatus === 'analyzing'}>
+                                        <Button type="submit" isLoading={isSaving} disabled={photoStatus === 'analyzing'}>
                                             Salvar Dados
                                         </Button>
                                         <Button type="button" variant="outline" onClick={resetForm}>Cancelar</Button>
@@ -272,7 +302,7 @@ export const HRDashboard: React.FC = () => {
                                         <tr key={staff.id} className="hover:bg-gray-50">
                                             <td className="p-4 flex items-center gap-3">
                                                 <div className="h-10 w-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
-                                                    {staff.photoUrl ? <img src={staff.photoUrl} className="h-full w-full object-cover" /> : <Users className="p-2 text-gray-400"/>}
+                                                    {staff.photoUrl ? <img src={staff.photoUrl} className="h-full w-full object-cover" alt={staff.name} /> : <Users className="p-2 text-gray-400"/>}
                                                 </div>
                                                 <span className="font-bold text-gray-800">{staff.name}</span>
                                             </td>
