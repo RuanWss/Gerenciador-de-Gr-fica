@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Megaphone, Volume2, Maximize, Minimize } from 'lucide-react';
+import { Clock, Calendar, X, Maximize2, AlertCircle, Volume2, Megaphone, ArrowRight } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -33,9 +32,9 @@ const MORNING_CLASSES = [
 ];
 
 const AFTERNOON_CLASSES = [
-    { id: '1em', name: '1ª SÉRIE' },
-    { id: '2em', name: '2ª SÉRIE' },
-    { id: '3em', name: '3ª SÉRIE' },
+    { id: '1em', name: '1ª SÉRIE EM' },
+    { id: '2em', name: '2ª SÉRIE EM' },
+    { id: '3em', name: '3ª SÉRIE EM' },
 ];
 
 // Som de Alerta (Sino de Serviço / Aeroporto)
@@ -44,241 +43,464 @@ const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-p
 export const PublicSchedule: React.FC = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
-    const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
+    const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [currentSlot, setCurrentSlot] = useState<TimeSlot | null>(null);
+    const [showModal, setShowModal] = useState(false);
+    const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     
-    // UI State
-    const [manualShift, setManualShift] = useState<'morning' | 'afternoon'>('morning');
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    // Estado para controlar se o áudio foi ativado pelo usuário
     const [audioEnabled, setAudioEnabled] = useState(false);
     
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastSlotId = useRef<string>('');
 
-    // 1. Listeners
+    // 1. Realtime Database Listener (Schedule & Config)
     useEffect(() => {
-        const unsubscribeSchedule = listenToSchedule((data) => setSchedule(data || []));
-        const unsubscribeConfig = listenToSystemConfig((config) => setSysConfig(config));
-        return () => { unsubscribeSchedule(); unsubscribeConfig(); };
+        const unsubscribeSchedule = listenToSchedule((data) => {
+            setSchedule(data || []);
+        });
+        const unsubscribeConfig = listenToSystemConfig((config) => {
+            console.log("Configuração do Sistema Recebida:", config);
+            setSysConfig(config);
+        });
+        return () => {
+            unsubscribeSchedule();
+            unsubscribeConfig();
+        };
     }, []);
 
-    // 2. Relógio e Detecção de Turno/Slot
+    // 2. Clock & Shift Logic
     useEffect(() => {
         const timer = setInterval(() => {
             const now = new Date();
             setCurrentTime(now);
-            checkCurrentSlot(now);
-
-            // Auto-switch turno apenas se o usuário não tiver interagido recentemente (opcional, aqui forçamos pelo horário)
-            const hour = now.getHours();
-            if (hour >= 13 && manualShift === 'morning') setManualShift('afternoon');
-            if (hour < 12 && manualShift === 'afternoon') setManualShift('morning');
-
+            checkCurrentStatus(now);
         }, 1000);
-        
-        // Define turno inicial
-        const h = new Date().getHours();
-        if (h >= 13) setManualShift('afternoon');
-
         return () => clearInterval(timer);
     }, []);
 
-    const checkCurrentSlot = (now: Date) => {
+    const checkCurrentStatus = (now: Date) => {
         const day = now.getDay();
         const hours = now.getHours();
         const minutes = now.getMinutes();
         const timeVal = hours * 60 + minutes;
 
-        if (day === 0 || day === 6) { setCurrentSlot(null); return; }
+        // Weekend Check (Optional)
+        if (day === 0 || day === 6) {
+            setCurrentShift('off');
+            setCurrentSlot(null);
+            return;
+        }
 
-        const allSlots = [...MORNING_SLOTS, ...AFTERNOON_SLOTS];
-        const foundSlot = allSlots.find(s => {
-            const [startH, startM] = s.start.split(':').map(Number);
-            const [endH, endM] = s.end.split(':').map(Number);
-            const startVal = startH * 60 + startM;
-            const endVal = endH * 60 + endM;
-            return timeVal >= startVal && timeVal < endVal;
-        });
+        // Shift Logic
+        let shift: 'morning' | 'afternoon' | 'off' = 'off';
 
-        if (foundSlot) {
-            if (foundSlot.id !== lastSlotId.current) {
-                lastSlotId.current = foundSlot.id;
-                setCurrentSlot(foundSlot);
-                playAlert();
+        // Faixas de horário ampliadas para cobrir todo o período
+        if (timeVal >= 420 && timeVal < 750) { // 07:00 - 12:30
+            shift = 'morning';
+        } else if (timeVal >= 750 && timeVal < 1260) { // 12:30 - 21:00
+            shift = 'afternoon';
+        }
+
+        setCurrentShift(shift);
+
+        // Slot Detection
+        if (shift !== 'off') {
+            const slots = shift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+            const foundSlot = slots.find(s => {
+                const [startH, startM] = s.start.split(':').map(Number);
+                const [endH, endM] = s.end.split(':').map(Number);
+                const startVal = startH * 60 + startM;
+                const endVal = endH * 60 + endM;
+                return timeVal >= startVal && timeVal < endVal;
+            });
+
+            if (foundSlot) {
+                // Se encontrou um slot novo (diferente do anterior)
+                if (foundSlot.id !== lastSlotId.current) {
+                    console.log(`Troca de horário detectada: ${lastSlotId.current} -> ${foundSlot.id}`);
+                    lastSlotId.current = foundSlot.id;
+                    setCurrentSlot(foundSlot);
+                    // Toca o alerta apenas se mudou o slot
+                    playAlert();
+                }
+            } else {
+                // Se não está em nenhum slot (ex: antes da primeira aula ou depois da última)
+                if (lastSlotId.current !== '') {
+                    lastSlotId.current = '';
+                    setCurrentSlot(null);
+                }
             }
         } else {
-            if (lastSlotId.current !== '') {
-                lastSlotId.current = '';
-                setCurrentSlot(null);
-            }
+            setCurrentSlot(null);
         }
     };
 
     const enableAudio = () => {
         if (audioRef.current) {
+            // Tenta tocar e pausar imediatamente para desbloquear o áudio no navegador
             audioRef.current.play().then(() => {
                 audioRef.current?.pause();
                 audioRef.current!.currentTime = 0;
                 setAudioEnabled(true);
-            }).catch(() => {});
+            }).catch(e => console.error("Erro ao desbloquear áudio:", e));
         }
     };
 
     const playAlert = () => {
         if (audioRef.current) {
-            audioRef.current.volume = 1.0;
-            audioRef.current.play().catch(() => {});
-        }
-    };
-
-    const toggleFullscreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen();
-            setIsFullscreen(true);
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-                setIsFullscreen(false);
+            audioRef.current.volume = 1.0; // Volume máximo
+            const playPromise = audioRef.current.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.warn("Reprodução automática bloqueada pelo navegador. O usuário precisa interagir com a página primeiro.", error);
+                });
             }
+
+            // Toca por 6 segundos (para pegar o gongo inteiro)
+            setTimeout(() => {
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                }
+            }, 6000);
         }
     };
 
     const getEntry = (classId: string) => {
         if (!currentSlot) return null;
-        // Se estivermos mostrando o turno da tarde, mas o slot atual for da manhã (ou vice versa), não mostra nada
-        if (currentSlot.shift !== manualShift) return null;
-
-        return schedule.find(s => 
-            s.classId === classId && 
-            s.dayOfWeek === currentTime.getDay() && 
-            s.slotId === currentSlot.id
-        );
+        const day = currentTime.getDay();
+        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === currentSlot.id);
     };
 
-    const activeClasses = manualShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
-    
-    // Formatação
+    const getNextEntry = (classId: string) => {
+        if (!currentSlot) return null;
+        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+        const currentIndex = slots.findIndex(s => s.id === currentSlot.id);
+        
+        // Se for o último horário ou não achou
+        if (currentIndex === -1 || currentIndex === slots.length - 1) return null;
+
+        let nextSlotIndex = currentIndex + 1;
+        let nextSlot = slots[nextSlotIndex];
+
+        // Se o próximo for intervalo, pega o seguinte
+        if (nextSlot.type === 'break') {
+            nextSlotIndex++;
+            nextSlot = slots[nextSlotIndex];
+        }
+
+        if (!nextSlot) return null;
+
+        const day = currentTime.getDay();
+        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === nextSlot.id);
+    };
+
+    const getFullEntry = (classId: string, slotId: string, day: number) => {
+        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === slotId);
+    };
+
     const dateString = currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
     const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+    const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
+
+    // Grid Layout Logic
+    const gridCols = currentShift === 'morning' ? 4 : 3;
+
+    // Warning Visibility Logic (ROBUSTO)
+    const isWarningVisible = () => {
+        // Checagem básica: Configuração existe, aviso está ativo e tem mensagem
+        if (!sysConfig?.isBannerActive || !sysConfig?.showOnTV || !sysConfig?.bannerMessage) {
+            return false;
+        }
+        
+        const now = new Date();
+        
+        // Validação da Data de Início
+        if (sysConfig.tvStart && sysConfig.tvStart.trim() !== '') {
+            const startDate = new Date(sysConfig.tvStart);
+            if (!isNaN(startDate.getTime())) {
+                if (now < startDate) return false; // Ainda não chegou a hora
+            }
+        }
+
+        // Validação da Data de Fim
+        if (sysConfig.tvEnd && sysConfig.tvEnd.trim() !== '') {
+            const endDate = new Date(sysConfig.tvEnd);
+            if (!isNaN(endDate.getTime())) {
+                if (now > endDate) return false; // Já passou da hora
+            }
+        }
+
+        // Se passou por todas as verificações (ou se as datas estavam vazias), mostra o aviso
+        return true;
+    };
+
+    const showWarning = isWarningVisible();
+
     return (
-        <div className="min-h-screen w-full bg-[#0f0f10] text-white overflow-y-auto lg:overflow-hidden flex flex-col font-sans relative selection:bg-red-500 selection:text-white">
-            <audio ref={audioRef} src={ALERT_SOUND_URL} />
+        <div className="h-screen w-screen bg-gradient-to-br from-[#0f0f10] via-[#2a0a0a] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
+            <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
 
-            {/* Audio overlay fix */}
+            {/* OVERLAY DE ATIVAÇÃO DE ÁUDIO */}
             {!audioEnabled && (
-                <div onClick={enableAudio} className="fixed inset-0 z-[9999] cursor-pointer flex items-center justify-center">
-                    <div className="bg-red-600/90 backdrop-blur px-8 py-4 rounded-full animate-pulse shadow-lg flex items-center gap-4 mx-4 text-center">
-                        <Volume2 size={24} className="shrink-0" />
-                        <span className="font-bold uppercase tracking-widest text-sm md:text-base">Toque para ativar o som</span>
-                    </div>
-                </div>
-            )}
-
-            {/* HEADER CENTRALIZADO (CLOCK) */}
-            <div className="pt-8 md:pt-10 pb-4 md:pb-6 text-center z-10 flex flex-col items-center px-4">
-                <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" alt="Logo" className="h-10 md:h-16 w-auto mb-4 md:mb-6 object-contain drop-shadow-xl" />
-                
-                <h1 className="text-6xl sm:text-8xl md:text-9xl lg:text-[140px] leading-none font-['Montserrat'] font-black text-white tracking-tighter drop-shadow-2xl tabular-nums">
-                    {timeString}
-                </h1>
-                
-                <div className="bg-[#1a1a1a] border border-white/10 px-4 md:px-8 py-2 rounded-full mt-4 md:mt-8 shadow-lg">
-                    <span className="text-xs md:text-sm font-bold tracking-[0.1em] md:tracking-[0.2em] text-gray-400 uppercase">
-                        {dateString}
-                    </span>
-                </div>
-            </div>
-
-            {/* CONTROLES / TURNO */}
-            <div className="flex justify-center items-center gap-4 my-4 md:my-6 z-10">
-                <button 
-                    onClick={() => setManualShift(manualShift === 'morning' ? 'afternoon' : 'morning')}
-                    className="group bg-black/40 border border-white/10 px-6 py-2 rounded-full flex items-center gap-3 transition-all hover:bg-white/5 hover:border-white/20 shadow-lg"
+                <div 
+                    onClick={enableAudio}
+                    className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center cursor-pointer hover:bg-black/70 transition-colors"
                 >
-                    <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_10px_currentColor] transition-colors ${manualShift === 'morning' ? 'bg-green-500 text-green-500' : 'bg-blue-500 text-blue-500'} animate-pulse`}></div>
-                    <span className="text-xs font-bold uppercase tracking-widest text-gray-300 group-hover:text-white">
-                        Turno {manualShift === 'morning' ? 'Matutino' : 'Vespertino'}
-                    </span>
-                </button>
-            </div>
-
-            {/* WARNING BANNER */}
-            {sysConfig?.isBannerActive && sysConfig?.showOnTV && (
-                <div className="w-full max-w-5xl mx-auto mb-6 md:mb-8 px-4 animate-in slide-in-from-top-4">
-                    <div className={`border-l-4 ${sysConfig.bannerType === 'error' ? 'border-red-500 bg-red-900/20' : 'border-yellow-500 bg-yellow-900/20'} p-4 rounded-r-lg flex items-center gap-4 shadow-lg backdrop-blur-sm`}>
-                        <Megaphone size={24} className={`shrink-0 ${sysConfig.bannerType === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
-                        <span className="text-sm md:text-lg font-bold text-white uppercase tracking-wide">{sysConfig.bannerMessage}</span>
+                    <div className="bg-red-600 p-8 rounded-full mb-6 animate-pulse shadow-[0_0_50px_rgba(220,38,38,0.5)]">
+                        <Volume2 size={64} className="text-white" />
                     </div>
+                    <h1 className="text-4xl font-black text-white uppercase tracking-widest mb-4 text-center">Clique na tela para iniciar</h1>
+                    <p className="text-gray-400 text-xl font-medium">Necessário para ativar os alertas sonoros da TV</p>
                 </div>
             )}
 
-            {/* GRADE DE CARDS */}
-            <div className="flex-1 w-full max-w-[1800px] mx-auto px-4 md:px-8 pb-8 z-10 flex flex-col justify-center">
-                <div className={`grid gap-4 md:gap-6 w-full ${activeClasses.length === 3 ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
-                    {activeClasses.map(cls => {
-                        const entry = getEntry(cls.id);
-                        
-                        // Lógica de Estado do Card
-                        let statusText = "LIVRE";
-                        let statusSub = "";
-                        let cardColor = "text-gray-700"; // Cor padrão para 'LIVRE' (escuro)
-                        
-                        if (currentSlot?.type === 'break' && currentSlot.shift === manualShift) {
-                            statusText = "INTERVALO";
-                            cardColor = "text-yellow-500";
-                        } else if (entry) {
-                            statusText = entry.subject;
-                            statusSub = entry.professor;
-                            cardColor = "text-white";
-                        } else if (!currentSlot) {
-                            statusText = "AGUARDANDO";
-                            cardColor = "text-gray-800";
-                        }
+            {/* --- HEADER SECTION (40%) --- */}
+            <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/20 backdrop-blur-sm z-10 transition-all duration-700">
+                
+                {/* 
+                    LEFT COLUMN: Logo, Clock, Date 
+                    Se tiver aviso: 65% width + borda direita
+                    Se NÃO tiver aviso: 100% width (centralizado)
+                */}
+                <div className={`${showWarning ? 'w-[65%] border-r border-white/10' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-700`}>
+                    {/* Logo */}
+                    <img 
+                        src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
+                        alt="Logo" 
+                        className="h-[6vh] w-auto object-contain mb-4 drop-shadow-lg"
+                    />
 
-                        return (
-                            <div key={cls.id} className="bg-[#0a0a0a] border border-white/10 rounded-xl min-h-[220px] lg:h-[35vh] flex flex-col relative overflow-hidden group shadow-2xl transition-transform hover:scale-[1.01]">
-                                {/* Header do Card */}
-                                <div className="bg-[#121212] py-4 md:py-5 text-center border-b border-white/5 shadow-sm">
-                                    <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-wider">{cls.name}</h2>
-                                </div>
-                                
-                                {/* Conteúdo do Card */}
-                                <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 text-center relative">
-                                    {/* Texto Principal */}
-                                    <h3 className={`text-3xl md:text-5xl font-black uppercase tracking-tight leading-none mb-3 drop-shadow-lg ${cardColor} transition-colors duration-500 break-words w-full`}>
-                                        {statusText}
-                                    </h3>
+                    {/* Clock */}
+                    <h1 className="text-[20vh] leading-none tracking-tighter text-white drop-shadow-2xl font-['Montserrat'] font-extrabold tabular-nums text-center">
+                        {timeString}
+                    </h1>
+
+                    {/* Date */}
+                    <div className="mt-4 bg-white/5 px-8 py-2 rounded-full border border-white/5">
+                        <p className="text-[1.8vh] text-gray-300 font-bold tracking-[0.2em] uppercase">
+                            {dateString}
+                        </p>
+                    </div>
+                </div>
+
+                {/* 
+                    RIGHT COLUMN: Warnings (35% Width) 
+                    Renderizado condicionalmente
+                */}
+                {showWarning && (
+                    <div className="w-[35%] h-full flex items-center justify-center p-8 animate-in fade-in slide-in-from-right duration-700">
+                        {/* Box - h-auto to fit text */}
+                        <div className="w-full h-auto min-h-[150px] bg-black/80 backdrop-blur-xl border-[6px] border-yellow-500 rounded-3xl p-8 shadow-[0_0_50px_rgba(234,179,8,0.4)] animate-pulse flex flex-col items-center justify-center gap-6">
+                            <Megaphone size={50} className="text-yellow-400 shrink-0" />
+                            <p className="text-[3.5vh] font-bold text-yellow-50 uppercase text-center leading-tight break-words w-full">
+                                {sysConfig?.bannerMessage}
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* --- SHIFT INDICATOR --- */}
+            <div className="h-[5%] flex items-center justify-center shrink-0 z-10 mt-6">
+                 <div className="flex items-center gap-3 px-6 py-1 bg-black/40 rounded-full border border-white/10 shadow-lg backdrop-blur-md">
+                    <span className={`h-2 w-2 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
+                    <span className="text-[1.4vh] font-bold tracking-[0.15em] text-gray-200 uppercase">
+                        {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Fora de Horário'}
+                    </span>
+                </div>
+            </div>
+
+            {/* --- CARDS GRID SECTION --- */}
+            <div className="flex-1 w-full p-4 pb-6 flex items-center justify-center">
+                
+                {currentShift === 'off' ? (
+                     <div className="flex flex-col items-center justify-center opacity-40 animate-pulse">
+                        <AlertCircle size={100} className="mb-6 text-gray-600"/>
+                        <p className="text-4xl font-bold text-gray-500 tracking-widest uppercase">Sem Atividades</p>
+                     </div>
+                ) : (
+                    <div 
+                        className="grid gap-4 w-full h-full max-w-[98vw] mx-auto" 
+                        style={{ 
+                            gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` 
+                        }}
+                    >
+                        {activeClasses.map(cls => {
+                            const entry = getEntry(cls.id);
+                            const nextEntry = getNextEntry(cls.id);
+
+                            return (
+                                <div key={cls.id} className="flex flex-col bg-[#121212] border border-gray-800 rounded-2xl overflow-hidden shadow-2xl h-full relative group transform transition-transform duration-300 hover:scale-[1.01]">
                                     
-                                    {/* Subtexto (Professor) */}
-                                    {statusSub && (
-                                        <div className="bg-white/5 px-4 md:px-6 py-2 rounded-full border border-white/5 mt-2 md:mt-4">
-                                            <p className="text-sm md:text-lg font-bold text-gray-300 uppercase tracking-widest truncate max-w-full">
-                                                {statusSub}
-                                            </p>
-                                        </div>
-                                    )}
+                                    {/* Class Name Header */}
+                                    <div className="h-[15%] bg-gradient-to-b from-[#1a1a1a] to-[#121212] flex items-center justify-center border-b border-white/5">
+                                        <h2 className="text-[3vh] font-black text-gray-200 uppercase tracking-widest">
+                                            {cls.name}
+                                        </h2>
+                                    </div>
+                                    
+                                    {/* Card Content */}
+                                    <div className="h-[85%] relative w-full flex flex-col">
+                                        {currentSlot?.type === 'break' ? (
+                                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/10 z-20">
+                                                <Clock size={64} className="text-yellow-500 mb-6 drop-shadow-lg animate-bounce"/>
+                                                <span className="text-[4vh] font-black text-yellow-500 uppercase tracking-[0.2em]">INTERVALO</span>
+                                             </div>
+                                        ) : entry ? (
+                                            <>
+                                                {/* CURRENT CLASS (Main Body) - 65% Height */}
+                                                <div className="h-[65%] flex flex-col items-center justify-center border-b border-white/5 px-2 bg-gradient-to-b from-[#151515] to-[#121212] w-full text-center">
+                                                    <p className="text-[1.2vh] font-bold text-gray-500 uppercase tracking-[0.2em] mb-1">Agora</p>
+                                                    
+                                                    {/* Disciplina */}
+                                                    <h3 className="text-[4.5vh] leading-[0.9] font-black text-white uppercase drop-shadow-md break-words w-full px-1 line-clamp-2 mb-2">
+                                                        {entry.subject}
+                                                    </h3>
+                                                    
+                                                    {/* Professor Atual (Agora em baixo da disciplina) */}
+                                                    <p className="text-[2vh] font-bold text-gray-400 uppercase tracking-wide truncate w-full px-1">
+                                                        {entry.professor}
+                                                    </p>
+                                                </div>
 
-                                    {/* Efeito sutil de brilho no fundo para aulas ativas */}
-                                    {entry && (
-                                        <div className="absolute inset-0 bg-gradient-to-t from-red-900/10 to-transparent pointer-events-none"></div>
-                                    )}
+                                                {/* NEXT CLASS (Footer) - 35% Height */}
+                                                <div className="h-[35%] flex flex-col items-center justify-center px-2 bg-[#0a0a0a] w-full text-center relative overflow-hidden">
+                                                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-gray-800 to-transparent"></div>
+                                                    
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-[1.2vh] font-bold text-red-500 uppercase tracking-widest">A Seguir</span>
+                                                        <ArrowRight size="1.2vh" className="text-red-500"/>
+                                                    </div>
+
+                                                    {nextEntry ? (
+                                                        <div className="flex flex-col items-center w-full">
+                                                            <p className="text-[1.8vh] font-bold text-gray-200 uppercase truncate w-full px-1">
+                                                                {nextEntry.subject}
+                                                            </p>
+                                                            <p className="text-[1.4vh] font-medium text-gray-500 uppercase truncate w-full px-1">
+                                                                {nextEntry.professor}
+                                                            </p>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[1.5vh] font-bold text-gray-600 uppercase tracking-widest">
+                                                            Fim das Aulas
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full opacity-20">
+                                                <span className="text-[3vh] font-bold tracking-widest uppercase text-gray-600">LIVRE</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Floating Button for Full View */}
+            <button 
+                onClick={() => setShowModal(true)}
+                className="absolute bottom-6 right-6 p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-full text-gray-500 hover:text-white transition-all backdrop-blur-md z-50"
+            >
+                <Maximize2 size={24} />
+            </button>
+
+             {/* MODAL FULL VIEW */}
+             {showModal && (
+                 <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="w-full h-full max-w-[95vw] max-h-[95vh] bg-[#0f0f10] rounded-3xl border border-gray-800 flex flex-col overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#18181b] shrink-0">
+                            <h2 className="text-xl font-bold text-white flex items-center gap-3 uppercase tracking-wider">
+                                <Calendar className="text-red-500"/> Quadro Geral
+                            </h2>
+                            <button onClick={() => setShowModal(false)} className="bg-gray-800 p-2 rounded-full hover:bg-red-600 hover:text-white text-gray-400 transition-all">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-6 custom-scrollbar bg-[#0f0f10]">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                {/* Morning Table */}
+                                <div className="bg-[#18181b] rounded-2xl border border-gray-800/50 overflow-hidden">
+                                    <div className="bg-blue-900/20 p-3 border-b border-blue-900/30">
+                                        <h3 className="text-lg font-bold text-blue-400 uppercase tracking-wide text-center">Matutino</h3>
+                                    </div>
+                                    <table className="w-full text-sm text-gray-400">
+                                        <thead>
+                                            <tr className="bg-white/5 text-white">
+                                                <th className="py-3 px-2 font-bold w-20 border-r border-white/10">HORA</th>
+                                                {MORNING_CLASSES.map(c => <th key={c.id} className="py-3 px-1 font-bold text-center border-l border-white/10">{c.name}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {MORNING_SLOTS.filter(s => s.type === 'class').map(slot => (
+                                                <tr key={slot.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="py-3 px-2 font-mono text-gray-500 text-xs font-bold border-r border-white/10 text-center">{slot.start}</td>
+                                                    {MORNING_CLASSES.map(cls => {
+                                                        const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
+                                                        return (
+                                                            <td key={cls.id + slot.id} className="py-2 px-1 text-center border-l border-white/5">
+                                                                {entry ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-white text-xs">{entry.subject}</span>
+                                                                        <span className="text-[10px] text-gray-500 uppercase">{entry.professor.split(' ')[0]}</span>
+                                                                    </div>
+                                                                ) : <span className="text-gray-700 text-xs">-</span>}
+                                                            </td>
+                                                        )
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Afternoon Table */}
+                                <div className="bg-[#18181b] rounded-2xl border border-gray-800/50 overflow-hidden">
+                                     <div className="bg-red-900/20 p-3 border-b border-red-900/30">
+                                        <h3 className="text-lg font-bold text-red-400 uppercase tracking-wide text-center">Vespertino</h3>
+                                    </div>
+                                    <table className="w-full text-sm text-gray-400">
+                                        <thead>
+                                            <tr className="bg-white/5 text-white">
+                                                <th className="py-3 px-2 font-bold w-20 border-r border-white/10">HORA</th>
+                                                {AFTERNOON_CLASSES.map(c => <th key={c.id} className="py-3 px-1 font-bold text-center border-l border-white/10">{c.name}</th>)}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {AFTERNOON_SLOTS.filter(s => s.type === 'class').map(slot => (
+                                                <tr key={slot.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="py-3 px-2 font-mono text-gray-500 text-xs font-bold border-r border-white/10 text-center">{slot.start}</td>
+                                                    {AFTERNOON_CLASSES.map(cls => {
+                                                        const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
+                                                        return (
+                                                            <td key={cls.id + slot.id} className="py-2 px-1 text-center border-l border-white/5">
+                                                                {entry ? (
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-bold text-white text-xs">{entry.subject}</span>
+                                                                        <span className="text-[10px] text-gray-500 uppercase">{entry.professor.split(' ')[0]}</span>
+                                                                    </div>
+                                                                ) : <span className="text-gray-700 text-xs">-</span>}
+                                                            </td>
+                                                        )
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                        );
-                    })}
+                        </div>
+                    </div>
                 </div>
-            </div>
-
-            {/* FOOTER BUTTON */}
-            <div className="fixed bottom-6 right-6 z-50 hidden md:block">
-                <button 
-                    onClick={toggleFullscreen}
-                    className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-gray-500 hover:text-white transition-colors"
-                >
-                    {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-                </button>
-            </div>
+            )}
         </div>
     );
 };
