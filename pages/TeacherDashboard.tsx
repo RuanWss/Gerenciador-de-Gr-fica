@@ -115,7 +115,10 @@ export const TeacherDashboard: React.FC = () => {
   const [materialClass, setMaterialClass] = useState('');
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [isUploadingMaterial, setIsUploadingMaterial] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Refs para inputs de arquivo (para limpar após envio)
+  const materialFileInputRef = useRef<HTMLInputElement>(null);
+  const examFileInputRef = useRef<HTMLInputElement>(null);
   
   // State auxiliar para download
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -224,6 +227,9 @@ export const TeacherDashboard: React.FC = () => {
       setFilePreviewUrl(null);
       setExistingFileUrl(null);
       setAiGeneratedContent('');
+      if (examFileInputRef.current) {
+          examFileInputRef.current.value = '';
+      }
   };
 
   const handleNewExam = () => {
@@ -280,8 +286,16 @@ export const TeacherDashboard: React.FC = () => {
 
         // Upload new file if exists
         if (uploadedFile) {
-            finalFileUrl = await uploadExamFile(uploadedFile);
-            finalFileName = uploadedFile.name;
+            try {
+                finalFileUrl = await uploadExamFile(uploadedFile);
+                finalFileName = uploadedFile.name;
+            } catch (storageError: any) {
+                console.error("Erro Storage:", storageError);
+                if (storageError.code === 'storage/unauthorized') {
+                    throw new Error("Permissão negada no Storage. Verifique as regras do Firebase Storage.");
+                }
+                throw new Error("Falha ao fazer upload do arquivo. Tente novamente.");
+            }
         }
 
         const examData: any = {
@@ -297,8 +311,8 @@ export const TeacherDashboard: React.FC = () => {
             status: ExamStatus.PENDING,
             createdAt: Date.now(),
             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            // Campos de diagramação (só relevantes se for creationMode === 'create', mas salvamos igual)
-            materialType,
+            // Campos de diagramação
+            materialType, // Agora garantido que está no state
             columns: docColumns,
             headerData: creationMode === 'create' ? {
                 schoolName: 'CEMAL EQUIPE',
@@ -316,10 +330,17 @@ export const TeacherDashboard: React.FC = () => {
             alert("Solicitação enviada para a gráfica com sucesso!");
         }
         
+        // Limpeza e redirecionamento
+        resetForm();
         setActiveTab('requests');
-    } catch (error) {
-        console.error(error);
-        alert("Erro ao salvar solicitação.");
+        
+    } catch (error: any) {
+        console.error("Erro Geral SaveExam:", error);
+        if (error.code === 'permission-denied') {
+            alert("Erro de Permissão (Firestore): Você não tem permissão para salvar solicitações.");
+        } else {
+            alert("Erro ao processar: " + (error.message || "Erro desconhecido"));
+        }
     } finally {
         setIsSaving(false);
     }
@@ -357,8 +378,8 @@ export const TeacherDashboard: React.FC = () => {
           setMaterialFile(null);
           setMaterialTitle('');
           
-          if (fileInputRef.current) {
-              fileInputRef.current.value = '';
+          if (materialFileInputRef.current) {
+              materialFileInputRef.current.value = '';
           }
 
           alert("Material enviado com sucesso! O arquivo foi organizado na pasta da turma.");
@@ -663,7 +684,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Arquivo</label>
                                         <input 
                                             type="file"
-                                            ref={fileInputRef}
+                                            ref={materialFileInputRef}
                                             className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
                                             onChange={handleMaterialFileChange}
                                         />
@@ -981,6 +1002,33 @@ export const TeacherDashboard: React.FC = () => {
                                          />
                                      </div>
                                      <div className="col-span-2">
+                                         <label className="block text-sm font-bold text-gray-700 mb-2">Tipo de Material</label>
+                                         <div className="grid grid-cols-2 gap-4">
+                                             <label className={`flex items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${materialType === 'exam' ? 'bg-purple-50 border-purple-500 text-purple-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                                                 <input 
+                                                     type="radio" 
+                                                     name="materialType" 
+                                                     className="hidden" 
+                                                     checked={materialType === 'exam'} 
+                                                     onChange={() => setMaterialType('exam')} 
+                                                 />
+                                                 <FileText size={18} className="mr-2"/>
+                                                 <span className="font-bold">Prova / Avaliação</span>
+                                             </label>
+                                             <label className={`flex items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${materialType === 'handout' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                                                 <input 
+                                                     type="radio" 
+                                                     name="materialType" 
+                                                     className="hidden" 
+                                                     checked={materialType === 'handout'} 
+                                                     onChange={() => setMaterialType('handout')} 
+                                                 />
+                                                 <BookOpen size={18} className="mr-2"/>
+                                                 <span className="font-bold">Apostila / Atividade</span>
+                                             </label>
+                                         </div>
+                                     </div>
+                                     <div className="col-span-2">
                                          <label className="block text-sm font-bold text-gray-700 mb-1">Observações / Instruções para Gráfica</label>
                                          <textarea 
                                              className="w-full border border-gray-300 rounded-lg p-3 h-24" 
@@ -997,6 +1045,7 @@ export const TeacherDashboard: React.FC = () => {
                                          <input 
                                             type="file" 
                                             id="quick-upload" 
+                                            ref={examFileInputRef}
                                             className="hidden" 
                                             onChange={handleFileUpload}
                                             accept=".pdf,.doc,.docx,image/*"
