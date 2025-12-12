@@ -85,7 +85,7 @@ export const Login: React.FC = () => {
             </div>
             <h2 className="text-2xl font-bold text-white">Bem-vindo</h2>
             <p className="mt-2 text-sm text-gray-300">
-                Acesse para enviar provas ou gerenciar impressões.
+                Portal de acesso ao sistema escolar.
             </p>
             </div>
             <form className="mt-8 space-y-6" onSubmit={handleLogin}>

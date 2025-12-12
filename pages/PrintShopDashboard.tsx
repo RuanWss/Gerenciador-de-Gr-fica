@@ -6,7 +6,7 @@ import {
     updateExamStatus, 
     createTeamMember, 
     saveStudent, 
-    updateStudent,
+    updateStudent, 
     deleteStudent,
     getStudents,
     getAnswerKeys,
@@ -18,9 +18,13 @@ import {
     getAttendanceLogs,
     getAllAttendanceLogs,
     uploadStudentPhoto,
-    getLessonPlans
+    getLessonPlans,
+    getStaffMembers,
+    saveStaffMember,
+    deleteStaffMember,
+    uploadStaffPhoto
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, TimeSlot, AttendanceLog, LessonPlan } from '../types';
+import { ExamRequest, ExamStatus, UserRole, SchoolClass, Student, AnswerKey, StudentCorrection, SystemConfig, ScheduleEntry, TimeSlot, AttendanceLog, LessonPlan, StaffMember } from '../types';
 import { Button } from '../components/Button';
 import { 
   Printer, 
@@ -53,12 +57,13 @@ import {
   BookOpenCheck,
   ChevronRight,
   FileText,
-  Briefcase
+  Briefcase,
+  Fingerprint
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
-type Tab = 'overview' | 'printing' | 'team' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance' | 'plans';
+type Tab = 'overview' | 'printing' | 'team' | 'classes' | 'students' | 'answer_keys' | 'statistics' | 'schedule' | 'attendance' | 'plans' | 'staff_biometry';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -137,6 +142,13 @@ export const PrintShopDashboard: React.FC = () => {
   const [isSavingStudent, setIsSavingStudent] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   
+  // Staff Biometry (New)
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [newStaffName, setNewStaffName] = useState('');
+  const [newStaffRole, setNewStaffRole] = useState('');
+  const [newStaffPhoto, setNewStaffPhoto] = useState<File | null>(null);
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  
   // Student Photo Validation State
   const [photoAnalysisStatus, setPhotoAnalysisStatus] = useState<'idle' | 'analyzing' | 'valid' | 'invalid'>('idle');
   const [photoAnalysisMessage, setPhotoAnalysisMessage] = useState('');
@@ -200,6 +212,9 @@ export const PrintShopDashboard: React.FC = () => {
       }
       if (activeTab === 'plans') {
           loadPlans();
+      }
+      if (activeTab === 'staff_biometry') {
+          loadStaffData();
       }
   }, [activeTab]);
 
@@ -273,8 +288,6 @@ export const PrintShopDashboard: React.FC = () => {
   const refreshData = async () => {
     setIsLoading(true);
 
-    // Carrega dados de forma resiliente (um erro não trava os outros)
-    
     // 1. Classes (Static)
     const allFixedClasses = [...MORNING_CLASSES_LIST, ...AFTERNOON_CLASSES_LIST];
     setClassList(allFixedClasses);
@@ -282,7 +295,6 @@ export const PrintShopDashboard: React.FC = () => {
     // 2. Exams
     try {
         const allExams = await getExams();
-        // Ordena por data de criação decrescente (mais novos primeiro)
         const sorted = allExams.sort((a,b) => b.createdAt - a.createdAt);
         setExams(sorted);
         setHasPendingExams(sorted.some(e => e.status === ExamStatus.PENDING));
@@ -330,6 +342,11 @@ export const PrintShopDashboard: React.FC = () => {
       } catch (e) {
           console.error("Erro ao carregar planejamentos", e);
       }
+  };
+
+  const loadStaffData = async () => {
+      const staff = await getStaffMembers();
+      setStaffList(staff);
   };
 
   const handleUpdateConfig = async (e: React.FormEvent) => {
@@ -520,6 +537,44 @@ export const PrintShopDashboard: React.FC = () => {
       }
   };
 
+  // Staff Handlers
+  const handleAddStaff = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsSavingStaff(true);
+      try {
+          let photoUrl = '';
+          if (newStaffPhoto) {
+              photoUrl = await uploadStaffPhoto(newStaffPhoto);
+          }
+          
+          await saveStaffMember({
+              id: '',
+              name: newStaffName,
+              role: newStaffRole,
+              photoUrl,
+              active: true,
+              createdAt: Date.now()
+          });
+          
+          alert("Funcionário cadastrado!");
+          setNewStaffName('');
+          setNewStaffRole('');
+          setNewStaffPhoto(null);
+          loadStaffData();
+      } catch(e) {
+          alert("Erro ao salvar funcionário");
+      } finally {
+          setIsSavingStaff(false);
+      }
+  };
+
+  const handleDeleteStaff = async (id: string) => {
+      if(confirm("Desligar funcionário?")) {
+          await deleteStaffMember(id);
+          loadStaffData();
+      }
+  };
+
   const handleUpdateSchedule = async (classId: string, className: string, slotId: string, field: 'subject' | 'professor', value: string) => {
       const existingEntry = scheduleData.find(s => s.classId === classId && s.dayOfWeek === selectedDay && s.slotId === slotId);
       
@@ -627,7 +682,8 @@ export const PrintShopDashboard: React.FC = () => {
             <div className="px-2">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Gestão Escolar</p>
                 <SidebarItem id="schedule" label="Quadro de Horários" icon={CalendarClock} />
-                <SidebarItem id="team" label="Equipe" icon={Briefcase} />
+                <SidebarItem id="team" label="Equipe (Acesso)" icon={Briefcase} />
+                <SidebarItem id="staff_biometry" label="Funcionários (Ponto)" icon={Fingerprint} />
                 <SidebarItem id="plans" label="Planejamentos" icon={BookOpenCheck} />
                 <SidebarItem id="classes" label="Turmas" icon={GraduationCap} />
                 <SidebarItem id="students" label="Alunos" icon={Users} />
@@ -668,6 +724,7 @@ export const PrintShopDashboard: React.FC = () => {
                         </div>
                     </div>
                     
+                    {/* System Config ... */}
                     <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -732,9 +789,53 @@ export const PrintShopDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* STAFF BIOMETRY (NEW) */}
+            {activeTab === 'staff_biometry' && (
+                <div className="max-w-6xl mx-auto">
+                    <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2"><Fingerprint className="text-brand-500" /> Cadastro de Funcionários (Ponto)</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Form */}
+                        <div className="bg-white rounded-xl shadow-lg p-6">
+                            <h3 className="font-bold text-gray-800 mb-4">Novo Funcionário</h3>
+                            <form onSubmit={handleAddStaff} className="space-y-4">
+                                <input className="w-full border p-2 rounded" placeholder="Nome Completo" required value={newStaffName} onChange={e => setNewStaffName(e.target.value)}/>
+                                <input className="w-full border p-2 rounded" placeholder="Cargo (Ex: Zeladoria)" required value={newStaffRole} onChange={e => setNewStaffRole(e.target.value)}/>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Foto (Rosto)</label>
+                                    <input type="file" className="text-sm" onChange={e => e.target.files && setNewStaffPhoto(e.target.files[0])}/>
+                                </div>
+                                <Button type="submit" isLoading={isSavingStaff} className="w-full">Cadastrar</Button>
+                            </form>
+                        </div>
+
+                        {/* List */}
+                        <div className="bg-white rounded-xl shadow-lg p-6 overflow-hidden flex flex-col">
+                            <h3 className="font-bold text-gray-800 mb-4">Funcionários Cadastrados</h3>
+                            <div className="flex-1 overflow-y-auto max-h-[400px]">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 text-left">
+                                        <tr><th className="p-2">Nome</th><th className="p-2">Cargo</th><th className="p-2 text-right">Ação</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {staffList.map(s => (
+                                            <tr key={s.id} className="border-t border-gray-100">
+                                                <td className="p-2 font-bold">{s.name}</td>
+                                                <td className="p-2 text-gray-500">{s.role}</td>
+                                                <td className="p-2 text-right"><button onClick={() => handleDeleteStaff(s.id)} className="text-red-500"><Trash2 size={16}/></button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* PRINTING */}
             {activeTab === 'printing' && (
                 <div className="max-w-6xl mx-auto space-y-6">
+                    {/* ... Existing printing UI ... */}
                     <div className="flex items-center justify-between">
                         <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Printer className="text-brand-500" /> Central de Impressão</h2>
                         <div className="flex bg-gray-900/50 p-1 rounded-lg backdrop-blur-sm border border-white/10 overflow-x-auto">
@@ -752,13 +853,7 @@ export const PrintShopDashboard: React.FC = () => {
                             <p>Nenhuma prova encontrada com este filtro.</p>
                         </div>
                     ) : (
-                        filteredExams.map((exam) => {
-                            const relatedClass = classList.find(c => c.name === exam.gradeLevel);
-                            const studentCount = relatedClass 
-                                ? studentList.filter(s => s.classId === relatedClass.id).length 
-                                : 0;
-
-                            return (
+                        filteredExams.map((exam) => (
                                 <div key={exam.id} className={`bg-white rounded-xl p-6 shadow-xl border-l-4 transition-all hover:scale-[1.01] ${exam.status === ExamStatus.PENDING ? 'border-l-brand-600 shadow-brand-900/20' : exam.status === ExamStatus.IN_PROGRESS ? 'border-l-yellow-500' : 'border-l-green-500'}`}>
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex items-center gap-3">
@@ -776,11 +871,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         <div>
                                             <p className="text-xs text-gray-400 font-bold uppercase">Qtd.</p>
                                             <p className="font-semibold text-gray-800">
-                                                {studentCount > 0 ? (
-                                                    <span className="text-brand-700">{studentCount} alunos (Sugestão)</span>
-                                                ) : (
-                                                    <span className="text-blue-600 text-xs cursor-pointer" onClick={() => handleViewFile(exam)}>Ver Arquivo</span>
-                                                )}
+                                                <span className="text-blue-600 text-xs cursor-pointer" onClick={() => handleViewFile(exam)}>Ver Arquivo</span>
                                             </p>
                                         </div>
                                         <div><p className="text-xs text-gray-400 font-bold uppercase">Prazo</p><p className="font-semibold text-gray-800">{new Date(exam.dueDate).toLocaleDateString()}</p></div>
@@ -796,8 +887,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         {exam.status === ExamStatus.COMPLETED && <Button onClick={() => handleStatusChange(exam.id, ExamStatus.IN_PROGRESS)} variant="outline" className="w-full justify-center text-xs opacity-75 hover:opacity-100">Reabrir Pedido</Button>}
                                     </div>
                                 </div>
-                            );
-                        })
+                        ))
                     )}
                 </div>
             )}
