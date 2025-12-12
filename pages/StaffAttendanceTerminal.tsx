@@ -64,7 +64,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 setModelsLoaded(true);
             } catch (error) {
                 console.error("Erro ao carregar modelos:", error);
-                setLoadingMessage('Erro de Conexão');
+                setLoadingMessage('Erro de Conexão (IA)');
             }
         };
         loadModels();
@@ -156,6 +156,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     });
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
+                        // Força play para garantir em mobile
+                        videoRef.current.play().catch(e => console.log("Auto-play blocked:", e));
                     }
                 } catch (err) {
                     console.error("Erro ao acessar câmera:", err);
@@ -180,20 +182,32 @@ export const StaffAttendanceTerminal: React.FC = () => {
         // Só inicia se tudo estiver pronto
         if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0 || !faceApi) return;
 
-        const faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
-        const displaySize = { width: video.videoWidth, height: video.videoHeight };
-        
-        // Garante que o canvas tem o tamanho do vídeo
-        faceApi.matchDimensions(canvas, displaySize);
+        // Cria o matcher
+        let faceMatcher: any;
+        try {
+            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
+        } catch (e) {
+            console.error("Erro ao criar FaceMatcher", e);
+            return;
+        }
 
         const detect = async () => {
             if (processingRef.current) return; 
             if (lastLog) return; 
+            if (video.paused || video.ended) return;
 
             try {
-                const detections = await faceApi.detectAllFaces(video, new faceApi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
-                    .withFaceLandmarks()
-                    .withFaceDescriptors();
+                // SsdMobilenetv1Options com minConfidence um pouco menor para ajudar em ambientes internos
+                const detections = await faceApi.detectAllFaces(
+                    video, 
+                    new faceApi.SsdMobilenetv1Options({ minConfidence: 0.45 })
+                )
+                .withFaceLandmarks()
+                .withFaceDescriptors();
+
+                // Tamanho atual do vídeo
+                const displaySize = { width: video.videoWidth, height: video.videoHeight };
+                faceApi.matchDimensions(canvas, displaySize);
 
                 const resizedDetections = faceApi.resizeResults(detections, displaySize);
                 
@@ -206,25 +220,29 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     const drawBox = new faceApi.draw.DrawBox(box, { 
                         label: 'Verificando...', 
                         boxColor: '#ffffff', 
-                        lineWidth: 1,
+                        lineWidth: 2,
                         drawLabelOptions: { fontSize: 10 }
                     });
                     drawBox.draw(canvas);
 
-                    const bestMatch = faceMatcher.findBestMatch(resizedDetections[0].descriptor);
-                    
-                    if (bestMatch.label !== 'unknown') {
-                        processingRef.current = true;
-                        setIsProcessing(true);
-                        await processAttendance(bestMatch.label);
-                        setTimeout(() => { 
-                            processingRef.current = false; 
-                            setIsProcessing(false);
-                        }, 4000); 
+                    if (resizedDetections[0].descriptor) {
+                        const bestMatch = faceMatcher.findBestMatch(resizedDetections[0].descriptor);
+                        
+                        if (bestMatch.label !== 'unknown') {
+                            processingRef.current = true;
+                            setIsProcessing(true);
+                            await processAttendance(bestMatch.label);
+                            // Pequeno delay após sucesso para não floodar
+                            setTimeout(() => { 
+                                processingRef.current = false; 
+                                setIsProcessing(false);
+                            }, 4000); 
+                        }
                     }
                 }
             } catch (err) {
-                // Silently handle
+                // Silently handle errors in loop
+                console.warn("Detection Loop Warning:", err);
             }
         };
 
@@ -312,7 +330,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"/>
                     
                     <p className="text-red-200/70 text-xs font-bold tracking-[0.2em] uppercase mb-2">Horário de Brasília</p>
-                    <h1 className="text-5xl md:text-6xl font-black font-mono tracking-tighter text-white drop-shadow-lg mb-2 tabular-nums">
+                    {/* FONTE ATUALIZADA PARA MONTSERRAT EXTRABOLD */}
+                    <h1 className="text-5xl md:text-6xl font-clock font-extrabold tracking-tighter text-white drop-shadow-lg mb-2 tabular-nums">
                         {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </h1>
                     <p className="text-gray-400 text-xs md:text-sm font-bold capitalize tracking-wide">
@@ -340,7 +359,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
                         <video 
                             ref={videoRef} 
                             autoPlay 
-                            muted 
+                            muted
+                            playsInline // IMPORTANTE PARA IOS/MOBILE
                             onPlay={() => setIsVideoReady(true)}
                             className="w-full h-full object-cover transform scale-x-[-1] opacity-90" 
                         />
