@@ -120,6 +120,15 @@ export const getClassMaterials = async (teacherId: string): Promise<ClassMateria
     }
 };
 
+export const deleteClassMaterial = async (materialId: string): Promise<void> => {
+    try {
+        await deleteDoc(doc(db, MATERIALS_COLLECTION, materialId));
+    } catch (error) {
+        console.error("Erro ao deletar material:", error);
+        throw error;
+    }
+};
+
 // Monitora materiais de uma turma específica em tempo real
 export const listenToClassMaterials = (
   className: string, 

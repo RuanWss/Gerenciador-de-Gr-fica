@@ -9,6 +9,7 @@ import {
     uploadClassMaterialFile, 
     saveClassMaterial,
     getClassMaterials,
+    deleteClassMaterial,
     saveLessonPlan,
     getLessonPlans
 } from '../services/firebaseService';
@@ -375,6 +376,22 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
+  const handleDeleteMaterial = async (id: string) => {
+      if (!window.confirm("Tem certeza que deseja excluir este material? Esta ação não pode ser desfeita.")) return;
+      
+      try {
+          await deleteClassMaterial(id);
+          setMaterials(materials.filter(m => m.id !== id));
+      } catch (error: any) {
+          console.error("Erro ao excluir", error);
+          if (error.code === 'permission-denied') {
+              alert("Erro de Permissão: Você não pode excluir este material.");
+          } else {
+              alert("Erro ao excluir material.");
+          }
+      }
+  };
+
   const handleSavePlan = async () => {
       if (!user) return;
       if (!planClass) return alert("Selecione a turma.");
@@ -689,6 +706,13 @@ export const TeacherDashboard: React.FC = () => {
                                              </div>
                                              
                                              <div className="flex items-center gap-2">
+                                                  <button 
+                                                    onClick={() => handleDeleteMaterial(material.id)}
+                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2"
+                                                    title="Excluir Material"
+                                                  >
+                                                      <Trash2 size={18} />
+                                                  </button>
                                                   <button 
                                                     onClick={() => handleForceDownload(material.fileUrl, material.fileName, material.id)}
                                                     className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors flex items-center gap-2"
