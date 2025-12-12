@@ -1,5 +1,4 @@
-
-import * as firebase from 'firebase/app';
+import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -15,7 +14,7 @@ const firebaseConfig = {
   measurementId: "G-YVH4JK7ME0"
 };
 
-const app = firebase.initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // Inicializa o Firestore forçando Long Polling para evitar erros de conexão (WebSockets blocked)

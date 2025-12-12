@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   addDoc, 
@@ -197,8 +196,11 @@ export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
     
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamRequest));
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro ao buscar provas:", error);
+    if (error.code === 'permission-denied') {
+        console.warn("Permissão negada para listar provas. Verifique as regras do Firestore.");
+    }
     return [];
   }
 };
@@ -312,12 +314,21 @@ export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => 
 
 // --- STUDENTS ---
 
-export const getStudents = async (): Promise<Student[]> => {
+export const getStudents = async (classId?: string): Promise<Student[]> => {
     try {
-        const querySnapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
+        let q;
+        if (classId) {
+             q = query(collection(db, STUDENTS_COLLECTION), where("classId", "==", classId));
+        } else {
+             q = collection(db, STUDENTS_COLLECTION);
+        }
+        const querySnapshot = await getDocs(q);
         return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student));
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erro ao buscar alunos:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("Permissão negada para listar alunos. Verifique as regras do Firestore.");
+        }
         return [];
     }
 };
@@ -448,8 +459,11 @@ export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> 
         
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LessonPlan));
-    } catch (error) {
+    } catch (error: any) {
         console.error("Erro ao buscar planejamentos:", error);
+        if (error.code === 'permission-denied') {
+            console.warn("Permissão negada para listar planejamentos. Verifique as regras do Firestore.");
+        }
         return [];
     }
 };

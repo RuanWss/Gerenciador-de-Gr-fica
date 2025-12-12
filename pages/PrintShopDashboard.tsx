@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -272,18 +271,38 @@ export const PrintShopDashboard: React.FC = () => {
 
   const refreshData = async () => {
     setIsLoading(true);
-    const allExams = await getExams();
-    const sorted = allExams.sort((a,b) => a.createdAt - b.createdAt);
-    setExams(sorted);
-    setHasPendingExams(sorted.some(e => e.status === ExamStatus.PENDING));
+
+    // Carrega dados de forma resiliente (um erro não trava os outros)
     
+    // 1. Classes (Static)
     const allFixedClasses = [...MORNING_CLASSES_LIST, ...AFTERNOON_CLASSES_LIST];
     setClassList(allFixedClasses);
 
-    const students = await getStudents();
-    setStudentList(students);
-    const keys = await getAnswerKeys();
-    setAnswerKeys(keys);
+    // 2. Exams
+    try {
+        const allExams = await getExams();
+        const sorted = allExams.sort((a,b) => a.createdAt - b.createdAt);
+        setExams(sorted);
+        setHasPendingExams(sorted.some(e => e.status === ExamStatus.PENDING));
+    } catch (e) {
+        console.error("Erro ao carregar provas", e);
+    }
+
+    // 3. Students
+    try {
+        const students = await getStudents();
+        setStudentList(students);
+    } catch (e) {
+        console.error("Erro ao carregar alunos", e);
+    }
+
+    // 4. Answer Keys
+    try {
+        const keys = await getAnswerKeys();
+        setAnswerKeys(keys);
+    } catch (e) {
+        console.error("Erro ao carregar gabaritos", e);
+    }
 
     setIsLoading(false);
   };
@@ -303,8 +322,12 @@ export const PrintShopDashboard: React.FC = () => {
   };
   
   const loadPlans = async () => {
-      const plans = await getLessonPlans();
-      setAllPlans(plans);
+      try {
+          const plans = await getLessonPlans();
+          setAllPlans(plans);
+      } catch (e) {
+          console.error("Erro ao carregar planejamentos", e);
+      }
   };
 
   const handleUpdateConfig = async (e: React.FormEvent) => {
