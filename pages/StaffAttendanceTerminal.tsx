@@ -185,7 +185,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     const box = resizedDetections[0].detection.box;
                     const drawBox = new faceApi.draw.DrawBox(box, { 
                         label: 'Identificando...', 
-                        boxColor: '#8b5cf6', // Roxo para diferenciar
+                        boxColor: '#dc2626', // Vermelho para combinar com o tema
                         lineWidth: 2
                     });
                     drawBox.draw(canvas);
@@ -282,16 +282,16 @@ export const StaffAttendanceTerminal: React.FC = () => {
     };
 
     return (
-        <div className="h-screen w-screen bg-[#0f0720] text-white overflow-hidden flex flex-col font-sans selection:bg-purple-500/30">
+        <div className="h-screen w-screen bg-gradient-to-br from-gray-900 via-red-900 to-black text-white overflow-hidden flex flex-col font-sans">
             
-            {/* --- HEADER (Estilo Roxo/Noturno para diferenciar) --- */}
-            <div className="h-[15vh] bg-[#1a102e] border-b border-white/5 flex items-center justify-between px-8 z-20 shadow-lg relative">
+            {/* --- HEADER --- */}
+            <div className="h-[15vh] bg-black/20 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-8 z-20 shadow-lg relative">
                 <div className="flex items-center gap-6">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 w-auto drop-shadow-md" alt="Logo" />
                     <div className="h-10 w-px bg-white/10"></div>
                     <div>
-                        <h1 className="text-2xl font-black uppercase tracking-wider text-purple-100">Ponto Eletrônico</h1>
-                        <p className="text-xs font-medium text-purple-400 tracking-[0.2em] uppercase">Controle de Equipe</p>
+                        <h1 className="text-2xl font-black uppercase tracking-wider text-white">Ponto Eletrônico</h1>
+                        <p className="text-xs font-medium text-red-400 tracking-[0.2em] uppercase">Controle de Equipe</p>
                     </div>
                 </div>
 
@@ -313,7 +313,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
             </div>
 
             {/* --- MAIN CONTENT --- */}
-            <div className="flex-1 relative flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0f0720] to-[#0f0720]">
+            <div className="flex-1 relative flex flex-col items-center justify-center p-6 bg-transparent">
                 
                 {/* CAMERA CONTAINER */}
                 <div className={`relative w-full max-w-5xl aspect-video bg-black rounded-3xl overflow-hidden border-2 shadow-2xl transition-all duration-500 ${getStatusColor()} ${isProcessing ? 'scale-[0.98] opacity-80' : 'scale-100'}`}>
@@ -332,16 +332,16 @@ export const StaffAttendanceTerminal: React.FC = () => {
                         
                         {loadingMessage && !lastLog && (
                             <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-30">
-                                <Loader2 size={64} className="text-purple-500 animate-spin mb-6" />
+                                <Loader2 size={64} className="text-red-500 animate-spin mb-6" />
                                 <h2 className="text-2xl font-bold text-white tracking-widest uppercase animate-pulse">{loadingMessage}</h2>
                             </div>
                         )}
 
                         {!loadingMessage && !lastLog && !isProcessing && (
                             <div className="absolute inset-0 z-10 opacity-30">
-                                <div className="w-full h-1 bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.8)] animate-[scan_3s_ease-in-out_infinite]"></div>
+                                <div className="w-full h-1 bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-[scan_3s_ease-in-out_infinite]"></div>
                                 <div className="absolute bottom-10 left-0 right-0 text-center">
-                                    <span className="bg-black/60 backdrop-blur px-6 py-2 rounded-full text-purple-400 font-bold uppercase tracking-[0.2em] text-sm border border-purple-500/30 animate-pulse">
+                                    <span className="bg-black/60 backdrop-blur px-6 py-2 rounded-full text-red-400 font-bold uppercase tracking-[0.2em] text-sm border border-red-500/30 animate-pulse">
                                         <Scan className="inline-block mr-2 -mt-1" size={16}/>
                                         Aproxime-se para registrar o ponto
                                     </span>
@@ -401,9 +401,9 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 )}
             </div>
 
-            <div className="h-12 bg-[#09090b] border-t border-white/5 flex items-center justify-between px-8 text-[10px] text-gray-600 uppercase tracking-widest font-bold">
+            <div className="h-12 bg-black/40 backdrop-blur-md border-t border-white/10 flex items-center justify-between px-8 text-[10px] text-gray-400 uppercase tracking-widest font-bold">
                  <div className="flex items-center gap-4">
-                     <span className="flex items-center gap-1"><Zap size={10} className="text-purple-600" /> Sistema CEMAL RH</span>
+                     <span className="flex items-center gap-1"><Zap size={10} className="text-red-600" /> Sistema CEMAL RH</span>
                  </div>
             </div>
             <style>{`
