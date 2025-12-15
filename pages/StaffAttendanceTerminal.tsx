@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, Loader2, Scan, Database, Settings, XCircle, Maximize, Minimize, UserCheck } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, Loader2, Scan, Database, Settings, XCircle, Maximize, Minimize, UserCheck, RefreshCw } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -37,9 +37,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const matchCounter = useRef<number>(0);
     const lastMatchLabel = useRef<string>('unknown');
     const CONFIDENCE_THRESHOLD = 5; // Precisa de 5 frames consecutivos confirmando a mesma pessoa
-
-    // Cache para evitar re-processamento pesado
-    const processedCache = useRef<Map<string, string>>(new Map());
 
     // 1. Clock
     useEffect(() => {
@@ -86,9 +83,11 @@ export const StaffAttendanceTerminal: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    // 4. Process Faces (Smart Caching Strategy)
+    // 4. Process Faces (Parallel Processing Strategy)
     useEffect(() => {
         if (modelsLoaded && staff.length > 0) {
+            // Evita rodar se já temos descritores suficientes (exceto se houver mudança drástica)
+            // A função processStaffFaces lida com diffs internamente
             processStaffFaces(staff);
         } else if (modelsLoaded && staff.length === 0) {
             setLoadingMessage(''); 
@@ -99,56 +98,94 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const processStaffFaces = async (staffList: StaffMember[]) => {
         const faceApi = (faceapi as any).default || faceapi;
         
-        // Identifica quem precisa ser processado (foto nova ou não cacheada)
-        const toProcess = staffList.filter(s => {
-            const cachedUrl = processedCache.current.get(s.id);
-            return cachedUrl !== s.photoUrl && s.photoUrl;
+        // Filtra staff válido (com foto)
+        const validStaff = staffList.filter(s => s.photoUrl);
+        
+        const cachedDescriptors: any[] = [];
+        const toProcess: StaffMember[] = [];
+
+        // 1. Separação Rápida (Cache Hit vs Cache Miss)
+        // Isso roda instantaneamente
+        for (const member of validStaff) {
+            const cacheKey = `staff_face_v2_${member.id}`;
+            let loadedFromCache = false;
+
+            try {
+                const cachedData = localStorage.getItem(cacheKey);
+                if (cachedData) {
+                    const parsed = JSON.parse(cachedData);
+                    // Verifica se a URL da foto é a mesma
+                    if (parsed.url === member.photoUrl) {
+                        const descriptor = new Float32Array(parsed.descriptor);
+                        cachedDescriptors.push(new faceApi.LabeledFaceDescriptors(member.id, [descriptor]));
+                        loadedFromCache = true;
+                    }
+                }
+            } catch (e) { console.warn("Cache error", e); }
+
+            if (!loadedFromCache) {
+                toProcess.push(member);
+            }
+        }
+
+        // 2. Atualiza estado IMEDIATAMENTE com o que já temos em cache
+        // O usuário não precisa esperar processar as fotos novas para usar o sistema com as antigas
+        setLabeledDescriptors(prev => {
+            // Mantemos os existentes que não estão na lista de atualização, e adicionamos o cache novo
+            // Na prática, vamos substituir tudo pelo cache + processados para garantir limpeza
+            return cachedDescriptors;
         });
 
-        // Se ninguém mudou, verifica se alguém foi removido
         if (toProcess.length === 0) {
-            const currentIds = new Set(staffList.map(s => s.id));
-            if (labeledDescriptors.some(ld => !currentIds.has(ld.label)) || labeledDescriptors.length !== staffList.length) {
-                // Filtra descritores antigos
-                const validDescriptors = labeledDescriptors.filter(ld => currentIds.has(ld.label));
-                setLabeledDescriptors(validDescriptors);
-            }
             setLoadingMessage('');
             return;
         }
 
-        setLoadingMessage(`Atualizando Biometria (${toProcess.length})...`);
-        
-        const newDescriptors: any[] = [];
-        
-        for (const member of toProcess) {
-            if (!member.photoUrl) continue;
-            try {
-                // Yield para não travar a UI
-                await new Promise(resolve => setTimeout(resolve, 10));
+        // 3. Processamento Paralelo em Lotes (Batching)
+        // Processa 3 fotos por vez para não travar a UI nem o navegador
+        const BATCH_SIZE = 3;
+        setLoadingMessage(`Sincronizando faces: 0/${toProcess.length}`);
 
-                const img = await faceApi.fetchImage(member.photoUrl);
-                const detection = await faceApi.detectSingleFace(
-                    img, 
-                    new faceApi.TinyFaceDetectorOptions()
-                ).withFaceLandmarks(true).withFaceDescriptor();
-                
-                if (detection) {
-                    newDescriptors.push(new faceApi.LabeledFaceDescriptors(member.id, [detection.descriptor]));
-                    processedCache.current.set(member.id, member.photoUrl);
+        for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
+            const batch = toProcess.slice(i, i + BATCH_SIZE);
+            const batchPromises = batch.map(async (member) => {
+                try {
+                    const img = await faceApi.fetchImage(member.photoUrl);
+                    const detection = await faceApi.detectSingleFace(
+                        img, 
+                        new faceApi.TinyFaceDetectorOptions()
+                    ).withFaceLandmarks(true).withFaceDescriptor();
+                    
+                    if (detection) {
+                        const descriptor = detection.descriptor;
+                        
+                        // Salva no Cache
+                        try {
+                            localStorage.setItem(`staff_face_v2_${member.id}`, JSON.stringify({
+                                url: member.photoUrl,
+                                descriptor: Array.from(descriptor)
+                            }));
+                        } catch (e) { /* Storage full ignore */ }
+
+                        return new faceApi.LabeledFaceDescriptors(member.id, [descriptor]);
+                    }
+                } catch (err) {
+                    console.warn(`Falha ao processar foto: ${member.name}`);
                 }
-            } catch (err) {
-                console.warn(`Erro foto ${member.name}`);
-            }
+                return null;
+            });
+
+            // Aguarda o lote atual terminar
+            const results = await Promise.all(batchPromises);
+            const validResults = results.filter(r => r !== null);
+
+            // Atualização Incremental (Progressive Loading)
+            setLabeledDescriptors(prev => [...prev, ...validResults]);
+            
+            // Atualiza mensagem de progresso
+            const processedCount = Math.min(i + BATCH_SIZE, toProcess.length);
+            setLoadingMessage(`Sincronizando faces: ${processedCount}/${toProcess.length}`);
         }
-        
-        // Merge descritores novos com os antigos (preservando o cache)
-        setLabeledDescriptors(prev => {
-            const updatedIds = new Set(newDescriptors.map(d => d.label));
-            const currentIds = new Set(staffList.map(s => s.id));
-            const kept = prev.filter(d => !updatedIds.has(d.label) && currentIds.has(d.label));
-            return [...kept, ...newDescriptors];
-        });
         
         setLoadingMessage('');
     };
@@ -356,6 +393,16 @@ export const StaffAttendanceTerminal: React.FC = () => {
         }
     };
 
+    const clearCache = () => {
+        if(confirm("Deseja limpar o cache das faces? Isso fará o próximo carregamento ser mais lento.")) {
+            // Limpa apenas chaves de face
+            Object.keys(localStorage).forEach(key => {
+                if(key.startsWith('staff_face_v2_')) localStorage.removeItem(key);
+            });
+            window.location.reload();
+        }
+    };
+
     return (
         <div className="min-h-screen w-full bg-[#0a0000] text-white flex flex-col relative overflow-hidden font-sans selection:bg-red-500/30">
             {/* Background Gradients */}
@@ -498,6 +545,11 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     <Database size={14} />
                     {labeledDescriptors.length} Faces
                 </div>
+                
+                <button onClick={clearCache} className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white transition-all" title="Recarregar Dados">
+                    <RefreshCw size={20} />
+                </button>
+
                 <button onClick={toggleFullscreen} className="w-12 h-12 bg-black/40 backdrop-blur-md border border-white/10 rounded-full flex items-center justify-center text-gray-400 hover:text-white transition-all">
                     {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
                 </button>
