@@ -106,6 +106,7 @@ export interface StaffMember {
       thursday: number;
       friday: number;
   };
+  email?: string; // E-mail para login no sistema
 }
 
 export interface AnswerKey {

@@ -4,10 +4,11 @@ import {
     updateStaffMember, 
     deleteStaffMember, 
     uploadStaffPhoto, 
-    listenToStaffMembers,
-    listenToStaffLogs
+    listenToStaffMembers, 
+    listenToStaffLogs,
+    createSystemUserAuth
 } from '../services/firebaseService';
-import { StaffMember, StaffAttendanceLog } from '../types';
+import { StaffMember, StaffAttendanceLog, UserRole } from '../types';
 import { Button } from '../components/Button';
 import { 
     Users, 
@@ -26,7 +27,8 @@ import {
     Plus,
     AlertTriangle,
     UserCheck,
-    ClipboardList
+    ClipboardList,
+    Lock
 } from 'lucide-react';
 
 export const HRDashboard: React.FC = () => {
@@ -38,8 +40,9 @@ export const HRDashboard: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<Partial<StaffMember>>({
-        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false
+        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, email: ''
     });
+    const [createLogin, setCreateLogin] = useState(false);
     const [photoFile, setPhotoFile] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
@@ -68,6 +71,7 @@ export const HRDashboard: React.FC = () => {
     const handleEdit = (staff: StaffMember) => {
         setEditingId(staff.id);
         setFormData(staff);
+        setCreateLogin(!!staff.email);
         setPhotoFile(null);
         setPhotoPreview(staff.photoUrl || null);
         setShowForm(true);
@@ -105,7 +109,8 @@ export const HRDashboard: React.FC = () => {
                 photoUrl: photoUrl,
                 workPeriod: formData.workPeriod || 'morning',
                 isTeacher: formData.isTeacher || false,
-                weeklyClasses: formData.weeklyClasses
+                weeklyClasses: formData.weeklyClasses,
+                email: formData.email || ''
             };
 
             if (editingId) {
@@ -113,6 +118,20 @@ export const HRDashboard: React.FC = () => {
             } else {
                 await saveStaffMember(dataToSave);
             }
+
+            // LOGIN CREATION LOGIC
+            if (createLogin && formData.email) {
+                try {
+                    const role = formData.isTeacher ? UserRole.TEACHER : UserRole.HR;
+                    await createSystemUserAuth(formData.email, formData.name || 'Funcionário', role);
+                } catch (err: any) {
+                    if (err.code !== 'auth/email-already-in-use') {
+                         console.error("Erro ao criar login:", err);
+                         alert("Aviso: O cadastro foi salvo, mas houve erro ao criar o login de acesso: " + err.message);
+                    }
+                }
+            }
+
             setShowForm(false);
             resetForm();
         } catch (error) {
@@ -125,7 +144,8 @@ export const HRDashboard: React.FC = () => {
 
     const resetForm = () => {
         setEditingId(null);
-        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false });
+        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, email: '' });
+        setCreateLogin(false);
         setPhotoFile(null);
         setPhotoPreview(null);
     };
@@ -200,29 +220,57 @@ export const HRDashboard: React.FC = () => {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="md:col-span-2">
                                                 <label className="block text-sm font-bold text-gray-700 mb-1">Nome Completo</label>
-                                                <input required className="w-full border border-gray-300 p-2.5 rounded-lg" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                                                <input required className="w-full border border-gray-300 p-2.5 rounded-lg text-gray-900" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-bold text-gray-700 mb-1">Cargo / Função</label>
-                                                <input required className="w-full border border-gray-300 p-2.5 rounded-lg" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} placeholder="Ex: Professor de História" />
+                                                <input required className="w-full border border-gray-300 p-2.5 rounded-lg text-gray-900" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} placeholder="Ex: Professor de História" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-bold text-gray-700 mb-1">Jornada de Trabalho</label>
-                                                <select className="w-full border border-gray-300 p-2.5 rounded-lg" value={formData.workPeriod} onChange={e => setFormData({...formData, workPeriod: e.target.value as any})}>
+                                                <select className="w-full border border-gray-300 p-2.5 rounded-lg text-gray-900" value={formData.workPeriod} onChange={e => setFormData({...formData, workPeriod: e.target.value as any})}>
                                                     <option value="morning">Matutino</option>
                                                     <option value="afternoon">Vespertino</option>
                                                     <option value="full">Integral</option>
                                                 </select>
                                             </div>
-                                            <div className="flex items-center gap-4 mt-2">
-                                                 <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" className="w-4 h-4 text-brand-600 rounded" checked={formData.active} onChange={e => setFormData({...formData, active: e.target.checked})} />
-                                                    <span className="text-sm font-medium text-gray-700">Cadastro Ativo</span>
-                                                </label>
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" className="w-4 h-4 text-brand-600 rounded" checked={formData.isTeacher} onChange={e => setFormData({...formData, isTeacher: e.target.checked})} />
-                                                    <span className="text-sm font-medium text-gray-700">É Professor?</span>
-                                                </label>
+
+                                            {/* ÁREA DE LOGIN E PERMISSÕES */}
+                                            <div className="md:col-span-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100 mt-2">
+                                                <div className="flex items-center gap-6 mb-4">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500" checked={formData.active} onChange={e => setFormData({...formData, active: e.target.checked})} />
+                                                        <span className="text-sm font-bold text-gray-700">Cadastro Ativo</span>
+                                                    </label>
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500" checked={formData.isTeacher} onChange={e => setFormData({...formData, isTeacher: e.target.checked})} />
+                                                        <span className="text-sm font-bold text-gray-700">É Professor?</span>
+                                                    </label>
+                                                </div>
+
+                                                <div className="border-t border-blue-200 pt-4">
+                                                    <label className="flex items-center gap-2 cursor-pointer mb-3">
+                                                        <input type="checkbox" className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" checked={createLogin} onChange={e => setCreateLogin(e.target.checked)} />
+                                                        <span className="text-sm font-bold text-blue-800">Criar Login de Acesso ao Sistema</span>
+                                                    </label>
+                                                    
+                                                    {createLogin && (
+                                                        <div className="animate-in slide-in-from-top-2 pl-7">
+                                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">E-mail para Login</label>
+                                                            <input 
+                                                                type="email" 
+                                                                className="w-full border border-gray-300 p-2.5 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 bg-white" 
+                                                                placeholder="email@exemplo.com"
+                                                                value={formData.email || ''} 
+                                                                onChange={e => setFormData({...formData, email: e.target.value})} 
+                                                            />
+                                                            <p className="text-xs text-blue-600 mt-2 flex items-center gap-1 font-medium bg-blue-100/50 p-2 rounded border border-blue-200">
+                                                                <Lock size={12} /> 
+                                                                Senha padrão do sistema: <span className="font-mono font-bold text-blue-800">cemal2016</span>
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
 
@@ -253,7 +301,7 @@ export const HRDashboard: React.FC = () => {
                             <div className="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                                    <input className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:ring-2 focus:ring-brand-500 outline-none" placeholder="Buscar por nome ou cargo..." value={search} onChange={e => setSearch(e.target.value)} />
+                                    <input className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:ring-2 focus:ring-brand-500 outline-none text-gray-900" placeholder="Buscar por nome ou cargo..." value={search} onChange={e => setSearch(e.target.value)} />
                                 </div>
                                 <span className="text-xs font-bold text-gray-500 uppercase">{filteredStaff.length} Registros</span>
                             </div>
