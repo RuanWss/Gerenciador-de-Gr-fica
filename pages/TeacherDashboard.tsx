@@ -1278,32 +1278,33 @@ export const TeacherDashboard: React.FC = () => {
             </div>
         )}
         
-        {/* MODE: DIRECT UPLOAD */}
+        {/* MODE: DIRECT UPLOAD - RESPONSIVE FIXES */}
         {creationMode === 'upload' && (
-                <div className="max-w-3xl mx-auto w-full p-8 animate-in fade-in slide-in-from-bottom-4">
-                    <div className="flex items-center gap-4 mb-8">
-                        <button onClick={() => setCreationMode('none')} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white">
+                <div className="max-w-3xl mx-auto w-full p-4 md:p-8 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-8">
+                        <button onClick={() => setCreationMode('none')} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white shrink-0">
                             <ArrowLeft size={24} />
                         </button>
-                        <h2 className="text-2xl font-bold text-white">Solicitação de Impressão (Envio Rápido)</h2>
+                        <h2 className="text-xl md:text-2xl font-bold text-white leading-tight">Solicitação de Impressão (Envio Rápido)</h2>
                     </div>
 
-                    <Card className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="col-span-2">
+                    <Card className="space-y-4 md:space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                            <div className="col-span-1 md:col-span-2">
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Título da Atividade</label>
                                 <input 
                                     type="text" 
-                                    className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700" 
+                                    className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700 text-base md:text-sm" 
                                     placeholder="Ex: Prova Bimestral de História"
                                     value={docTitle}
                                     onChange={e => setDocTitle(e.target.value)}
                                 />
                             </div>
-                            <div>
+                            
+                            <div className="col-span-1">
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Turma</label>
                                 <select 
-                                className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700"
+                                className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700 text-base md:text-sm"
                                 value={selectedClassForExam}
                                 onChange={e => setSelectedClassForExam(e.target.value)}
                                 >
@@ -1313,18 +1314,19 @@ export const TeacherDashboard: React.FC = () => {
                                 ))}
                                 </select>
                             </div>
-                            <div>
+                            <div className="col-span-1">
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Quantidade de Cópias</label>
                                 <input 
                                     type="number" 
-                                    className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700" 
+                                    className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700 text-base md:text-sm" 
                                     value={printQuantity}
                                     onChange={e => setPrintQuantity(Number(e.target.value))}
                                 />
                             </div>
-                            <div className="col-span-2">
+                            
+                            <div className="col-span-1 md:col-span-2">
                                 <label className="block text-sm font-bold text-gray-700 mb-2">Tipo de Material</label>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                                     <label className={`flex items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${materialType === 'exam' ? 'bg-purple-50 border-purple-500 text-purple-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                                         <input 
                                             type="radio" 
@@ -1333,8 +1335,8 @@ export const TeacherDashboard: React.FC = () => {
                                             checked={materialType === 'exam'} 
                                             onChange={() => setMaterialType('exam')} 
                                         />
-                                        <FileText size={18} className="mr-2"/>
-                                        <span className="font-bold">Prova / Avaliação</span>
+                                        <FileText size={18} className="mr-2 shrink-0"/>
+                                        <span className="font-bold text-sm">Prova / Avaliação</span>
                                     </label>
                                     <label className={`flex items-center justify-center p-3 rounded-lg border cursor-pointer transition-all ${materialType === 'handout' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                                         <input 
@@ -1344,15 +1346,16 @@ export const TeacherDashboard: React.FC = () => {
                                             checked={materialType === 'handout'} 
                                             onChange={() => setMaterialType('handout')} 
                                         />
-                                        <BookOpen size={18} className="mr-2"/>
-                                        <span className="font-bold">Apostila / Atividade</span>
+                                        <BookOpen size={18} className="mr-2 shrink-0"/>
+                                        <span className="font-bold text-sm">Apostila / Atividade</span>
                                     </label>
                                 </div>
                             </div>
-                            <div className="col-span-2">
+                            
+                            <div className="col-span-1 md:col-span-2">
                                 <label className="block text-sm font-bold text-gray-700 mb-1">Observações / Instruções para Gráfica</label>
                                 <textarea 
-                                    className="w-full border border-gray-300 rounded-lg p-3 h-24 bg-gray-50 text-gray-700" 
+                                    className="w-full border border-gray-300 rounded-lg p-3 h-24 bg-gray-50 text-gray-700 text-base md:text-sm" 
                                     placeholder="Ex: Imprimir frente e verso, grampear no canto..."
                                     value={docSubtitle}
                                     onChange={e => setDocSubtitle(e.target.value)}
@@ -1362,7 +1365,7 @@ export const TeacherDashboard: React.FC = () => {
 
                         <div className="border-t border-gray-100 pt-6">
                             <label className="block text-sm font-bold text-gray-700 mb-3">Arquivo para Impressão</label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors bg-white">
+                            <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 md:p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors bg-white">
                                 <input 
                                 type="file" 
                                 id="quick-upload" 
@@ -1374,14 +1377,14 @@ export const TeacherDashboard: React.FC = () => {
                                 <label htmlFor="quick-upload" className="cursor-pointer flex flex-col items-center w-full">
                                     {uploadedFile ? (
                                         <div className="flex flex-col items-center text-green-600">
-                                            <FileText size={48} className="mb-2" />
-                                            <span className="font-bold text-lg">{uploadedFile.name}</span>
+                                            <FileText size={40} className="mb-2 md:w-12 md:h-12" />
+                                            <span className="font-bold text-base md:text-lg break-all">{uploadedFile.name}</span>
                                             <span className="text-xs text-gray-400 mt-1">Clique para trocar</span>
                                         </div>
                                     ) : (
                                         <>
-                                        <UploadCloud className="text-brand-500 mb-2" size={48} />
-                                        <span className="text-lg font-bold text-gray-700">Clique para selecionar o arquivo</span>
+                                        <UploadCloud className="text-brand-500 mb-2 w-10 h-10 md:w-12 md:h-12" />
+                                        <span className="text-base md:text-lg font-bold text-gray-700">Clique para selecionar o arquivo</span>
                                         <span className="text-xs text-gray-400 mt-1">PDF, Word ou Imagem</span>
                                         </>
                                     )}
@@ -1393,7 +1396,7 @@ export const TeacherDashboard: React.FC = () => {
                             <Button 
                             onClick={handleSaveExam} 
                             isLoading={isSaving}
-                            className="w-full py-4 text-lg shadow-lg shadow-brand-900/20"
+                            className="w-full py-3 md:py-4 text-base md:text-lg shadow-lg shadow-brand-900/20"
                             >
                                 <Printer size={20} className="mr-2" /> Enviar Pedido para Gráfica
                             </Button>
