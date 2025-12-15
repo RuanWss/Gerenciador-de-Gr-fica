@@ -582,6 +582,27 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
+  // Helper para renderizar o conteúdo da pré-visualização (evita aninhamento complexo no JSX)
+  const renderPreviewContent = () => {
+      if (aiGeneratedContent) {
+          return <div className="prose prose-sm max-w-none text-justify font-serif" dangerouslySetInnerHTML={{ __html: aiGeneratedContent }} />;
+      }
+      
+      if (filePreviewUrl || existingFileUrl) {
+          return (
+              <div className="w-full flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg p-8 bg-gray-50 min-h-[400px]">
+                  <img src={filePreviewUrl || existingFileUrl || ''} alt="Preview" className="max-w-full h-auto shadow-md" />
+              </div>
+          );
+      }
+
+      return (
+          <div className="text-center py-20 text-gray-300">
+              <p>Área de Conteúdo</p>
+          </div>
+      );
+  };
+
   const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create' | 'materials' | 'plans', label: string, icon: any }) => (
     <button
       onClick={id === 'create' ? handleNewExam : () => setActiveTab(id)}
@@ -1378,19 +1399,7 @@ export const TeacherDashboard: React.FC = () => {
                                             <div className="mb-6"><h2 className="text-xl font-bold text-center uppercase tracking-wide text-gray-900">{docTitle}</h2>{docSubtitle && <p className="text-center text-gray-500 text-sm italic mt-1">{docSubtitle}</p>}</div>
                                         </div>
                                         <div className={docColumns === 2 ? "columns-2 gap-8" : ""}>
-                                            {aiGeneratedContent ? (
-                                                <div className="prose prose-sm max-w-none text-justify font-serif" dangerouslySetInnerHTML={{ __html: aiGeneratedContent }} />
-                                            ) : (
-                                                (filePreviewUrl || existingFileUrl) ? (
-                                                    <div className="w-full flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg p-8 bg-gray-50 min-h-[400px]">
-                                                        <img src={filePreviewUrl || existingFileUrl || ''} alt="Preview" className="max-w-full h-auto shadow-md" />
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-center py-20 text-gray-300">
-                                                        <p>Área de Conteúdo</p>
-                                                    </div>
-                                                )
-                                            )}
+                                            {renderPreviewContent()}
                                         </div>
                                     </div>
                                 </div>
