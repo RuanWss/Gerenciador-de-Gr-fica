@@ -1156,7 +1156,7 @@ export const PrintShopDashboard: React.FC = () => {
                                  <div>
                                      <label className="block text-sm font-bold text-gray-700 mb-1">Mensagem do Aviso</label>
                                      <textarea 
-                                         className="w-full border border-gray-300 rounded-lg p-3 text-lg" 
+                                         className="w-full border border-gray-600 bg-gray-700 rounded-lg p-3 text-lg text-gray-300 placeholder-gray-500 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all" 
                                          rows={3}
                                          placeholder="Ex: Reunião de Pais hoje às 19h"
                                          value={config.bannerMessage}
@@ -1176,11 +1176,21 @@ export const PrintShopDashboard: React.FC = () => {
                                  <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
                                      <div>
                                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Início da Exibição</label>
-                                         <input type="datetime-local" className="w-full border p-2 rounded" value={config.tvStart || ''} onChange={e => setConfig({...config, tvStart: e.target.value})} />
+                                         <input 
+                                            type="datetime-local" 
+                                            className="w-full border border-gray-600 bg-gray-700 rounded-lg p-3 text-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all" 
+                                            value={config.tvStart || ''} 
+                                            onChange={e => setConfig({...config, tvStart: e.target.value})} 
+                                         />
                                      </div>
                                      <div>
                                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fim da Exibição</label>
-                                         <input type="datetime-local" className="w-full border p-2 rounded" value={config.tvEnd || ''} onChange={e => setConfig({...config, tvEnd: e.target.value})} />
+                                         <input 
+                                            type="datetime-local" 
+                                            className="w-full border border-gray-600 bg-gray-700 rounded-lg p-3 text-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all" 
+                                            value={config.tvEnd || ''} 
+                                            onChange={e => setConfig({...config, tvEnd: e.target.value})} 
+                                         />
                                      </div>
                                  </div>
                              </div>
