@@ -1,163 +1,109 @@
-
-import { db, storage, firebaseConfig } from '../firebaseConfig';
-import { initializeApp } from 'firebase/app'; // Necessário para criar usuário sem deslogar
-import { getAuth, createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
 import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where,
-  setDoc,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  limit,
+    collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
+    query, where, orderBy, onSnapshot, setDoc, limit 
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
-  ref, 
-  uploadBytes, 
-  getDownloadURL 
-} from 'firebase/storage';
-import { 
-  User, 
-  ExamRequest, 
-  ExamStatus, 
-  Student, 
-  ClassMaterial, 
-  LessonPlan, 
-  ScheduleEntry, 
-  SystemConfig, 
-  AttendanceLog, 
-  StaffMember, 
-  StaffAttendanceLog 
+    ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
+    Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
+    StaffAttendanceLog 
 } from '../types';
 
-const EXAMS_COLLECTION = 'exams';
-const STUDENTS_COLLECTION = 'students';
 const USERS_COLLECTION = 'users';
-const MATERIALS_COLLECTION = 'classMaterials';
-const LESSON_PLANS_COLLECTION = 'lessonPlans';
+const EXAMS_COLLECTION = 'exams';
+const CLASS_MATERIALS_COLLECTION = 'materials';
+const STUDENTS_COLLECTION = 'students';
+const ATTENDANCE_LOGS_COLLECTION = 'attendance_logs';
 const SCHEDULE_COLLECTION = 'schedule';
-const CONFIG_COLLECTION = 'systemConfig';
-const ATTENDANCE_LOGS_COLLECTION = 'attendanceLogs';
-const STAFF_COLLECTION = 'staff'; 
-const STAFF_LOGS_COLLECTION = 'staffLogs';
+const SYSTEM_CONFIG_COLLECTION = 'system_config';
+const LESSON_PLANS_COLLECTION = 'lesson_plans';
+const STAFF_COLLECTION = 'staff';
+const STAFF_LOGS_COLLECTION = 'staff_logs';
 
-// --- AUTH HELPER (CREATE TEACHER) ---
+// --- USERS ---
+export const getUserProfile = async (uid: string): Promise<User | null> => {
+    const docRef = doc(db, USERS_COLLECTION, uid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as User;
+    }
+    return null;
+};
 
-export const createTeacherAuth = async (email: string, name: string): Promise<string> => {
-    // Inicializa uma instância secundária do Firebase App
-    // Isso permite criar um usuário sem deslogar o administrador atual (RH)
+export const ensureUserProfile = async (user: User): Promise<void> => {
+    const docRef = doc(db, USERS_COLLECTION, user.id);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+        await setDoc(docRef, {
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            subject: user.subject || '',
+            classes: user.classes || []
+        });
+    }
+};
+
+export const createTeacherAuth = async (email: string, name: string): Promise<void> => {
+    // Use a secondary app to avoid signing out the current user
     const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
     const secondaryAuth = getAuth(secondaryApp);
-
+    
     try {
-        // Cria o usuário com a senha padrão
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, "cemal2016");
-        const user = userCredential.user;
-
-        // Atualiza o perfil com o nome
-        await updateProfile(user, { displayName: name });
+        const userCredential = await createUser(secondaryAuth, email, "cemal2016");
+        await updateProfileAuth(userCredential.user, { displayName: name });
         
-        // Cria o perfil no Firestore (collection 'users') para definir a Role como TEACHER
-        await setDoc(doc(db, USERS_COLLECTION, user.uid), {
-             name: name,
-             email: email,
-             role: 'TEACHER', // Força a role de professor
-             subject: 'Geral', // Default
-             classes: []
-        });
-
-        // Desloga da instância secundária para limpar a memória
+        const user: User = {
+            id: userCredential.user.uid,
+            name: name,
+            email: email,
+            role: UserRole.TEACHER,
+            subject: '',
+            classes: []
+        };
+        await setDoc(doc(db, USERS_COLLECTION, user.id), user);
+        
         await signOut(secondaryAuth);
-        
-        return user.uid;
-    } catch (error: any) {
-        console.error("Erro ao criar usuário professor:", error);
+    } catch (error) {
         throw error;
     } 
 };
 
-// --- USERS ---
-
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-  try {
-    const docRef = doc(db, USERS_COLLECTION, uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as User;
-    }
-    return null;
-  } catch (error) {
-    console.error("Error getting user profile:", error);
-    return null;
-  }
-};
-
-export const ensureUserProfile = async (user: User): Promise<void> => {
-    try {
-        const userRef = doc(db, USERS_COLLECTION, user.id);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-             await setDoc(userRef, {
-                 name: user.name,
-                 email: user.email,
-                 role: user.role,
-                 subject: user.subject || '',
-                 classes: user.classes || []
-             });
-        }
-    } catch (error) {
-        console.error("Error ensuring user profile:", error);
-    }
-};
-
 // --- EXAMS ---
-
 export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
-  try {
     let q;
     if (teacherId) {
-      q = query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId));
+        q = query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId));
     } else {
-      q = collection(db, EXAMS_COLLECTION);
+        q = collection(db, EXAMS_COLLECTION);
     }
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ExamRequest));
-  } catch (error) {
-    console.error("Error getting exams:", error);
-    return [];
-  }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExamRequest));
 };
 
 export const saveExam = async (exam: ExamRequest): Promise<void> => {
-    try {
-        const { id, ...data } = exam;
-        if (id) {
-            await setDoc(doc(db, EXAMS_COLLECTION, id), data);
-        } else {
-            await addDoc(collection(db, EXAMS_COLLECTION), data);
-        }
-    } catch (error) {
-        console.error("Error saving exam:", error);
-        throw error;
+    const { id, ...data } = exam;
+    if (id) {
+        await setDoc(doc(db, EXAMS_COLLECTION, id), data);
+    } else {
+        await addDoc(collection(db, EXAMS_COLLECTION), data);
     }
 };
 
 export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
-    return saveExam(exam);
+    const { id, ...data } = exam;
+    await updateDoc(doc(db, EXAMS_COLLECTION, id), data);
 };
 
-export const deleteExamRequest = async (examId: string): Promise<void> => {
-    await deleteDoc(doc(db, EXAMS_COLLECTION, examId));
+export const deleteExamRequest = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, EXAMS_COLLECTION, id));
 };
 
-export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
-    await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
+export const updateExamStatus = async (id: string, status: ExamStatus): Promise<void> => {
+    await updateDoc(doc(db, EXAMS_COLLECTION, id), { status });
 };
 
 export const uploadExamFile = async (file: File): Promise<string> => {
@@ -166,44 +112,34 @@ export const uploadExamFile = async (file: File): Promise<string> => {
     return await getDownloadURL(storageRef);
 };
 
-
 // --- CLASS MATERIALS ---
-
 export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
-    try {
-        let q;
-        if (teacherId) {
-            q = query(collection(db, MATERIALS_COLLECTION), where("teacherId", "==", teacherId));
-        } else {
-            q = collection(db, MATERIALS_COLLECTION);
-        }
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassMaterial));
-    } catch (error) {
-        console.error("Error getting materials:", error);
-        return [];
+    let q;
+    if (teacherId) {
+        q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("teacherId", "==", teacherId));
+    } else {
+        q = collection(db, CLASS_MATERIALS_COLLECTION);
     }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
 };
 
-export const listenToClassMaterials = (className: string, onUpdate: (materials: ClassMaterial[]) => void, onError?: (error: any) => void) => {
-    const q = query(collection(db, MATERIALS_COLLECTION), where("className", "==", className));
+export const listenToClassMaterials = (className: string, onSuccess: (data: ClassMaterial[]) => void, onError: (error: any) => void) => {
+    const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
     return onSnapshot(q, (snapshot) => {
-        const materials = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassMaterial));
-        onUpdate(materials);
-    }, (error) => {
-        console.error("Error listening to class materials:", error);
-        if (onError) onError(error);
-    });
+        const materials = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
+        onSuccess(materials);
+    }, onError);
 };
 
 export const saveClassMaterial = async (material: ClassMaterial): Promise<string> => {
     const { id, ...data } = material;
-    const docRef = await addDoc(collection(db, MATERIALS_COLLECTION), data);
+    const docRef = await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), data);
     return docRef.id;
 };
 
 export const deleteClassMaterial = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, MATERIALS_COLLECTION, id));
+    await deleteDoc(doc(db, CLASS_MATERIALS_COLLECTION, id));
 };
 
 export const uploadClassMaterialFile = async (file: File, className: string): Promise<string> => {
@@ -212,23 +148,16 @@ export const uploadClassMaterialFile = async (file: File, className: string): Pr
     return await getDownloadURL(storageRef);
 };
 
-
 // --- LESSON PLANS ---
-
 export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
-    try {
-        let q;
-        if (teacherId) {
-            q = query(collection(db, LESSON_PLANS_COLLECTION), where("teacherId", "==", teacherId));
-        } else {
-            q = collection(db, LESSON_PLANS_COLLECTION);
-        }
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LessonPlan));
-    } catch (error) {
-        console.error("Error getting lesson plans:", error);
-        return [];
+    let q;
+    if (teacherId) {
+        q = query(collection(db, LESSON_PLANS_COLLECTION), where("teacherId", "==", teacherId));
+    } else {
+        q = collection(db, LESSON_PLANS_COLLECTION);
     }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
 };
 
 export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
@@ -237,37 +166,19 @@ export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
     return docRef.id;
 };
 
-
-// --- STUDENTS ---
-
-export const getStudents = async (classId?: string): Promise<Student[]> => {
-    try {
-        let q;
-        if (classId) {
-             q = query(collection(db, STUDENTS_COLLECTION), where("classId", "==", classId));
-        } else {
-             q = collection(db, STUDENTS_COLLECTION);
-        }
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student));
-    } catch (error: any) {
-        console.error("Erro ao buscar alunos:", error);
-        return [];
-    }
+export const deleteLessonPlan = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
 };
 
-export const listenToStudents = (onUpdate: (students: Student[]) => void) => {
-    const q = collection(db, STUDENTS_COLLECTION);
-    return onSnapshot(q, (snapshot) => {
-        const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Student));
-        onUpdate(students);
-    }, (error) => {
-        // Suppress permission errors in console if it's just due to auth state
-        if (error.code !== 'permission-denied') {
-             console.error("Erro ao ouvir alunos:", error);
-        } else {
-             console.warn("Permissão negada ao ouvir alunos (verifique o login).");
-        }
+// --- STUDENTS ---
+export const getStudents = async (): Promise<Student[]> => {
+    const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+};
+
+export const listenToStudents = (callback: (students: Student[]) => void) => {
+    return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
     });
 };
 
@@ -286,142 +197,50 @@ export const deleteStudent = async (id: string): Promise<void> => {
 };
 
 export const uploadStudentPhoto = async (file: File): Promise<string> => {
-    const storageRef = ref(storage, `students_photos/${Date.now()}_${file.name}`);
+    const storageRef = ref(storage, `students/${Date.now()}_${file.name}`);
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
 };
 
-
-// --- SCHEDULE ---
-
-export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
-    try {
-        const snapshot = await getDocs(collection(db, SCHEDULE_COLLECTION));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduleEntry));
-    } catch (error) {
-        console.error("Error getting schedule:", error);
-        return [];
-    }
-};
-
-export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
-    const { id, ...data } = entry;
-    await setDoc(doc(db, SCHEDULE_COLLECTION, id), data);
-};
-
-export const listenToSchedule = (onUpdate: (schedule: ScheduleEntry[]) => void) => {
-    return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
-        const schedule = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ScheduleEntry));
-        onUpdate(schedule);
-    }, (error) => {
-        if (error.code !== 'permission-denied') {
-             console.error("Error listening to schedule:", error);
-        }
-    });
-};
-
-
-// --- SYSTEM CONFIG ---
-
-export const listenToSystemConfig = (onUpdate: (config: SystemConfig) => void) => {
-    return onSnapshot(doc(db, CONFIG_COLLECTION, 'main'), (docSnap) => {
-        if (docSnap.exists()) {
-            onUpdate(docSnap.data() as SystemConfig);
-        } else {
-            onUpdate({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
-        }
-    }, (error) => {
-        if (error.code !== 'permission-denied') {
-            console.error("Error listening to system config:", error);
-        }
-    });
-};
-
-export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
-    await setDoc(doc(db, CONFIG_COLLECTION, 'main'), config, { merge: true });
-};
-
-
 // --- ATTENDANCE ---
-
-// DEPRECATED: Use listenToAttendanceLogs for real-time
-export const getAttendanceLogs = async (dateString?: string): Promise<AttendanceLog[]> => {
-    try {
-        let q;
-        if (dateString) {
-            q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
-        } else {
-            q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), orderBy("timestamp", "desc"), limit(100));
-        }
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
-    } catch (error) {
-        console.error("Error getting attendance logs:", error);
-        return [];
-    }
-};
-
-// NEW: Real-time listener for Student Attendance
-export const listenToAttendanceLogs = (dateString: string, onUpdate: (logs: AttendanceLog[]) => void) => {
+export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     const q = query(
         collection(db, ATTENDANCE_LOGS_COLLECTION), 
-        where("dateString", "==", dateString),
-        orderBy("timestamp", "desc")
+        where("studentId", "==", log.studentId),
+        where("timestamp", ">", fiveMinutesAgo)
     );
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+        return false;
+    }
     
+    const { id, ...data } = log;
+    await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), data);
+    return true;
+};
+
+export const listenToAttendanceLogs = (dateString: string, callback: (logs: AttendanceLog[]) => void) => {
+    const q = query(
+        collection(db, ATTENDANCE_LOGS_COLLECTION), 
+        where("dateString", "==", dateString)
+    );
     return onSnapshot(q, (snapshot) => {
-        const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceLog));
-        onUpdate(logs);
-    }, (error) => {
-        console.error("Error listening to attendance logs:", error);
+        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
+        logs.sort((a,b) => b.timestamp - a.timestamp);
+        callback(logs);
     });
 };
 
-export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
-    try {
-        const q = query(
-            collection(db, ATTENDANCE_LOGS_COLLECTION), 
-            where("studentId", "==", log.studentId),
-            where("dateString", "==", log.dateString)
-        );
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-            return false; 
-        }
-
-        const { id, ...data } = log;
-        await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), data);
-        return true;
-    } catch (error) {
-        console.error("Error logging attendance:", error);
-        return false;
-    }
-};
-
-
 // --- STAFF ---
-
 export const getStaffMembers = async (): Promise<StaffMember[]> => {
-    try {
-        const snapshot = await getDocs(collection(db, STAFF_COLLECTION));
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffMember));
-    } catch (error) {
-        console.error("Error getting staff:", error);
-        return [];
-    }
+    const snapshot = await getDocs(collection(db, STAFF_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember));
 };
 
-export const listenToStaffMembers = (onUpdate: (staff: StaffMember[]) => void) => {
+export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
     return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
-        const staff = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffMember));
-        onUpdate(staff);
-    }, (error) => {
-         if (error.code !== 'permission-denied') {
-             console.error("Error listening to staff members:", error);
-        } else {
-             console.warn("Permissão negada ao ouvir equipe (verifique o login).");
-        }
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
     });
 };
 
@@ -436,68 +255,79 @@ export const updateStaffMember = async (staff: StaffMember): Promise<void> => {
 };
 
 export const deleteStaffMember = async (id: string): Promise<void> => {
-    await updateDoc(doc(db, STAFF_COLLECTION, id), { active: false });
+    await deleteDoc(doc(db, STAFF_COLLECTION, id));
 };
 
 export const uploadStaffPhoto = async (file: File): Promise<string> => {
-    const storageRef = ref(storage, `staff_photos/${Date.now()}_${file.name}`);
+    const storageRef = ref(storage, `staff/${Date.now()}_${file.name}`);
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
 };
 
-
-// --- STAFF LOGS ---
-
-export const getStaffLogs = async (dateString: string): Promise<StaffAttendanceLog[]> => {
-    try {
-        const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffAttendanceLog));
-    } catch (error) {
-        console.error("Error getting staff logs:", error);
-        return [];
-    }
-};
-
-// NEW: Real-time listener for Staff Attendance
-export const listenToStaffLogs = (dateString: string, onUpdate: (logs: StaffAttendanceLog[]) => void) => {
-    const q = query(
-        collection(db, STAFF_LOGS_COLLECTION), 
-        where("dateString", "==", dateString),
-        orderBy("timestamp", "desc")
-    );
-    
-    return onSnapshot(q, (snapshot) => {
-        const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StaffAttendanceLog));
-        onUpdate(logs);
-    }, (error) => {
-        console.error("Error listening to staff logs:", error);
-    });
-};
-
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
     try {
+        const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
         const q = query(
-            collection(db, STAFF_LOGS_COLLECTION), 
+            collection(db, STAFF_LOGS_COLLECTION),
             where("staffId", "==", log.staffId),
-            orderBy("timestamp", "desc"),
-            limit(1)
+            where("timestamp", ">", twoMinutesAgo)
         );
         const snapshot = await getDocs(q);
-        
         if (!snapshot.empty) {
-            const lastLog = snapshot.docs[0].data() as StaffAttendanceLog;
-            const diff = log.timestamp - lastLog.timestamp;
-            if (diff < 2 * 60 * 1000) {
-                return 'too_soon';
-            }
+            return 'too_soon';
         }
 
         const { id, ...data } = log;
         await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
         return 'success';
-    } catch (error) {
-        console.error("Error logging staff attendance:", error);
+    } catch (e) {
+        console.error(e);
         return 'error';
     }
+};
+
+export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
+    const q = query(
+        collection(db, STAFF_LOGS_COLLECTION), 
+        where("dateString", "==", dateString)
+    );
+    return onSnapshot(q, (snapshot) => {
+        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
+        logs.sort((a,b) => b.timestamp - a.timestamp);
+        callback(logs);
+    });
+};
+
+// --- SCHEDULE ---
+export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
+    const snapshot = await getDocs(collection(db, SCHEDULE_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry));
+};
+
+export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
+    const { id, ...data } = entry;
+    const docRef = doc(db, SCHEDULE_COLLECTION, id);
+    await setDoc(docRef, data);
+};
+
+export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
+    return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
+    });
+};
+
+// --- SYSTEM CONFIG ---
+export const listenToSystemConfig = (callback: (config: SystemConfig) => void) => {
+    const docRef = doc(db, SYSTEM_CONFIG_COLLECTION, 'main');
+    return onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            callback(docSnap.data() as SystemConfig);
+        } else {
+            callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
+        }
+    });
+};
+
+export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
+    await setDoc(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), config);
 };

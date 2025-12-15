@@ -11,6 +11,7 @@ import {
     getClassMaterials, 
     deleteClassMaterial,
     saveLessonPlan,
+    deleteLessonPlan,
     getLessonPlans,
     ensureUserProfile,
     deleteExamRequest
@@ -482,6 +483,19 @@ export const TeacherDashboard: React.FC = () => {
               alert("Erro de Permissão: Você não pode excluir este material.");
           } else {
               alert("Erro ao excluir material.");
+          }
+      }
+  };
+
+  const handleDeletePlan = async (id: string) => {
+      if (window.confirm("Tem certeza que deseja excluir este planejamento? Esta ação não pode ser desfeita.")) {
+          try {
+              await deleteLessonPlan(id);
+              setLessonPlans(lessonPlans.filter(p => p.id !== id));
+              alert("Planejamento excluído com sucesso.");
+          } catch (error) {
+              console.error("Erro ao excluir planejamento:", error);
+              alert("Erro ao excluir. Tente novamente.");
           }
       }
   };
@@ -1117,26 +1131,45 @@ export const TeacherDashboard: React.FC = () => {
             
             {/* HISTORICO */}
             <div className="lg:col-span-1">
-                <h3 className="font-bold text-white mb-4">Meus Planejamentos</h3>
-                <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                    {lessonPlans.map(plan => (
-                        <div key={plan.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                            <div className="flex justify-between items-start mb-2">
-                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${plan.type === 'daily' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                                    {plan.type === 'daily' ? 'Diário' : 'Semestral'}
-                                </span>
-                                <span className="text-xs text-gray-400">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                <div className="bg-white/10 p-4 rounded-xl border border-white/10 h-full flex flex-col">
+                    <h3 className="font-bold text-white mb-4 text-lg flex items-center gap-2"><BookOpenCheck size={20}/> Meus Planejamentos</h3>
+                    <div className="space-y-3 overflow-y-auto flex-1 custom-scrollbar pr-2">
+                        {lessonPlans.map(plan => (
+                            <div key={plan.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative group hover:shadow-md transition-all">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${plan.type === 'daily' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                        {plan.type === 'daily' ? 'Diário' : 'Semestral'}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-gray-400">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                        <button 
+                                            onClick={() => handleDeletePlan(plan.id)}
+                                            className="text-gray-300 hover:text-red-600 transition-colors p-1"
+                                            title="Excluir Planejamento"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <h4 className="font-bold text-gray-800 text-sm mb-1">{plan.className}</h4>
+                                <p className="text-xs text-gray-600 font-medium mb-2 uppercase">{plan.subject}</p>
+                                
+                                {plan.type === 'daily' && plan.topic && (
+                                    <p className="text-xs text-gray-500 line-clamp-2 italic bg-gray-50 p-2 rounded border border-gray-100">{plan.topic}</p>
+                                )}
+
+                                {plan.type === 'semester' && plan.period && (
+                                    <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 border border-gray-200 font-bold">{plan.period}</span>
+                                )}
                             </div>
-                            <h4 className="font-bold text-gray-800 text-sm mb-1">{plan.className}</h4>
-                            <p className="text-xs text-gray-600 mb-2">{plan.subject}</p>
-                            {plan.type === 'semester' && plan.period && (
-                                <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 border border-gray-200">{plan.period}</span>
-                            )}
-                        </div>
-                    ))}
-                    {lessonPlans.length === 0 && (
-                        <p className="text-gray-300 text-center text-sm py-4 bg-white/5 rounded-lg border border-white/10">Nenhum planejamento salvo.</p>
-                    )}
+                        ))}
+                        {lessonPlans.length === 0 && (
+                            <div className="text-center py-10 opacity-50">
+                                <BookOpenCheck size={48} className="mx-auto mb-2 text-white" />
+                                <p className="text-white text-sm">Nenhum planejamento salvo.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
