@@ -1010,7 +1010,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
-                                            <p className="text-sm"><span className="font-bold text-gray-600">Semestre:</span> {plan.semester}</p>
+                                            <p className="text-sm"><span className="font-bold text-gray-600">Bimestre:</span> {plan.period}</p>
                                         </div>
                                     )}
                                     

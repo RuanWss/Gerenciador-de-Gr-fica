@@ -154,13 +154,25 @@ export const TeacherDashboard: React.FC = () => {
   const [planResources, setPlanResources] = useState('');
   const [planEvaluation, setPlanEvaluation] = useState('');
   const [planHomework, setPlanHomework] = useState('');
-  // Semester
-  const [planSemester, setPlanSemester] = useState<'1º Semestre' | '2º Semestre'>('1º Semestre');
-  const [planGenObj, setPlanGenObj] = useState('');
-  const [planSpecObj, setPlanSpecObj] = useState('');
-  const [planSkills, setPlanSkills] = useState('');
-  const [planTimeline, setPlanTimeline] = useState('');
-  const [planBibliography, setPlanBibliography] = useState('');
+  
+  // Semester (Updated States to match image)
+  const [planPeriod, setPlanPeriod] = useState('1º Bimestre');
+  const [planJustification, setPlanJustification] = useState('');
+  const [planSemesterContents, setPlanSemesterContents] = useState('');
+  const [planCognitiveSkills, setPlanCognitiveSkills] = useState('');
+  const [planSocialSkills, setPlanSocialSkills] = useState('');
+  const [planStrategies, setPlanStrategies] = useState(''); // Situações Didáticas
+  // Atividades
+  const [planActPre, setPlanActPre] = useState('');
+  const [planActAuto, setPlanActAuto] = useState('');
+  const [planActCoop, setPlanActCoop] = useState('');
+  const [planActCompl, setPlanActCompl] = useState('');
+  // Footer
+  const [planPractices, setPlanPractices] = useState('');
+  const [planSpaces, setPlanSpaces] = useState('');
+  const [planDidacticResources, setPlanDidacticResources] = useState(''); // Recursos Didáticos Semestral
+  const [planEvaluationStrat, setPlanEvaluationStrat] = useState('');
+  const [planReferences, setPlanReferences] = useState('');
   
   const [isSavingPlan, setIsSavingPlan] = useState(false);
   const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
@@ -500,12 +512,21 @@ export const TeacherDashboard: React.FC = () => {
                   evaluation: planEvaluation,
                   homework: planHomework
               } : {
-                  semester: planSemester,
-                  generalObjectives: planGenObj,
-                  specificObjectives: planSpecObj,
-                  skills: planSkills,
-                  timeline: planTimeline,
-                  bibliography: planBibliography
+                  period: planPeriod,
+                  justification: planJustification,
+                  semesterContents: planSemesterContents,
+                  cognitiveSkills: planCognitiveSkills,
+                  socialEmotionalSkills: planSocialSkills,
+                  didacticStrategies: planStrategies,
+                  activitiesPre: planActPre,
+                  activitiesAuto: planActAuto,
+                  activitiesCoop: planActCoop,
+                  activitiesCompl: planActCompl,
+                  educationalPractices: planPractices,
+                  educationalSpaces: planSpaces,
+                  didacticResources: planDidacticResources,
+                  evaluationStrategies: planEvaluationStrat,
+                  references: planReferences
               })
           };
 
@@ -514,7 +535,9 @@ export const TeacherDashboard: React.FC = () => {
 
           // Reset fields
           setPlanTopic(''); setPlanContent(''); setPlanMethodology(''); setPlanResources(''); setPlanEvaluation(''); setPlanHomework('');
-          setPlanGenObj(''); setPlanSpecObj(''); setPlanSkills(''); setPlanTimeline(''); setPlanBibliography('');
+          setPlanJustification(''); setPlanSemesterContents(''); setPlanCognitiveSkills(''); setPlanSocialSkills(''); setPlanStrategies('');
+          setPlanActPre(''); setPlanActAuto(''); setPlanActCoop(''); setPlanActCompl('');
+          setPlanPractices(''); setPlanSpaces(''); setPlanDidacticResources(''); setPlanEvaluationStrat(''); setPlanReferences('');
           
           alert("Planejamento salvo com sucesso!");
           
@@ -858,11 +881,11 @@ export const TeacherDashboard: React.FC = () => {
                         <h1 className="text-3xl font-bold text-white">Planejamento de Aula</h1>
                         <p className="text-gray-400">Organize suas aulas e envie o planejamento para a coordenação.</p>
                     </header>
-                    {/* (Existing Plans Code) */}
+                    
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* FORMULARIO */}
                         <div className="lg:col-span-2">
-                            <Card>
+                            <Card className="overflow-hidden">
                                 <div className="flex gap-4 mb-6 border-b border-gray-100 pb-4">
                                     <button 
                                         onClick={() => setPlanType('daily')}
@@ -879,6 +902,7 @@ export const TeacherDashboard: React.FC = () => {
                                 </div>
 
                                 <div className="space-y-4">
+                                    {/* Campos Comuns: Turma e Data/Bimestre */}
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Turma</label>
@@ -905,14 +929,16 @@ export const TeacherDashboard: React.FC = () => {
                                             </div>
                                         ) : (
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Semestre</label>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bimestre</label>
                                                 <select 
                                                     className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-700"
-                                                    value={planSemester}
-                                                    onChange={e => setPlanSemester(e.target.value as any)}
+                                                    value={planPeriod}
+                                                    onChange={e => setPlanPeriod(e.target.value)}
                                                 >
-                                                    <option value="1º Semestre">1º Semestre</option>
-                                                    <option value="2º Semestre">2º Semestre</option>
+                                                    <option value="1º Bimestre">1º Bimestre</option>
+                                                    <option value="2º Bimestre">2º Bimestre</option>
+                                                    <option value="3º Bimestre">3º Bimestre</option>
+                                                    <option value="4º Bimestre">4º Bimestre</option>
                                                 </select>
                                             </div>
                                         )}
@@ -948,35 +974,97 @@ export const TeacherDashboard: React.FC = () => {
                                             </div>
                                         </>
                                     ) : (
-                                        <>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Objetivos Gerais</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planGenObj} onChange={e => setPlanGenObj(e.target.value)} />
+                                        <div className="space-y-6">
+                                            {/* SEÇÃO 1: JUSTIFICATIVA E CONTEÚDOS */}
+                                            <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                                                <h4 className="font-bold text-green-800 mb-3 text-sm flex items-center gap-2 uppercase">Base do Planejamento</h4>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-green-700 uppercase mb-1">Breve Justificativa</label>
+                                                        <textarea rows={3} className="w-full border border-green-200 rounded-lg p-2.5 bg-white text-gray-700 text-sm focus:ring-green-500 focus:border-green-500" placeholder="Descrição da importância dos conceitos..." value={planJustification} onChange={e => setPlanJustification(e.target.value)} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-green-700 uppercase mb-1">Conteúdos</label>
+                                                        <textarea rows={3} className="w-full border border-green-200 rounded-lg p-2.5 bg-white text-gray-700 text-sm focus:ring-green-500 focus:border-green-500" placeholder="Descrição dos conteúdos a serem desenvolvidos..." value={planSemesterContents} onChange={e => setPlanSemesterContents(e.target.value)} />
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Objetivos Específicos</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planSpecObj} onChange={e => setPlanSpecObj(e.target.value)} />
+
+                                            {/* SEÇÃO 2: HABILIDADES */}
+                                            <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                                                <h4 className="font-bold text-green-800 mb-3 text-sm flex items-center gap-2 uppercase">Habilidades</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-green-700 uppercase mb-1">Habilidades Cognitivas</label>
+                                                        <textarea rows={4} className="w-full border border-green-200 rounded-lg p-2.5 bg-white text-gray-700 text-sm focus:ring-green-500 focus:border-green-500" placeholder="Descrição das habilidades cognitivas..." value={planCognitiveSkills} onChange={e => setPlanCognitiveSkills(e.target.value)} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-green-700 uppercase mb-1">Habilidades Socioemocionais</label>
+                                                        <textarea rows={4} className="w-full border border-green-200 rounded-lg p-2.5 bg-white text-gray-700 text-sm focus:ring-green-500 focus:border-green-500" placeholder="Descrição das habilidades socioemocionais..." value={planSocialSkills} onChange={e => setPlanSocialSkills(e.target.value)} />
+                                                    </div>
+                                                </div>
                                             </div>
+
+                                            {/* SEÇÃO 3: ESTRATÉGIAS */}
                                             <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Habilidades (BNCC)</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planSkills} onChange={e => setPlanSkills(e.target.value)} />
+                                                <label className="block text-xs font-bold text-green-700 uppercase mb-1 bg-green-100 p-2 rounded-t-lg border border-green-200 border-b-0">Situações Didáticas</label>
+                                                <textarea rows={3} className="w-full border border-green-200 rounded-b-lg p-2.5 bg-gray-50 text-gray-700 text-sm focus:ring-green-500 focus:border-green-500" placeholder="Atividades, meios e estratégias..." value={planStrategies} onChange={e => setPlanStrategies(e.target.value)} />
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cronograma de Conteúdos</label>
-                                                <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planTimeline} onChange={e => setPlanTimeline(e.target.value)} placeholder="Ex: Semana 1: Introdução; Semana 2: ..." />
+
+                                            {/* SEÇÃO 4: ATIVIDADES (GRID) */}
+                                            <div className="border border-green-200 rounded-lg overflow-hidden">
+                                                <div className="bg-green-600 text-white text-center font-bold py-1 text-sm uppercase">Atividades</div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-green-200">
+                                                    <div className="p-2 bg-green-50">
+                                                        <label className="block text-[10px] font-bold text-green-800 uppercase mb-1 text-center">Prévias</label>
+                                                        <textarea rows={5} className="w-full border border-green-200 rounded p-2 text-xs bg-white text-gray-700 resize-none" placeholder="Atividades orais e escritas..." value={planActPre} onChange={e => setPlanActPre(e.target.value)} />
+                                                    </div>
+                                                    <div className="p-2 bg-green-50">
+                                                        <label className="block text-[10px] font-bold text-green-800 uppercase mb-1 text-center">Autodidáticas</label>
+                                                        <textarea rows={5} className="w-full border border-green-200 rounded p-2 text-xs bg-white text-gray-700 resize-none" placeholder="Atividades autônomas..." value={planActAuto} onChange={e => setPlanActAuto(e.target.value)} />
+                                                    </div>
+                                                    <div className="p-2 bg-green-50">
+                                                        <label className="block text-[10px] font-bold text-green-800 uppercase mb-1 text-center">Didático-Cooperativas</label>
+                                                        <textarea rows={5} className="w-full border border-green-200 rounded p-2 text-xs bg-white text-gray-700 resize-none" placeholder="Em dupla, equipe..." value={planActCoop} onChange={e => setPlanActCoop(e.target.value)} />
+                                                    </div>
+                                                    <div className="p-2 bg-green-50">
+                                                        <label className="block text-[10px] font-bold text-green-800 uppercase mb-1 text-center">Complementares</label>
+                                                        <textarea rows={5} className="w-full border border-green-200 rounded p-2 text-xs bg-white text-gray-700 resize-none" placeholder="Complementam o conteúdo..." value={planActCompl} onChange={e => setPlanActCompl(e.target.value)} />
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bibliografia / Referências</label>
-                                                <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planBibliography} onChange={e => setPlanBibliography(e.target.value)} />
+
+                                            {/* SEÇÃO 5: RODAPÉ */}
+                                            <div className="space-y-4 pt-2">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-green-700 uppercase mb-1">Práticas Educativas</label>
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700 text-sm" value={planPractices} onChange={e => setPlanPractices(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-green-700 uppercase mb-1">Espaços Educativos</label>
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700 text-sm" value={planSpaces} onChange={e => setPlanSpaces(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-green-700 uppercase mb-1">Recursos Didáticos</label>
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700 text-sm" value={planDidacticResources} onChange={e => setPlanDidacticResources(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-green-700 uppercase mb-1">Estratégias de Avaliação</label>
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700 text-sm" value={planEvaluationStrat} onChange={e => setPlanEvaluationStrat(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-green-700 uppercase mb-1">Fontes de Referência</label>
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700 text-sm" value={planReferences} onChange={e => setPlanReferences(e.target.value)} />
+                                                </div>
                                             </div>
-                                        </>
+                                        </div>
                                     )}
 
-                                    <div className="pt-4">
+                                    <div className="pt-6">
                                         <Button 
                                             onClick={handleSavePlan}
                                             isLoading={isSavingPlan}
-                                            className="w-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg"
+                                            className="w-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg py-3 text-sm uppercase tracking-wide"
                                         >
                                             <Save size={18} className="mr-2"/> Salvar Planejamento
                                         </Button>
@@ -992,13 +1080,16 @@ export const TeacherDashboard: React.FC = () => {
                                 {lessonPlans.map(plan => (
                                     <div key={plan.id} className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
                                         <div className="flex justify-between items-start mb-2">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${plan.type === 'daily' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${plan.type === 'daily' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
                                                 {plan.type === 'daily' ? 'Diário' : 'Semestral'}
                                             </span>
                                             <span className="text-xs text-gray-400">{new Date(plan.createdAt).toLocaleDateString()}</span>
                                         </div>
                                         <h4 className="font-bold text-gray-800 text-sm mb-1">{plan.className}</h4>
                                         <p className="text-xs text-gray-600 mb-2">{plan.subject}</p>
+                                        {plan.type === 'semester' && plan.period && (
+                                            <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500 border border-gray-200">{plan.period}</span>
+                                        )}
                                     </div>
                                 ))}
                                 {lessonPlans.length === 0 && (

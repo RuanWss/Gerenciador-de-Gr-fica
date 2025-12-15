@@ -195,11 +195,23 @@ export interface LessonPlan {
   evaluation?: string; // Avaliação
   homework?: string; // Tarefa de Casa
 
-  // Campos do Planejamento Semestral
-  semester?: '1º Semestre' | '2º Semestre';
-  generalObjectives?: string;
-  specificObjectives?: string;
-  skills?: string; // Habilidades BNCC
-  timeline?: string; // Cronograma
-  bibliography?: string; // Referências
+  // Campos do Planejamento Semestral (Atualizado conforme imagem)
+  period?: string; // Bimestre
+  justification?: string; // Breve Justificativa
+  semesterContents?: string; // Conteúdos (Semestral)
+  cognitiveSkills?: string; // Habilidades Cognitivas
+  socialEmotionalSkills?: string; // Habilidades Socioemocionais
+  didacticStrategies?: string; // Situações Didáticas
+  
+  // Atividades
+  activitiesPre?: string; // Prévias
+  activitiesAuto?: string; // Autodidáticas
+  activitiesCoop?: string; // Didático-Cooperativas
+  activitiesCompl?: string; // Complementares
+  
+  educationalPractices?: string; // Práticas Educativas
+  educationalSpaces?: string; // Espaços Educativos
+  didacticResources?: string; // Recursos Didáticos (Semestral)
+  evaluationStrategies?: string; // Estratégias de Avaliação
+  references?: string; // Fontes de Referência
 }
