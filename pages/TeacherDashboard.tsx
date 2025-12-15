@@ -11,6 +11,7 @@ import {
     getClassMaterials, 
     deleteClassMaterial,
     saveLessonPlan,
+    updateLessonPlan,
     deleteLessonPlan,
     getLessonPlans,
     ensureUserProfile,
@@ -51,7 +52,8 @@ import {
   ArrowLeft,
   FileUp,
   PenTool,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 
 // --- CONSTANTES DE IMAGEM ---
@@ -145,6 +147,7 @@ export const TeacherDashboard: React.FC = () => {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // PLANNING STATE
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [planType, setPlanType] = useState<LessonPlanType>('daily');
   const [planClass, setPlanClass] = useState('');
   // Daily
@@ -500,6 +503,46 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
+  const handleEditPlan = (plan: LessonPlan) => {
+      setEditingPlanId(plan.id);
+      setPlanType(plan.type);
+      setPlanClass(plan.className);
+      
+      if (plan.type === 'daily') {
+          setPlanDate(plan.date || '');
+          setPlanTopic(plan.topic || '');
+          setPlanContent(plan.content || '');
+          setPlanMethodology(plan.methodology || '');
+          setPlanResources(plan.resources || '');
+          setPlanEvaluation(plan.evaluation || '');
+          setPlanHomework(plan.homework || '');
+      } else {
+          setPlanPeriod(plan.period || '1º Bimestre');
+          setPlanJustification(plan.justification || '');
+          setPlanSemesterContents(plan.semesterContents || '');
+          setPlanCognitiveSkills(plan.cognitiveSkills || '');
+          setPlanSocialSkills(plan.socialEmotionalSkills || '');
+          setPlanStrategies(plan.didacticStrategies || '');
+          setPlanActPre(plan.activitiesPre || '');
+          setPlanActAuto(plan.activitiesAuto || '');
+          setPlanActCoop(plan.activitiesCoop || '');
+          setPlanActCompl(plan.activitiesCompl || '');
+          setPlanPractices(plan.educationalPractices || '');
+          setPlanSpaces(plan.educationalSpaces || '');
+          setPlanDidacticResources(plan.didacticResources || '');
+          setPlanEvaluationStrat(plan.evaluationStrategies || '');
+          setPlanReferences(plan.references || '');
+      }
+  };
+
+  const cancelEdit = () => {
+      setEditingPlanId(null);
+      setPlanTopic(''); setPlanContent(''); setPlanMethodology(''); setPlanResources(''); setPlanEvaluation(''); setPlanHomework('');
+      setPlanJustification(''); setPlanSemesterContents(''); setPlanCognitiveSkills(''); setPlanSocialSkills(''); setPlanStrategies('');
+      setPlanActPre(''); setPlanActAuto(''); setPlanActCoop(''); setPlanActCompl('');
+      setPlanPractices(''); setPlanSpaces(''); setPlanDidacticResources(''); setPlanEvaluationStrat(''); setPlanReferences('');
+  };
+
   const handleSavePlan = async () => {
       if (!user) return;
       if (!planClass) return alert("Selecione a turma.");
@@ -509,13 +552,13 @@ export const TeacherDashboard: React.FC = () => {
           await ensureUserProfile(user);
 
           const newPlan: LessonPlan = {
-              id: '',
+              id: editingPlanId || '',
               teacherId: user.id,
               teacherName: user.name,
               type: planType,
               className: planClass,
               subject: user.subject || 'Geral',
-              createdAt: Date.now(),
+              createdAt: editingPlanId ? (lessonPlans.find(p => p.id === editingPlanId)?.createdAt || Date.now()) : Date.now(),
               // Conditional Fields
               ...(planType === 'daily' ? {
                   date: planDate,
@@ -544,24 +587,23 @@ export const TeacherDashboard: React.FC = () => {
               })
           };
 
-          const docId = await saveLessonPlan(newPlan);
-          newPlan.id = docId;
+          if (editingPlanId) {
+              await updateLessonPlan(newPlan);
+              alert("Planejamento atualizado com sucesso!");
+              setLessonPlans(lessonPlans.map(p => p.id === editingPlanId ? newPlan : p));
+          } else {
+              const docId = await saveLessonPlan(newPlan);
+              newPlan.id = docId;
+              alert("Planejamento salvo com sucesso!");
+              setLessonPlans([newPlan, ...lessonPlans]);
+          }
 
-          // Reset fields
-          setPlanTopic(''); setPlanContent(''); setPlanMethodology(''); setPlanResources(''); setPlanEvaluation(''); setPlanHomework('');
-          setPlanJustification(''); setPlanSemesterContents(''); setPlanCognitiveSkills(''); setPlanSocialSkills(''); setPlanStrategies('');
-          setPlanActPre(''); setPlanActAuto(''); setPlanActCoop(''); setPlanActCompl('');
-          setPlanPractices(''); setPlanSpaces(''); setPlanDidacticResources(''); setPlanEvaluationStrat(''); setPlanReferences('');
-          
-          alert("Planejamento salvo com sucesso!");
-          
-          // Update local list
-          setLessonPlans([newPlan, ...lessonPlans]);
+          cancelEdit();
 
       } catch (error: any) {
           console.error("Erro ao salvar planejamento", error);
           if (error.code === 'permission-denied') {
-              alert("Erro de Permissão: Você não tem permissão para salvar planejamentos. Peça ao administrador para verificar as Regras do Firestore.");
+              alert("Erro de Permissão: Você não tem permissão para salvar planejamentos.");
           } else {
               alert("Erro ao salvar planejamento: " + error.message);
           }
@@ -953,7 +995,7 @@ export const TeacherDashboard: React.FC = () => {
                             onClick={() => setPlanType('semester')}
                             className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 ${planType === 'semester' ? 'bg-brand-600 text-white shadow-lg shadow-brand-900/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                         >
-                            <Layers size={18}/> Planejamento Semestral
+                            <Layers size={18}/> Planejamento Bimestral
                         </button>
                     </div>
 
@@ -1116,13 +1158,22 @@ export const TeacherDashboard: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="pt-6">
+                        <div className="pt-6 flex gap-4">
+                            {editingPlanId && (
+                                <Button 
+                                    onClick={cancelEdit}
+                                    variant="outline"
+                                    className="w-full border-gray-300 text-gray-500 hover:bg-gray-50"
+                                >
+                                    <X size={18} className="mr-2"/> Cancelar Edição
+                                </Button>
+                            )}
                             <Button 
                                 onClick={handleSavePlan}
                                 isLoading={isSavingPlan}
                                 className="w-full bg-brand-600 hover:bg-brand-700 text-white shadow-lg py-3 text-sm uppercase tracking-wide"
                             >
-                                <Save size={18} className="mr-2"/> Salvar Planejamento
+                                <Save size={18} className="mr-2"/> {editingPlanId ? 'Atualizar Planejamento' : 'Salvar Planejamento'}
                             </Button>
                         </div>
                     </div>
@@ -1135,13 +1186,20 @@ export const TeacherDashboard: React.FC = () => {
                     <h3 className="font-bold text-white mb-4 text-lg flex items-center gap-2"><BookOpenCheck size={20}/> Meus Planejamentos</h3>
                     <div className="space-y-3 overflow-y-auto flex-1 custom-scrollbar pr-2">
                         {lessonPlans.map(plan => (
-                            <div key={plan.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm relative group hover:shadow-md transition-all">
+                            <div key={plan.id} className={`bg-white p-4 rounded-xl border shadow-sm relative group hover:shadow-md transition-all ${editingPlanId === plan.id ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-gray-200'}`}>
                                 <div className="flex justify-between items-start mb-2">
                                     <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${plan.type === 'daily' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                                        {plan.type === 'daily' ? 'Diário' : 'Semestral'}
+                                        {plan.type === 'daily' ? 'Diário' : 'Bimestral'}
                                     </span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-bold text-gray-400">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[10px] font-bold text-gray-400 mr-2">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                        <button 
+                                            onClick={() => handleEditPlan(plan)}
+                                            className="text-gray-300 hover:text-blue-600 transition-colors p-1"
+                                            title="Editar Planejamento"
+                                        >
+                                            <Edit3 size={16} />
+                                        </button>
                                         <button 
                                             onClick={() => handleDeletePlan(plan.id)}
                                             className="text-gray-300 hover:text-red-600 transition-colors p-1"

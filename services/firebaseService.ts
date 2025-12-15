@@ -166,6 +166,12 @@ export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
     return docRef.id;
 };
 
+export const updateLessonPlan = async (plan: LessonPlan): Promise<void> => {
+    const { id, ...data } = plan;
+    if (!id) throw new Error("ID is required for update");
+    await updateDoc(doc(db, LESSON_PLANS_COLLECTION, id), data);
+};
+
 export const deleteLessonPlan = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
 };
