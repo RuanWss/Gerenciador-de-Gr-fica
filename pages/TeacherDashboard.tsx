@@ -430,6 +430,9 @@ export const TeacherDashboard: React.FC = () => {
 
       setIsUploadingMaterial(true);
       try {
+          // Garante que o perfil do usuário exista para satisfazer regras de segurança
+          await ensureUserProfile(user);
+
           // Upload to storage organized by class name
           const fileUrl = await uploadClassMaterialFile(materialFile, materialClass);
           

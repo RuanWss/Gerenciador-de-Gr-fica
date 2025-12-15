@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToClassMaterials } from '../services/firebaseService';
 import { ClassMaterial } from '../types';
-import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle, ArrowLeft, Folder } from 'lucide-react';
+import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle, ArrowLeft, Folder, Lock, LogIn } from 'lucide-react';
 
 const CLASSES_LIST = [
     { id: '6efaf', name: '6º ANO EFAF' },
@@ -38,6 +38,7 @@ export const ClassroomFiles: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [autoOpen, setAutoOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [permissionDenied, setPermissionDenied] = useState(false);
     
     // Novo Estado para navegação por pastas
     const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
@@ -63,6 +64,7 @@ export const ClassroomFiles: React.FC = () => {
 
         setIsLoading(true);
         setError(null);
+        setPermissionDenied(false);
         setSelectedSubject(null); // Reseta a pasta ao mudar de turma
         
         localStorage.setItem('classroom_selected_class', selectedClassName);
@@ -72,6 +74,7 @@ export const ClassroomFiles: React.FC = () => {
             (newMaterials) => {
                 setIsLoading(false);
                 setError(null);
+                setPermissionDenied(false);
                 
                 // Ordena os materiais localmente (mais recentes primeiro)
                 newMaterials.sort((a, b) => b.createdAt - a.createdAt);
@@ -94,7 +97,8 @@ export const ClassroomFiles: React.FC = () => {
                 console.error("Erro no listener:", err);
                 setIsLoading(false);
                 if (err.code === 'permission-denied') {
-                    setError("Acesso Negado: Regras de Segurança do Firebase bloqueando leitura.");
+                    setPermissionDenied(true);
+                    setError(null); // Use specific permission state
                 } else {
                     setError("Erro de conexão ao buscar arquivos.");
                 }
@@ -115,6 +119,7 @@ export const ClassroomFiles: React.FC = () => {
         setSelectedClassName(e.target.value);
         setMaterials([]);
         setError(null);
+        setPermissionDenied(false);
         isFirstLoad.current = true;
     };
 
@@ -193,6 +198,25 @@ export const ClassroomFiles: React.FC = () => {
                          </div>
                      )}
 
+                     {permissionDenied && (
+                         <div className="bg-black/40 border border-red-900/50 rounded-3xl p-12 text-center mb-8 flex flex-col items-center animate-in zoom-in-95">
+                             <div className="bg-red-900/20 p-6 rounded-full mb-6">
+                                <Lock size={64} className="text-red-500"/>
+                             </div>
+                             <h3 className="text-3xl font-black text-white uppercase tracking-wider mb-2">Acesso Restrito</h3>
+                             <p className="text-gray-400 max-w-md mx-auto mb-8 text-lg">
+                                 Os arquivos desta turma estão protegidos. É necessário realizar login para visualizar o conteúdo.
+                             </p>
+                             <button 
+                                onClick={() => window.location.href = '/'}
+                                className="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-10 rounded-xl shadow-lg shadow-red-900/40 flex items-center gap-3 transition-all transform hover:-translate-y-1"
+                             >
+                                 <LogIn size={24} />
+                                 Fazer Login no Sistema
+                             </button>
+                         </div>
+                     )}
+
                      {isLoading && (
                          <div className="text-center py-10 text-brand-500 flex items-center justify-center gap-2">
                              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce"></div>
@@ -202,7 +226,7 @@ export const ClassroomFiles: React.FC = () => {
                          </div>
                      )}
 
-                     {!isLoading && !error && (
+                     {!isLoading && !error && !permissionDenied && (
                          <>
                             {/* NAVEGAÇÃO: VOLTAR PARA PASTAS */}
                             {selectedSubject && (
