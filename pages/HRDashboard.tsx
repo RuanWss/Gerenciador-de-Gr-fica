@@ -8,9 +8,9 @@ import {
     deleteStaffMember, 
     uploadStaffPhoto,
     listenToStaffLogs,
-    createTeacherAuth
+    createSystemUserAuth
 } from '../services/firebaseService';
-import { StaffMember, StaffAttendanceLog } from '../types';
+import { StaffMember, StaffAttendanceLog, UserRole } from '../types';
 import { Button } from '../components/Button';
 import { 
   Users, 
@@ -159,13 +159,27 @@ export const HRDashboard: React.FC = () => {
 
         setIsSaving(true);
         try {
-            // Auth creation logic omitted for brevity, keeping existing flow
-             if (!editingId && isTeacher && teacherEmail) {
+            // AUTOMATIC LOGIN CREATION FOR ALL STAFF WITH EMAIL
+            if (!editingId && teacherEmail) {
                 try {
-                    await createTeacherAuth(teacherEmail, newName);
+                    // Mapeamento de Role do Sistema baseado na função escolhida
+                    let systemRole = UserRole.TEACHER; // Default para professores e outros
+                    
+                    if (newRole === 'Coordenador' || newRole === 'Diretor') {
+                        systemRole = UserRole.HR; // Acesso administrativo
+                    } else if (newRole === 'Secretaria') {
+                        systemRole = UserRole.PRINTSHOP; // Acesso ao painel da escola/gráfica
+                    }
+                    // Professor mantém TEACHER
+                    // Apoio/Outros mantêm TEACHER (limitado) ou acesso genérico para login funcionar
+
+                    await createSystemUserAuth(teacherEmail, newName, systemRole);
                 } catch (authError: any) {
                     if (authError.code !== 'auth/email-already-in-use') {
                         console.error("Auth error", authError);
+                        alert("Atenção: O cadastro foi salvo, mas houve um erro ao criar o login de acesso: " + authError.message);
+                    } else {
+                        console.log("Email já cadastrado no Auth, prosseguindo com dados do banco.");
                     }
                 }
             }
@@ -197,7 +211,7 @@ export const HRDashboard: React.FC = () => {
                 await saveStaffMember({ ...staffData, id: '' });
             }
             
-            alert(editingId ? "Atualizado com sucesso!" : "Cadastrado com sucesso! A senha padrão é: cemal2016");
+            alert(editingId ? "Atualizado com sucesso!" : "Cadastrado com sucesso! Login criado. Senha padrão: cemal2016");
             resetForm();
             loadData();
         } catch (error: any) {
@@ -222,6 +236,17 @@ export const HRDashboard: React.FC = () => {
                     const role = parts[2]?.trim() || 'Professor';
                     
                     if (name) {
+                         // Cria Login se tiver email
+                         if (email) {
+                             try {
+                                 let systemRole = UserRole.TEACHER;
+                                 if (role === 'Coordenador' || role === 'Diretor') systemRole = UserRole.HR;
+                                 else if (role === 'Secretaria') systemRole = UserRole.PRINTSHOP;
+                                 
+                                 await createSystemUserAuth(email, name, systemRole);
+                             } catch (e) { console.warn("Batch auth error", e); }
+                         }
+
                          const staffData: any = {
                             id: '',
                             name: name,
@@ -231,14 +256,14 @@ export const HRDashboard: React.FC = () => {
                             active: true,
                             createdAt: Date.now(),
                             workPeriod: 'morning',
-                            isTeacher: true,
+                            isTeacher: role === 'Professor',
                             weeklyClasses: { monday: 0, tuesday: 0, wednesday: 0, thursday: 0, friday: 0 }
                         };
                         await saveStaffMember(staffData);
                     }
                 }
             }
-            alert("Processamento em lote concluído!");
+            alert("Processamento em lote concluído! Senha padrão para novos logins: cemal2016");
             setBatchText('');
             setShowBatchForm(false);
             loadData();

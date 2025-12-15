@@ -48,12 +48,13 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
     }
 };
 
-export const createTeacherAuth = async (email: string, name: string): Promise<void> => {
+export const createSystemUserAuth = async (email: string, name: string, role: UserRole): Promise<void> => {
     // Use a secondary app to avoid signing out the current user
     const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
     const secondaryAuth = getAuth(secondaryApp);
     
     try {
+        // Criação com senha padrão solicitada: cemal2016
         const userCredential = await createUser(secondaryAuth, email, "cemal2016");
         await updateProfileAuth(userCredential.user, { displayName: name });
         
@@ -61,7 +62,7 @@ export const createTeacherAuth = async (email: string, name: string): Promise<vo
             id: userCredential.user.uid,
             name: name,
             email: email,
-            role: UserRole.TEACHER,
+            role: role,
             subject: '',
             classes: []
         };
