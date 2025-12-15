@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog } from '../types';
-import { CheckCircle, AlertTriangle, Clock, Loader2, Scan, Database, Settings, XCircle, Maximize, Minimize } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, Loader2, Scan, Database, Settings, XCircle, Maximize, Minimize, UserCheck } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
 
@@ -22,6 +22,10 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isVideoReady, setIsVideoReady] = useState(false);
     
+    // Recognition Stability State
+    const [detectedName, setDetectedName] = useState<string | null>(null);
+    const [confidenceScore, setConfidenceScore] = useState(0);
+    
     // UI State
     const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -29,6 +33,11 @@ export const StaffAttendanceTerminal: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const processingRef = useRef(false);
     
+    // Stability Refs (Anti-Jitter)
+    const matchCounter = useRef<number>(0);
+    const lastMatchLabel = useRef<string>('unknown');
+    const CONFIDENCE_THRESHOLD = 5; // Precisa de 5 frames consecutivos confirmando a mesma pessoa
+
     // Cache para evitar re-processamento pesado
     const processedCache = useRef<Map<string, string>>(new Map());
 
@@ -177,7 +186,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
         };
     }, [modelsLoaded]);
 
-    // 6. Fast Detection Loop
+    // 6. Fast Detection Loop with Stability Check
     useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
@@ -187,17 +196,18 @@ export const StaffAttendanceTerminal: React.FC = () => {
 
         let faceMatcher: any;
         try {
-            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.55);
+            // Aumentei a rigidez para 0.45 para evitar falsos positivos
+            faceMatcher = new faceApi.FaceMatcher(labeledDescriptors, 0.45);
         } catch (e) { return; }
+
+        // Mover opções para fora do loop para performance
+        const detectorOptions = new faceApi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
 
         const detect = async () => {
             if (processingRef.current || lastLog || video.paused || video.ended) return;
 
             try {
-                // OTIMIZAÇÃO MAXIMA: inputSize 224 (Padrão MobileNet)
-                const options = new faceApi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
-                
-                const detections = await faceApi.detectAllFaces(video, options)
+                const detections = await faceApi.detectAllFaces(video, detectorOptions)
                     .withFaceLandmarks(true)
                     .withFaceDescriptors();
 
@@ -211,39 +221,71 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (resizedDetections.length > 0) {
+                    // Pega o rosto principal (maior área)
                     const match = resizedDetections[0];
                     const box = match.detection.box;
                     
                     let label = 'unknown';
+                    let bestDistance = 1;
+
                     if (match.descriptor) {
                         const bestMatch = faceMatcher.findBestMatch(match.descriptor);
                         label = bestMatch.label;
+                        bestDistance = bestMatch.distance;
+                    }
+
+                    // --- Lógica de Estabilidade Temporal (Anti-Jitter) ---
+                    if (label !== 'unknown' && label === lastMatchLabel.current) {
+                        matchCounter.current += 1;
+                    } else {
+                        matchCounter.current = 0;
+                        lastMatchLabel.current = label;
+                        setDetectedName(null);
+                        setConfidenceScore(0);
+                    }
+
+                    // Se confirmou por X frames seguidos
+                    const isConfirmed = matchCounter.current >= CONFIDENCE_THRESHOLD;
+                    
+                    // UI Feedback
+                    const staffName = label !== 'unknown' ? staff.find(s => s.id === label)?.name : 'Desconhecido';
+                    
+                    if (label !== 'unknown') {
+                        setDetectedName(staffName || null);
+                        setConfidenceScore(matchCounter.current);
                     }
 
                     const drawBox = new faceApi.draw.DrawBox(box, { 
-                        label: label === 'unknown' ? '...' : 'Identificado', 
-                        boxColor: label === 'unknown' ? 'rgba(255,255,255,0.5)' : '#22c55e', 
-                        lineWidth: 2
+                        label: isConfirmed ? 'Confirmado' : (label !== 'unknown' ? 'Verificando...' : ''), 
+                        boxColor: isConfirmed ? '#22c55e' : (label !== 'unknown' ? '#eab308' : 'rgba(255,255,255,0.3)'), 
+                        lineWidth: isConfirmed ? 4 : 2
                     });
                     drawBox.draw(canvas);
 
-                    if (label !== 'unknown') {
+                    if (isConfirmed && label !== 'unknown') {
                         processingRef.current = true;
                         setIsProcessing(true);
+                        matchCounter.current = 0; // Reset
                         await processAttendance(label);
                         // Delay para evitar múltiplos registros
                         setTimeout(() => { 
                             processingRef.current = false; 
                             setIsProcessing(false);
-                        }, 3000); 
+                            setDetectedName(null);
+                        }, 4000); 
                     }
+                } else {
+                    // Ninguém detectado
+                    matchCounter.current = 0;
+                    lastMatchLabel.current = 'unknown';
+                    setDetectedName(null);
                 }
             } catch (err) {
-                // Silent error
+                // Silent error loop
             }
         };
 
-        const intervalId = setInterval(detect, 200);
+        const intervalId = setInterval(detect, 150); // Loop um pouco mais rápido para fluidez
         return () => clearInterval(intervalId);
     }, [modelsLoaded, isVideoReady, labeledDescriptors]); 
 
@@ -251,10 +293,6 @@ export const StaffAttendanceTerminal: React.FC = () => {
         const member = staff.find(s => s.id === staffId);
         if (member) {
             const now = new Date();
-            
-            // CORREÇÃO DE FUSO HORÁRIO
-            // Usar 'en-CA' garante formato YYYY-MM-DD baseado na hora LOCAL do computador
-            // Evita que registros às 22h caiam no dia seguinte (UTC)
             const localDateString = now.toLocaleDateString('en-CA');
 
             const log: StaffAttendanceLog = {
@@ -283,7 +321,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 setStatusMessage('ERRO AO REGISTRAR');
                 playSound('error');
             }
-            setTimeout(() => resetState(), 3000);
+            setTimeout(() => resetState(), 3500);
         }
     };
 
@@ -292,6 +330,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
         setStatusType('waiting');
         setStatusMessage('');
         setIsProcessing(false);
+        setDetectedName(null);
+        matchCounter.current = 0;
     };
 
     const playSound = (type: 'success' | 'error') => {
@@ -300,16 +340,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
             ? "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" 
             : "https://assets.mixkit.co/active_storage/sfx/2578/2578-preview.mp3"
         );
+        audio.volume = 0.5;
         audio.play().catch(() => {});
-    };
-
-    const getStatusColor = () => {
-        switch (statusType) {
-            case 'success': return 'border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.3)]';
-            case 'warning': return 'border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]';
-            case 'error': return 'border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.3)]';
-            default: return 'border-white/10';
-        }
     };
 
     const toggleFullscreen = () => {
@@ -355,7 +387,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 <div className={`relative w-full max-w-md aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(220,38,38,0.2)] border border-white/10 transition-all duration-300 ${
                     statusType === 'success' ? 'ring-4 ring-green-500' :
                     statusType === 'error' ? 'ring-4 ring-red-500' :
-                    statusType === 'warning' ? 'ring-4 ring-yellow-500' : ''
+                    detectedName ? 'ring-4 ring-yellow-500 shadow-yellow-500/20' : ''
                 }`}>
                     <div className="absolute inset-0 bg-gradient-to-br from-red-600 to-red-800 z-0"></div>
                     <div className="absolute inset-0 z-10 mix-blend-normal">
@@ -371,14 +403,33 @@ export const StaffAttendanceTerminal: React.FC = () => {
                     </div>
 
                     <div className="absolute inset-0 z-20 flex flex-col items-center justify-end pb-12 pointer-events-none bg-gradient-to-t from-black/80 via-transparent to-transparent">
-                        {!isProcessing && !lastLog && (
+                        {!isProcessing && !lastLog && !detectedName && (
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full flex items-center justify-center animate-pulse">
                                 <Scan size={64} className="text-white relative z-10 drop-shadow-md opacity-80" />
                             </div>
                         )}
                         <div className="text-center">
-                            <h2 className="text-3xl font-black text-white uppercase tracking-wide drop-shadow-md mb-1">Bater Ponto</h2>
-                            <p className="text-red-200/80 text-xs font-bold tracking-[0.2em] uppercase">Reconhecimento Facial</p>
+                            {detectedName && !lastLog ? (
+                                <div className="animate-in slide-in-from-bottom-4 fade-in">
+                                    <p className="text-yellow-400 font-bold text-lg mb-1 flex items-center justify-center gap-2">
+                                        <Loader2 size={18} className="animate-spin"/> Verificando...
+                                    </p>
+                                    <h2 className="text-2xl font-black text-white uppercase tracking-wide drop-shadow-md">{detectedName}</h2>
+                                    
+                                    {/* Progress Bar */}
+                                    <div className="w-48 h-2 bg-gray-700 rounded-full mt-3 mx-auto overflow-hidden">
+                                        <div 
+                                            className="h-full bg-yellow-500 transition-all duration-150 ease-out"
+                                            style={{ width: `${Math.min((confidenceScore / CONFIDENCE_THRESHOLD) * 100, 100)}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <h2 className="text-3xl font-black text-white uppercase tracking-wide drop-shadow-md mb-1">Bater Ponto</h2>
+                                    <p className="text-red-200/80 text-xs font-bold tracking-[0.2em] uppercase">Reconhecimento Facial</p>
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -419,6 +470,13 @@ export const StaffAttendanceTerminal: React.FC = () => {
                                     alt="Funcionario" 
                                     className="w-full h-full rounded-full object-cover bg-gray-800"
                                 />
+                                <div className={`absolute bottom-0 right-0 p-2 rounded-full border-4 border-[#121214] ${
+                                    statusType === 'success' ? 'bg-green-500 text-white' : 
+                                    statusType === 'warning' ? 'bg-yellow-500 text-black' : 
+                                    'bg-red-500 text-white'
+                                }`}>
+                                    {statusType === 'success' ? <CheckCircle size={20} /> : statusType === 'warning' ? <Clock size={20} /> : <XCircle size={20} />}
+                                </div>
                             </div>
                             <h2 className="text-2xl font-black text-white uppercase leading-tight mb-1">{lastLog.staffName}</h2>
                             <p className="text-sm text-gray-400 font-bold uppercase mb-6">{lastLog.staffRole}</p>
