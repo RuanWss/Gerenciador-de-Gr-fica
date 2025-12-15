@@ -4,7 +4,8 @@ export enum UserRole {
   PRINTSHOP = 'PRINTSHOP',
   ATTENDANCE_TERMINAL = 'ATTENDANCE_TERMINAL',
   STAFF_TERMINAL = 'STAFF_TERMINAL', // Novo: Quiosque de Ponto da Equipe
-  HR = 'HR' // Novo: Recursos Humanos
+  HR = 'HR', // Novo: Recursos Humanos
+  CLASSROOM = 'CLASSROOM' // Novo: Acesso específico para Arquivos da Turma
 }
 
 export interface User {

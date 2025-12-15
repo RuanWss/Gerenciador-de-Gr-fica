@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToClassMaterials } from '../services/firebaseService';
 import { ClassMaterial } from '../types';
-import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle, ArrowLeft, Folder, Lock, LogIn } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle, ArrowLeft, Folder, Lock, LogIn, LogOut } from 'lucide-react';
 
 const CLASSES_LIST = [
     { id: '6efaf', name: '6º ANO EFAF' },
@@ -33,6 +34,7 @@ const EM_SUBJECTS = [
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 export const ClassroomFiles: React.FC = () => {
+    const { user, logout } = useAuth();
     const [selectedClassName, setSelectedClassName] = useState<string>('');
     const [materials, setMaterials] = useState<ClassMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -179,6 +181,19 @@ export const ClassroomFiles: React.FC = () => {
                         </div>
                         <span className="text-xs font-bold text-gray-400 group-hover:text-white transition-colors">Abrir Automático</span>
                     </label>
+
+                    {user && (
+                        <>
+                            <div className="h-10 w-px bg-gray-800"></div>
+                            <button 
+                                onClick={logout} 
+                                className="px-4 text-gray-400 hover:text-red-500 transition-colors"
+                                title="Sair do Sistema"
+                            >
+                                <LogOut size={20} />
+                            </button>
+                        </>
+                    )}
                 </div>
             </header>
 

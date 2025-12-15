@@ -61,6 +61,10 @@ const AppContent: React.FC = () => {
   if (user?.role === UserRole.STAFF_TERMINAL) {
       return <StaffAttendanceTerminal />;
   }
+
+  if (user?.role === UserRole.CLASSROOM) {
+      return <ClassroomFiles />;
+  }
   
   // VERIFICAÇÃO DE MÚLTIPLOS ROLES
   if (user?.roles && user.roles.length > 1 && !sessionRole) {

@@ -54,6 +54,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 classes: []
               });
         }
+        else if (firebaseUser.email === 'cemal.salas@ceprofmal.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Arquivos da Turma',
+                email: firebaseUser.email,
+                role: UserRole.CLASSROOM,
+                subject: '',
+                classes: []
+              });
+        }
         else if (
              firebaseUser.uid === 'QX1GxorHhxU3jPUVXAJVLRndb7E2' || 
              firebaseUser.email === 'graficacemal@gmail.com'
@@ -106,7 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (
               (email === 'pontoequipecemal@ceprofmal.com' && password === 'cemal#2016') ||
               (email === 'rh@ceprofmal.com' && password === 'cemal#2016') ||
-              (email === 'frequencia.cemal@ceprofmal.com' && password === 'cemal#2016')
+              (email === 'frequencia.cemal@ceprofmal.com' && password === 'cemal#2016') ||
+              (email === 'cemal.salas@ceprofmal.com' && password === 'cemal#2016')
           ) {
               try {
                   console.log("Criando conta de sistema automaticamente...");
