@@ -273,21 +273,29 @@ export const uploadStaffPhoto = async (file: File): Promise<string> => {
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
     try {
         const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-        const q = query(
-            collection(db, STAFF_LOGS_COLLECTION),
-            where("staffId", "==", log.staffId),
-            where("timestamp", ">", twoMinutesAgo)
-        );
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-            return 'too_soon';
+        
+        // CORREÇÃO CRÍTICA: Envolver a consulta de duplicidade em try/catch
+        // Se o índice composto não existir, a consulta falha.
+        // Neste caso, ignoramos o erro e salvamos o ponto mesmo assim para não bloquear o usuário.
+        try {
+            const q = query(
+                collection(db, STAFF_LOGS_COLLECTION),
+                where("staffId", "==", log.staffId),
+                where("timestamp", ">", twoMinutesAgo)
+            );
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                return 'too_soon';
+            }
+        } catch (queryError) {
+            console.warn("Aviso: Índice de duplicidade pendente ou erro de consulta. Salvando registro...", queryError);
         }
 
         const { id, ...data } = log;
         await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
         return 'success';
     } catch (e) {
-        console.error(e);
+        console.error("Erro fatal ao registrar ponto:", e);
         return 'error';
     }
 };

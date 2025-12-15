@@ -251,6 +251,12 @@ export const StaffAttendanceTerminal: React.FC = () => {
         const member = staff.find(s => s.id === staffId);
         if (member) {
             const now = new Date();
+            
+            // CORREÇÃO DE FUSO HORÁRIO
+            // Usar 'en-CA' garante formato YYYY-MM-DD baseado na hora LOCAL do computador
+            // Evita que registros às 22h caiam no dia seguinte (UTC)
+            const localDateString = now.toLocaleDateString('en-CA');
+
             const log: StaffAttendanceLog = {
                 id: '',
                 staffId: member.id,
@@ -258,7 +264,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
                 staffRole: member.role,
                 staffPhotoUrl: member.photoUrl,
                 timestamp: now.getTime(),
-                dateString: now.toISOString().split('T')[0]
+                dateString: localDateString
             };
 
             const result = await logStaffAttendance(log);
@@ -295,6 +301,15 @@ export const StaffAttendanceTerminal: React.FC = () => {
             : "https://assets.mixkit.co/active_storage/sfx/2578/2578-preview.mp3"
         );
         audio.play().catch(() => {});
+    };
+
+    const getStatusColor = () => {
+        switch (statusType) {
+            case 'success': return 'border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.3)]';
+            case 'warning': return 'border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]';
+            case 'error': return 'border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.3)]';
+            default: return 'border-white/10';
+        }
     };
 
     const toggleFullscreen = () => {

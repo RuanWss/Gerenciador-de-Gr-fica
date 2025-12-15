@@ -65,7 +65,8 @@ export const HRDashboard: React.FC = () => {
 
     // Logs State
     const [logs, setLogs] = useState<StaffAttendanceLog[]>([]);
-    const [logFilterDate, setLogFilterDate] = useState(new Date().toISOString().split('T')[0]);
+    // CORREÇÃO: Usar data local (YYYY-MM-DD) para iniciar o filtro corretamente
+    const [logFilterDate, setLogFilterDate] = useState(new Date().toLocaleDateString('en-CA'));
 
     useEffect(() => {
         loadData();

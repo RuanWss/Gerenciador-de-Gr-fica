@@ -51,19 +51,28 @@ export const AttendanceTerminal: React.FC = () => {
             const faceApi = (faceapi as any).default || faceapi;
             if (!faceApi || !faceApi.nets) return;
 
-            if (faceApi.nets.tinyFaceDetector.isLoaded && faceApi.nets.faceLandmark68TinyNet.isLoaded) {
+            // OTIMIZAÇÃO: Verifica se TODOS os modelos necessários (Tiny Detector, Tiny Landmarks, Recognition) 
+            // já estão carregados para evitar re-download ou reinicialização.
+            if (
+                faceApi.nets.tinyFaceDetector.isLoaded && 
+                faceApi.nets.faceLandmark68TinyNet.isLoaded && 
+                faceApi.nets.faceRecognitionNet.isLoaded
+            ) {
                 setModelsLoaded(true);
                 return;
             }
 
-            setLoadingMessage('Carregando Motores de IA...');
+            setLoadingMessage('Carregando Motores de IA (Tiny Mode)...');
             try {
                 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+                
+                // Carrega apenas os modelos leves (Tiny) e o de reconhecimento
                 await Promise.all([
                     faceApi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
                     faceApi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
                     faceApi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
                 ]);
+                
                 setModelsLoaded(true);
             } catch (error) {
                 console.error("Erro AI:", error);
@@ -117,6 +126,7 @@ export const AttendanceTerminal: React.FC = () => {
             try {
                 await new Promise(resolve => setTimeout(resolve, 10));
                 const img = await faceApi.fetchImage(student.photoUrl);
+                // Usa TinyFaceDetector e TinyLandmarks (via withFaceLandmarks(true))
                 const detection = await faceApi.detectSingleFace(img, new faceApi.TinyFaceDetectorOptions())
                     .withFaceLandmarks(true)
                     .withFaceDescriptor();
@@ -184,9 +194,10 @@ export const AttendanceTerminal: React.FC = () => {
             if (processingRef.current || lastLog || video.paused || video.ended) return;
 
             try {
+                // Opções otimizadas para Tiny Face Detector
                 const options = new faceApi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
                 const detections = await faceApi.detectAllFaces(video, options)
-                    .withFaceLandmarks(true)
+                    .withFaceLandmarks(true) // Usa Tiny Landmarks
                     .withFaceDescriptors();
 
                 const displaySize = { width: video.videoWidth, height: video.videoHeight };
