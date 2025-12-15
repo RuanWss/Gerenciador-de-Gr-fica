@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -196,7 +197,7 @@ export const HRDashboard: React.FC = () => {
                 await saveStaffMember({ ...staffData, id: '' });
             }
             
-            alert(editingId ? "Atualizado com sucesso!" : "Cadastrado com sucesso!");
+            alert(editingId ? "Atualizado com sucesso!" : "Cadastrado com sucesso! A senha padrão é: cemal2016");
             resetForm();
             loadData();
         } catch (error: any) {
@@ -561,6 +562,10 @@ export const HRDashboard: React.FC = () => {
                                                 <label className="flex items-center gap-2 cursor-pointer">
                                                     <input type="radio" name="wp" checked={workPeriod === 'afternoon'} onChange={() => setWorkPeriod('afternoon')} />
                                                     <span className="text-sm text-gray-600">Tarde</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input type="radio" name="wp" checked={workPeriod === 'full'} onChange={() => setWorkPeriod('full')} />
+                                                    <span className="text-sm text-gray-600">Integral</span>
                                                 </label>
                                             </div>
                                         </div>
