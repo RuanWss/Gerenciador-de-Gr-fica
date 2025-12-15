@@ -335,9 +335,9 @@ export const StaffAttendanceTerminal: React.FC = () => {
             const log: StaffAttendanceLog = {
                 id: '',
                 staffId: member.id,
-                staffName: member.name,
-                staffRole: member.role,
-                staffPhotoUrl: member.photoUrl,
+                staffName: member.name || 'Funcionário',
+                staffRole: member.role || 'Geral',
+                staffPhotoUrl: member.photoUrl || '', // Fallback para string vazia
                 timestamp: now.getTime(),
                 dateString: localDateString
             };
@@ -356,6 +356,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
             } else {
                 setStatusType('error');
                 setStatusMessage('ERRO AO REGISTRAR');
+                console.error("Erro retornado pelo serviço. Verifique o console.");
                 playSound('error');
             }
             setTimeout(() => resetState(), 3500);

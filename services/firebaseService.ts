@@ -1,3 +1,4 @@
+
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
@@ -274,9 +275,8 @@ export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'succ
     try {
         const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
         
-        // CORREÇÃO CRÍTICA: Envolver a consulta de duplicidade em try/catch
-        // Se o índice composto não existir, a consulta falha.
-        // Neste caso, ignoramos o erro e salvamos o ponto mesmo assim para não bloquear o usuário.
+        // Verifica duplicidade. Se falhar (ex: erro de permissão ou indice), IGNORA o erro e permite salvar.
+        // Isso garante que o ponto seja batido mesmo com instabilidade no índice.
         try {
             const q = query(
                 collection(db, STAFF_LOGS_COLLECTION),
@@ -288,11 +288,18 @@ export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'succ
                 return 'too_soon';
             }
         } catch (queryError) {
-            console.warn("Aviso: Índice de duplicidade pendente ou erro de consulta. Salvando registro...", queryError);
+            console.warn("Aviso: Verificação de duplicidade pulada (erro de índice ou permissão). Salvando registro...", queryError);
         }
 
         const { id, ...data } = log;
-        await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
+        
+        // Sanitização: Remove undefined para evitar rejeição do Firestore
+        const safeData = {
+            ...data,
+            staffPhotoUrl: data.staffPhotoUrl || null, // Garante que não é undefined
+        };
+
+        await addDoc(collection(db, STAFF_LOGS_COLLECTION), safeData);
         return 'success';
     } catch (e) {
         console.error("Erro fatal ao registrar ponto:", e);
