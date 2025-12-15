@@ -160,7 +160,8 @@ export const HRDashboard: React.FC = () => {
         setIsSaving(true);
         try {
             // AUTOMATIC LOGIN CREATION FOR ALL STAFF WITH EMAIL
-            if (!editingId && teacherEmail) {
+            // Removed check for !editingId to allow creating login on update if it was missing
+            if (teacherEmail) {
                 try {
                     // Mapeamento de Role do Sistema baseado na função escolhida
                     let systemRole = UserRole.TEACHER; // Default para professores e outros
@@ -179,6 +180,7 @@ export const HRDashboard: React.FC = () => {
                         console.error("Auth error", authError);
                         alert("Atenção: O cadastro foi salvo, mas houve um erro ao criar o login de acesso: " + authError.message);
                     } else {
+                        // Email já existe, não é um erro crítico, apenas significa que o usuário já tinha login
                         console.log("Email já cadastrado no Auth, prosseguindo com dados do banco.");
                     }
                 }

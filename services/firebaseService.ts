@@ -1,6 +1,6 @@
 
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
 import { 
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
@@ -49,8 +49,9 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
 };
 
 export const createSystemUserAuth = async (email: string, name: string, role: UserRole): Promise<void> => {
-    // Use a secondary app to avoid signing out the current user
-    const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+    // Use a unique app name to avoid conflicts and signing out the current user
+    const appName = "SecondaryApp-" + Date.now();
+    const secondaryApp = initializeApp(firebaseConfig, appName);
     const secondaryAuth = getAuth(secondaryApp);
     
     try {
@@ -66,12 +67,20 @@ export const createSystemUserAuth = async (email: string, name: string, role: Us
             subject: '',
             classes: []
         };
+        // Use main DB instance to save profile
         await setDoc(doc(db, USERS_COLLECTION, user.id), user);
         
         await signOut(secondaryAuth);
     } catch (error) {
         throw error;
-    } 
+    } finally {
+        // Clean up the secondary app to prevent memory leaks and name conflicts
+        try {
+            await deleteApp(secondaryApp);
+        } catch (e) {
+            console.warn("Error deleting secondary app", e);
+        }
+    }
 };
 
 // --- EXAMS ---
