@@ -8,7 +8,7 @@ import {
     uploadExamFile, 
     uploadClassMaterialFile, 
     saveClassMaterial,
-    getClassMaterials,
+    getClassMaterials, 
     deleteClassMaterial,
     saveLessonPlan,
     getLessonPlans,
@@ -1143,7 +1143,6 @@ export const TeacherDashboard: React.FC = () => {
                         </div>
                     )}
                     
-                    {/* (Telas de Upload e Studio mantidas como no arquivo original) */}
                     {/* MODE: DIRECT UPLOAD */}
                     {creationMode === 'upload' && (
                          <div className="max-w-3xl mx-auto w-full p-8 animate-in fade-in slide-in-from-bottom-4">
