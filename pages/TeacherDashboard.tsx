@@ -1407,7 +1407,7 @@ export const TeacherDashboard: React.FC = () => {
                                         )}
                                     </div>
                                 </div>
-                                {/* Right Panel (Preview) - Mantido simplificado aqui */}
+                                {/* Right Panel (Preview) */}
                                 <div className="flex-1 bg-gray-100 p-8 overflow-y-auto flex justify-center relative">
                                     <div className="absolute top-4 right-4 flex bg-white rounded-lg shadow-sm border border-gray-200 p-1">
                                         <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-2 hover:bg-gray-100 rounded text-gray-500"><ZoomOut size={16}/></button>
