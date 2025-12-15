@@ -582,7 +582,6 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
-  // Helper para renderizar o conteúdo da pré-visualização (evita aninhamento complexo no JSX)
   const renderPreviewContent = () => {
       if (aiGeneratedContent) {
           return <div className="prose prose-sm max-w-none text-justify font-serif" dangerouslySetInnerHTML={{ __html: aiGeneratedContent }} />;
@@ -603,21 +602,6 @@ export const TeacherDashboard: React.FC = () => {
       );
   };
 
-  const SidebarItem = ({ id, label, icon: Icon }: { id: 'requests' | 'create' | 'materials' | 'plans', label: string, icon: any }) => (
-    <button
-      onClick={id === 'create' ? handleNewExam : () => setActiveTab(id)}
-      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
-      ${activeTab === id 
-        ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' 
-        : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
-    >
-      <div className="flex items-center gap-3">
-        <Icon size={18} />
-        <span>{label}</span>
-      </div>
-    </button>
-  );
-
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8">
         
@@ -625,10 +609,50 @@ export const TeacherDashboard: React.FC = () => {
         <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
             <div className="mb-6">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Menu do Professor</p>
-                <SidebarItem id="requests" label="Meus Pedidos" icon={List} />
-                <SidebarItem id="create" label="Nova Solicitação" icon={PlusCircle} />
-                <SidebarItem id="materials" label="Materiais de Aula" icon={FolderUp} />
-                <SidebarItem id="plans" label="Planejamento" icon={BookOpenCheck} />
+                
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
+                  ${activeTab === 'requests' ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <List size={18} />
+                    <span>Meus Pedidos</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleNewExam}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
+                  ${activeTab === 'create' ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <PlusCircle size={18} />
+                    <span>Nova Solicitação</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('materials')}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
+                  ${activeTab === 'materials' ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <FolderUp size={18} />
+                    <span>Materiais de Aula</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('plans')}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
+                  ${activeTab === 'plans' ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <BookOpenCheck size={18} />
+                    <span>Planejamento</span>
+                  </div>
+                </button>
             </div>
             
             <div className="mb-6 border-t border-white/10 pt-6">
