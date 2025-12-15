@@ -734,7 +734,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Título do Material</label>
                                         <input 
                                             type="text" 
-                                            className="w-full border border-gray-300 rounded-lg p-2.5" 
+                                            className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all" 
                                             placeholder="Ex: Slides - Revolução Francesa"
                                             value={materialTitle}
                                             onChange={e => setMaterialTitle(e.target.value)}
@@ -744,7 +744,7 @@ export const TeacherDashboard: React.FC = () => {
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Turma Destino</label>
                                         <select 
-                                            className="w-full border border-gray-300 rounded-lg p-2.5"
+                                            className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all"
                                             value={materialClass}
                                             onChange={e => setMaterialClass(e.target.value)}
                                         >
@@ -760,7 +760,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <div className="animate-in fade-in slide-in-from-top-2">
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Disciplina (Pasta)</label>
                                             <select 
-                                                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-700 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all"
                                                 value={materialSubject}
                                                 onChange={e => setMaterialSubject(e.target.value)}
                                             >
@@ -776,7 +776,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <input 
                                             type="file"
                                             ref={materialFileInputRef}
-                                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
+                                            className="w-full text-sm text-gray-500 bg-gray-50 border border-gray-300 rounded-lg p-2 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
                                             onChange={handleMaterialFileChange}
                                         />
                                         <p className="text-xs text-gray-400 mt-1">PDF, Word, PowerPoint, Imagens</p>
@@ -797,9 +797,10 @@ export const TeacherDashboard: React.FC = () => {
                         <div className="md:col-span-2">
                              <div className="space-y-4">
                                  {materials.length === 0 ? (
-                                     <div className="bg-white/10 backdrop-blur border border-white/10 rounded-xl p-12 text-center">
-                                         <FolderOpen size={48} className="mx-auto text-gray-400 mb-4" />
-                                         <p className="text-gray-300 font-medium">Nenhum material enviado ainda.</p>
+                                     <div className="bg-white border border-gray-200 rounded-xl p-12 text-center shadow-sm">
+                                         <FolderOpen size={48} className="mx-auto text-gray-300 mb-4" />
+                                         <p className="text-gray-500 font-medium">Nenhum material enviado ainda.</p>
+                                         <p className="text-xs text-gray-400 mt-2">Selecione uma turma e faça upload para começar.</p>
                                      </div>
                                  ) : (
                                      materials.map(material => (
@@ -882,7 +883,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <div>
                                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Turma</label>
                                             <select 
-                                                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-700"
                                                 value={planClass}
                                                 onChange={e => setPlanClass(e.target.value)}
                                             >
@@ -897,7 +898,7 @@ export const TeacherDashboard: React.FC = () => {
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data da Aula</label>
                                                 <input 
                                                     type="date"
-                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-700"
                                                     value={planDate}
                                                     onChange={e => setPlanDate(e.target.value)}
                                                 />
@@ -906,7 +907,7 @@ export const TeacherDashboard: React.FC = () => {
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Semestre</label>
                                                 <select 
-                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm"
+                                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm bg-gray-50 text-gray-700"
                                                     value={planSemester}
                                                     onChange={e => setPlanSemester(e.target.value as any)}
                                                 >
@@ -921,52 +922,52 @@ export const TeacherDashboard: React.FC = () => {
                                         <>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tema da Aula</label>
-                                                <input type="text" className="w-full border border-gray-300 rounded-lg p-2.5" value={planTopic} onChange={e => setPlanTopic(e.target.value)} />
+                                                <input type="text" className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planTopic} onChange={e => setPlanTopic(e.target.value)} />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Conteúdo Programático</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planContent} onChange={e => setPlanContent(e.target.value)} />
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planContent} onChange={e => setPlanContent(e.target.value)} />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Metodologia / Estratégias</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planMethodology} onChange={e => setPlanMethodology(e.target.value)} />
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planMethodology} onChange={e => setPlanMethodology(e.target.value)} />
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
                                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Recursos Didáticos</label>
-                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planResources} onChange={e => setPlanResources(e.target.value)} />
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planResources} onChange={e => setPlanResources(e.target.value)} />
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Avaliação</label>
-                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planEvaluation} onChange={e => setPlanEvaluation(e.target.value)} />
+                                                    <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planEvaluation} onChange={e => setPlanEvaluation(e.target.value)} />
                                                 </div>
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tarefa de Casa</label>
-                                                <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planHomework} onChange={e => setPlanHomework(e.target.value)} />
+                                                <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planHomework} onChange={e => setPlanHomework(e.target.value)} />
                                             </div>
                                         </>
                                     ) : (
                                         <>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Objetivos Gerais</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planGenObj} onChange={e => setPlanGenObj(e.target.value)} />
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planGenObj} onChange={e => setPlanGenObj(e.target.value)} />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Objetivos Específicos</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planSpecObj} onChange={e => setPlanSpecObj(e.target.value)} />
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planSpecObj} onChange={e => setPlanSpecObj(e.target.value)} />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Habilidades (BNCC)</label>
-                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5" value={planSkills} onChange={e => setPlanSkills(e.target.value)} />
+                                                <textarea rows={3} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planSkills} onChange={e => setPlanSkills(e.target.value)} />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cronograma de Conteúdos</label>
-                                                <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-2.5" value={planTimeline} onChange={e => setPlanTimeline(e.target.value)} placeholder="Ex: Semana 1: Introdução; Semana 2: ..." />
+                                                <textarea rows={4} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planTimeline} onChange={e => setPlanTimeline(e.target.value)} placeholder="Ex: Semana 1: Introdução; Semana 2: ..." />
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Bibliografia / Referências</label>
-                                                <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5" value={planBibliography} onChange={e => setPlanBibliography(e.target.value)} />
+                                                <textarea rows={2} className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-700" value={planBibliography} onChange={e => setPlanBibliography(e.target.value)} />
                                             </div>
                                         </>
                                     )}
@@ -1068,7 +1069,7 @@ export const TeacherDashboard: React.FC = () => {
                                          <label className="block text-sm font-bold text-gray-700 mb-1">Título da Atividade</label>
                                          <input 
                                              type="text" 
-                                             className="w-full border border-gray-300 rounded-lg p-3" 
+                                             className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700" 
                                              placeholder="Ex: Prova Bimestral de História"
                                              value={docTitle}
                                              onChange={e => setDocTitle(e.target.value)}
@@ -1077,7 +1078,7 @@ export const TeacherDashboard: React.FC = () => {
                                      <div>
                                          <label className="block text-sm font-bold text-gray-700 mb-1">Turma</label>
                                          <select 
-                                            className="w-full border border-gray-300 rounded-lg p-3"
+                                            className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700"
                                             value={selectedClassForExam}
                                             onChange={e => setSelectedClassForExam(e.target.value)}
                                          >
@@ -1091,7 +1092,7 @@ export const TeacherDashboard: React.FC = () => {
                                          <label className="block text-sm font-bold text-gray-700 mb-1">Quantidade de Cópias</label>
                                          <input 
                                              type="number" 
-                                             className="w-full border border-gray-300 rounded-lg p-3" 
+                                             className="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 text-gray-700" 
                                              value={printQuantity}
                                              onChange={e => setPrintQuantity(Number(e.target.value))}
                                          />
@@ -1126,7 +1127,7 @@ export const TeacherDashboard: React.FC = () => {
                                      <div className="col-span-2">
                                          <label className="block text-sm font-bold text-gray-700 mb-1">Observações / Instruções para Gráfica</label>
                                          <textarea 
-                                             className="w-full border border-gray-300 rounded-lg p-3 h-24" 
+                                             className="w-full border border-gray-300 rounded-lg p-3 h-24 bg-gray-50 text-gray-700" 
                                              placeholder="Ex: Imprimir frente e verso, grampear no canto..."
                                              value={docSubtitle}
                                              onChange={e => setDocSubtitle(e.target.value)}
@@ -1230,14 +1231,14 @@ export const TeacherDashboard: React.FC = () => {
                                             <div className="space-y-4">
                                                 <div>
                                                     <label className="text-xs font-bold text-gray-500 uppercase">Turma</label>
-                                                    <select className="w-full mt-1 border border-gray-300 rounded-lg p-2 text-sm" value={selectedClassForExam} onChange={e => setSelectedClassForExam(e.target.value)}>
+                                                    <select className="w-full mt-1 border border-gray-300 rounded-lg p-2 text-sm bg-gray-50 text-gray-700" value={selectedClassForExam} onChange={e => setSelectedClassForExam(e.target.value)}>
                                                         <option value="">Selecione...</option>
                                                         {["6º ANO EFAF", "7º ANO EFAF", "8º ANO EFAF", "9º ANO EFAF", "1ª SÉRIE EM", "2ª SÉRIE EM", "3ª SÉRIE EM"].map(c => <option key={c} value={c}>{c}</option>)}
                                                     </select>
                                                 </div>
                                                 <div>
                                                     <label className="text-xs font-bold text-gray-500 uppercase">Instruções</label>
-                                                    <textarea className="w-full mt-1 border border-gray-300 rounded-lg p-2 text-sm h-20" value={docSubtitle} onChange={e => setDocSubtitle(e.target.value)} placeholder="Ex: Leia com atenção..." />
+                                                    <textarea className="w-full mt-1 border border-gray-300 rounded-lg p-2 text-sm h-20 bg-gray-50 text-gray-700" value={docSubtitle} onChange={e => setDocSubtitle(e.target.value)} placeholder="Ex: Leia com atenção..." />
                                                 </div>
                                                 {materialType === 'exam' && (
                                                     <div className="flex items-center justify-between">
@@ -1298,6 +1299,5 @@ export const TeacherDashboard: React.FC = () => {
             )}
 
         </div>
-    </div>
-  );
+    );
 };
