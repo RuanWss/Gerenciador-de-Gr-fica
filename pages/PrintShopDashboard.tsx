@@ -23,7 +23,7 @@ import {
     Student, 
     ScheduleEntry, 
     LessonPlan, 
-    SystemConfig,
+    SystemConfig, 
     AttendanceLog,
     StaffMember
 } from '../types';
@@ -58,7 +58,9 @@ import {
   XCircle,
   Briefcase,
   ListPlus,
-  Eraser // Restaurado
+  Eraser,
+  X,
+  Eye
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
@@ -134,6 +136,9 @@ export const PrintShopDashboard: React.FC = () => {
     // --- STATES: PLANNING ---
     const [plans, setPlans] = useState<LessonPlan[]>([]);
     const [planFilterClass, setPlanFilterClass] = useState('');
+    const [planTypeFilter, setPlanTypeFilter] = useState<'ALL' | 'daily' | 'semester'>('ALL');
+    const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
+    const [showPlanModal, setShowPlanModal] = useState(false);
 
     // --- STATES: STAFF BOARD ---
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -397,6 +402,16 @@ export const PrintShopDashboard: React.FC = () => {
         setIsLoading(false);
     };
 
+    const openPlanModal = (plan: LessonPlan) => {
+        setSelectedPlan(plan);
+        setShowPlanModal(true);
+    };
+
+    const closePlanModal = () => {
+        setShowPlanModal(false);
+        setSelectedPlan(null);
+    };
+
     // --- ACTIONS: STAFF ---
     const loadStaff = async () => {
         setIsLoading(true);
@@ -448,9 +463,11 @@ export const PrintShopDashboard: React.FC = () => {
     const presentStudentIds = new Set(attendanceLogs.map(log => log.studentId));
     const presentCountFiltered = filteredStudents.filter(s => presentStudentIds.has(s.id)).length;
     
-    const filteredPlans = planFilterClass 
-        ? plans.filter(p => p.className === planFilterClass)
-        : plans;
+    const filteredPlans = plans.filter(p => {
+        const matchClass = planFilterClass ? p.className === planFilterClass : true;
+        const matchType = planTypeFilter === 'ALL' || p.type === planTypeFilter;
+        return matchClass && matchType;
+    });
 
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
@@ -973,23 +990,50 @@ export const PrintShopDashboard: React.FC = () => {
                             <p className="text-gray-400">Acompanhamento dos envios dos professores</p>
                         </header>
 
-                        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-                            <button onClick={() => setPlanFilterClass('')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${planFilterClass === '' ? 'bg-red-600 text-white shadow-md' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>Todos</button>
-                            {CLASSES.map(c => (
-                                <button key={c.id} onClick={() => setPlanFilterClass(c.name)} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${planFilterClass === c.name ? 'bg-red-600 text-white shadow-md' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>{c.name}</button>
-                            ))}
+                        <div className="flex flex-col md:flex-row gap-4 mb-6 justify-between items-center">
+                            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide max-w-full">
+                                <button onClick={() => setPlanFilterClass('')} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${planFilterClass === '' ? 'bg-red-600 text-white shadow-md' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>Todos</button>
+                                {CLASSES.map(c => (
+                                    <button key={c.id} onClick={() => setPlanFilterClass(c.name)} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${planFilterClass === c.name ? 'bg-red-600 text-white shadow-md' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>{c.name}</button>
+                                ))}
+                            </div>
+                            
+                            <div className="flex bg-white/10 p-1 rounded-lg">
+                                <button 
+                                    onClick={() => setPlanTypeFilter('ALL')}
+                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${planTypeFilter === 'ALL' ? 'bg-white text-gray-900 shadow' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    Todos
+                                </button>
+                                <button 
+                                    onClick={() => setPlanTypeFilter('daily')}
+                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${planTypeFilter === 'daily' ? 'bg-white text-gray-900 shadow' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    Diário
+                                </button>
+                                <button 
+                                    onClick={() => setPlanTypeFilter('semester')}
+                                    className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${planTypeFilter === 'semester' ? 'bg-white text-gray-900 shadow' : 'text-gray-400 hover:text-white'}`}
+                                >
+                                    Semestral
+                                </button>
+                            </div>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                             {filteredPlans.map(plan => (
-                                <div key={plan.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                                <div 
+                                    key={plan.id} 
+                                    onClick={() => { setSelectedPlan(plan); setShowPlanModal(true); }}
+                                    className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-all cursor-pointer group"
+                                >
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold">
+                                            <div className="h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 font-bold group-hover:bg-red-50 group-hover:text-red-600 transition-colors">
                                                 {plan.teacherName.charAt(0)}
                                             </div>
                                             <div>
-                                                <h4 className="font-bold text-gray-800 text-sm">{plan.teacherName}</h4>
+                                                <h4 className="font-bold text-gray-800 text-sm group-hover:text-red-700 transition-colors">{plan.teacherName}</h4>
                                                 <p className="text-xs text-gray-500">{plan.subject}</p>
                                             </div>
                                         </div>
@@ -998,7 +1042,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         </span>
                                     </div>
                                     
-                                    <div className="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                    <div className="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-100 group-hover:bg-white group-hover:border-red-100 transition-colors">
                                         <p className="text-xs font-bold text-gray-500 uppercase mb-1">Turma</p>
                                         <p className="font-bold text-gray-800">{plan.className}</p>
                                     </div>
@@ -1015,11 +1059,146 @@ export const PrintShopDashboard: React.FC = () => {
                                     )}
                                     
                                     <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400">
-                                        <Clock size={12} className="mr-1"/> Enviado em {new Date(plan.createdAt).toLocaleDateString()}
+                                        <span className="flex items-center"><Clock size={12} className="mr-1"/> Enviado em {new Date(plan.createdAt).toLocaleDateString()}</span>
+                                        <Eye size={16} className="text-gray-300 group-hover:text-red-500 transition-colors" />
                                     </div>
                                 </div>
                             ))}
                         </div>
+
+                        {/* PLAN DETAILS MODAL */}
+                        {showPlanModal && selectedPlan && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                                <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+                                    <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                                        <div>
+                                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                                <BookOpen size={20} className="text-red-600"/>
+                                                Planejamento {selectedPlan.type === 'daily' ? 'Diário' : 'Semestral'}
+                                            </h2>
+                                            <p className="text-sm text-gray-500 mt-1">Prof. {selectedPlan.teacherName} • {selectedPlan.className}</p>
+                                        </div>
+                                        <button onClick={() => setShowPlanModal(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500 transition-colors">
+                                            <X size={24} />
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                                <p className="text-xs font-bold text-gray-400 uppercase mb-1">Disciplina</p>
+                                                <p className="font-bold text-gray-800 text-lg">{selectedPlan.subject}</p>
+                                            </div>
+                                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                                <p className="text-xs font-bold text-gray-400 uppercase mb-1">{selectedPlan.type === 'daily' ? 'Data da Aula' : 'Período'}</p>
+                                                <p className="font-bold text-gray-800 text-lg">{selectedPlan.type === 'daily' ? selectedPlan.date : selectedPlan.period}</p>
+                                            </div>
+                                        </div>
+
+                                        {selectedPlan.type === 'daily' ? (
+                                            <div className="space-y-6">
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 text-lg mb-2 pb-2 border-b border-gray-100">Tema da Aula</h3>
+                                                    <p className="text-gray-700 leading-relaxed">{selectedPlan.topic}</p>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 text-lg mb-2 pb-2 border-b border-gray-100">Conteúdo Programático</h3>
+                                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{selectedPlan.content}</p>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-800 text-sm uppercase mb-2">Metodologia</h3>
+                                                        <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap border border-gray-100">
+                                                            {selectedPlan.methodology}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-800 text-sm uppercase mb-2">Recursos</h3>
+                                                        <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap border border-gray-100">
+                                                            {selectedPlan.resources}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 text-lg mb-2 pb-2 border-b border-gray-100">Avaliação</h3>
+                                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{selectedPlan.evaluation}</p>
+                                                </div>
+                                                {selectedPlan.homework && (
+                                                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                                        <h3 className="font-bold text-blue-800 text-sm uppercase mb-2">Tarefa de Casa</h3>
+                                                        <p className="text-blue-900 leading-relaxed">{selectedPlan.homework}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-8">
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 text-lg mb-2 pb-2 border-b border-gray-100">Justificativa</h3>
+                                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{selectedPlan.justification}</p>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 text-lg mb-2 pb-2 border-b border-gray-100">Conteúdos do Bimestre</h3>
+                                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{selectedPlan.semesterContents}</p>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div className="bg-green-50 p-5 rounded-xl border border-green-100">
+                                                        <h3 className="font-bold text-green-800 text-sm uppercase mb-2">Habilidades Cognitivas</h3>
+                                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedPlan.cognitiveSkills}</p>
+                                                    </div>
+                                                    <div className="bg-blue-50 p-5 rounded-xl border border-blue-100">
+                                                        <h3 className="font-bold text-blue-800 text-sm uppercase mb-2">Habilidades Socioemocionais</h3>
+                                                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedPlan.socialEmotionalSkills}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 text-lg mb-4 pb-2 border-b border-gray-100">Atividades Planejadas</h3>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                                            <strong className="block text-xs uppercase text-gray-500 mb-2">Prévias</strong>
+                                                            <p className="text-sm">{selectedPlan.activitiesPre || '-'}</p>
+                                                        </div>
+                                                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                                            <strong className="block text-xs uppercase text-gray-500 mb-2">Autodidáticas</strong>
+                                                            <p className="text-sm">{selectedPlan.activitiesAuto || '-'}</p>
+                                                        </div>
+                                                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                                            <strong className="block text-xs uppercase text-gray-500 mb-2">Cooperativas</strong>
+                                                            <p className="text-sm">{selectedPlan.activitiesCoop || '-'}</p>
+                                                        </div>
+                                                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                                            <strong className="block text-xs uppercase text-gray-500 mb-2">Complementares</strong>
+                                                            <p className="text-sm">{selectedPlan.activitiesCompl || '-'}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-800 text-sm uppercase mb-2">Práticas Educativas</h3>
+                                                        <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg">{selectedPlan.educationalPractices}</p>
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-800 text-sm uppercase mb-2">Espaços Educativos</h3>
+                                                        <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg">{selectedPlan.educationalSpaces}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <h3 className="font-bold text-gray-800 text-lg mb-2 pb-2 border-b border-gray-100">Estratégias de Avaliação</h3>
+                                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{selectedPlan.evaluationStrategies}</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+                                        <Button onClick={() => setShowPlanModal(false)} className="bg-gray-800 hover:bg-gray-900 text-white">Fechar Detalhes</Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
