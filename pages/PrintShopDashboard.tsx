@@ -298,10 +298,14 @@ export const PrintShopDashboard: React.FC = () => {
                 photoUrl
             };
 
+            // FIX: Remove undefined keys to prevent Firestore 'addDoc' validation errors
+            // Firestore does not accept 'undefined' as a value
+            const cleanData = JSON.parse(JSON.stringify(studentData));
+
             if (editingStudent) {
-                await updateStudent(studentData);
+                await updateStudent(cleanData);
             } else {
-                await saveStudent(studentData);
+                await saveStudent(cleanData);
             }
             setShowStudentForm(false);
             setEditingStudent(null);
@@ -311,9 +315,9 @@ export const PrintShopDashboard: React.FC = () => {
             setPhotoMessage('');
             loadStudents();
             alert("Aluno salvo com sucesso!");
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert("Erro ao salvar aluno.");
+            alert("Erro ao salvar aluno: " + error.message);
         } finally {
             setIsLoading(false);
         }

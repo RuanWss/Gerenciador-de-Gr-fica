@@ -216,7 +216,7 @@ export const getStudents = async (): Promise<Student[]> => {
 export const listenToStudents = (callback: (students: Student[]) => void) => {
     return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
-    });
+    }, (error) => console.error("Error listening to students:", error));
 };
 
 export const saveStudent = async (student: Student): Promise<void> => {
@@ -266,7 +266,7 @@ export const listenToAttendanceLogs = (dateString: string, callback: (logs: Atte
         const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
         logs.sort((a,b) => b.timestamp - a.timestamp);
         callback(logs);
-    });
+    }, (error) => console.error("Error listening to attendance logs:", error));
 };
 
 // --- STAFF ---
@@ -278,7 +278,7 @@ export const getStaffMembers = async (): Promise<StaffMember[]> => {
 export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
     return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
-    });
+    }, (error) => console.error("Error listening to staff members:", error));
 };
 
 export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
@@ -343,7 +343,7 @@ export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAtte
         const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
         logs.sort((a,b) => b.timestamp - a.timestamp);
         callback(logs);
-    });
+    }, (error) => console.error("Error listening to staff logs:", error));
 };
 
 // --- SCHEDULE ---
@@ -361,7 +361,7 @@ export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => 
 export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
-    });
+    }, (error) => console.error("Error listening to schedule:", error));
 };
 
 // --- SYSTEM CONFIG ---
@@ -373,6 +373,8 @@ export const listenToSystemConfig = (callback: (config: SystemConfig) => void) =
         } else {
             callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
         }
+    }, (error) => {
+        console.warn("System config listener warning (possible permission denied):", error.message);
     });
 };
 
@@ -384,7 +386,7 @@ export const updateSystemConfig = async (config: SystemConfig): Promise<void> =>
 export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
     return onSnapshot(collection(db, EVENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
-    });
+    }, (error) => console.error("Error listening to events:", error));
 };
 
 export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {

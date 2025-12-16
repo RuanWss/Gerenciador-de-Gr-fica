@@ -116,10 +116,14 @@ export const HRDashboard: React.FC = () => {
                 email: formData.email || ''
             };
 
+            // FIX: Remove undefined keys to prevent Firestore 'addDoc' validation errors
+            // Firestore does not accept 'undefined' as a value
+            const cleanData = JSON.parse(JSON.stringify(dataToSave));
+
             if (editingId) {
-                await updateStaffMember(dataToSave);
+                await updateStaffMember(cleanData);
             } else {
-                await saveStaffMember(dataToSave);
+                await saveStaffMember(cleanData);
             }
 
             // LOGIN / PERMISSION UPDATE LOGIC
@@ -156,7 +160,7 @@ export const HRDashboard: React.FC = () => {
             resetForm();
         } catch (error) {
             console.error(error);
-            alert("Erro ao salvar");
+            alert("Erro ao salvar: " + (error as any).message);
         } finally {
             setIsLoading(false);
         }
