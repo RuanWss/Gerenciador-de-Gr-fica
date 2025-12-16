@@ -69,50 +69,54 @@ const AppContent: React.FC = () => {
   // VERIFICAÇÃO DE MÚLTIPLOS ROLES
   if (user?.roles && user.roles.length > 1 && !sessionRole) {
       return (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-4">
-              <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-gray-200 shadow-2xl text-center">
-                  <img 
-                    src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
-                    alt="Logo" 
-                    className="h-20 w-auto mx-auto mb-6 object-contain"
-                  />
-                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Olá, {user.name.split(' ')[0]}</h2>
-                  <p className="text-gray-500 mb-8">Selecione qual painel deseja acessar agora:</p>
+          <div className="fixed inset-0 z-50 bg-[#0f0f10] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/40 via-[#0f0f10] to-[#0f0f10] flex flex-col items-center justify-center p-4 animate-in fade-in duration-500">
+              <div className="max-w-5xl w-full">
+                  <div className="text-center mb-12">
+                      <img 
+                        src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" 
+                        alt="Logo" 
+                        className="h-24 w-auto mx-auto mb-6 object-contain drop-shadow-2xl"
+                      />
+                      <h2 className="text-4xl font-bold text-white mb-2">Bem-vindo, {user.name.split(' ')[0]}</h2>
+                      <p className="text-gray-400 text-lg">Selecione o painel que deseja acessar:</p>
+                  </div>
                   
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
                       {user.roles.includes(UserRole.TEACHER) && (
                           <button 
                             onClick={() => setSessionRole(UserRole.TEACHER)}
-                            className="w-full bg-white hover:bg-brand-50 hover:border-brand-500 text-gray-700 font-bold py-4 px-6 rounded-2xl flex items-center justify-between group transition-all duration-300 border border-gray-200 shadow-sm"
+                            className="group bg-white p-10 rounded-3xl shadow-2xl border border-gray-100 hover:scale-[1.02] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden"
                           >
-                              <div className="flex items-center gap-4">
-                                  <div className="p-3 bg-gray-100 rounded-xl group-hover:bg-brand-100 text-brand-600 transition-colors">
-                                      <LayoutGrid size={24} />
-                                  </div>
-                                  <span className="text-lg">Painel do Professor</span>
+                              <div className="absolute top-0 left-0 w-full h-2 bg-red-600"></div>
+                              <div className="h-24 w-24 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-6 group-hover:bg-red-600 group-hover:text-white transition-colors shadow-lg group-hover:scale-110 duration-300">
+                                  <LayoutGrid size={48} />
                               </div>
-                              <span className="text-xs text-gray-400 group-hover:text-brand-600">Acessar &rarr;</span>
+                              <h3 className="text-2xl font-bold text-gray-900 mb-3">Portal do Professor</h3>
+                              <p className="text-gray-500 text-sm leading-relaxed">
+                                  Acesso para envio de provas, materiais de aula, planejamento e gestão acadêmica.
+                              </p>
                           </button>
                       )}
 
                       {user.roles.includes(UserRole.PRINTSHOP) && (
                           <button 
                             onClick={() => setSessionRole(UserRole.PRINTSHOP)}
-                            className="w-full bg-white hover:bg-blue-50 hover:border-blue-500 text-gray-700 font-bold py-4 px-6 rounded-2xl flex items-center justify-between group transition-all duration-300 border border-gray-200 shadow-sm"
+                            className="group bg-white p-10 rounded-3xl shadow-2xl border border-gray-100 hover:scale-[1.02] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden"
                           >
-                               <div className="flex items-center gap-4">
-                                  <div className="p-3 bg-gray-100 rounded-xl group-hover:bg-blue-100 text-blue-600 transition-colors">
-                                      <Printer size={24} />
-                                  </div>
-                                  <span className="text-lg">Painel da Escola</span>
+                               <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
+                               <div className="h-24 w-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors shadow-lg group-hover:scale-110 duration-300">
+                                  <Printer size={48} />
                               </div>
-                              <span className="text-xs text-gray-400 group-hover:text-blue-600">Acessar &rarr;</span>
+                              <h3 className="text-2xl font-bold text-gray-900 mb-3">Painel da Escola</h3>
+                              <p className="text-gray-500 text-sm leading-relaxed">
+                                  Gestão de impressões, calendário escolar, turmas, alunos e configurações do sistema.
+                              </p>
                           </button>
                       )}
                   </div>
 
-                  <button onClick={logout} className="mt-8 text-gray-500 hover:text-red-600 text-sm flex items-center justify-center gap-2 w-full transition-colors">
-                      <LogOut size={14} /> Sair da conta
+                  <button onClick={logout} className="mt-16 text-white/40 hover:text-white text-xs flex items-center justify-center gap-2 w-full transition-colors uppercase tracking-widest font-bold">
+                      <LogOut size={16} /> Sair da conta
                   </button>
               </div>
           </div>

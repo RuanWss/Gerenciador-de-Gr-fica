@@ -626,7 +626,7 @@ export const PrintShopDashboard: React.FC = () => {
         const days = [];
         // Empty cells for previous month
         for (let i = 0; i < startingDay; i++) {
-            days.push(<div key={`empty-${i}`} className="bg-[#121212] border border-gray-800/50 min-h-[100px]"></div>);
+            days.push(<div key={`empty-${i}`} className="bg-[#202022] border border-gray-800/50 min-h-[100px]"></div>);
         }
         
         // Days
@@ -636,7 +636,7 @@ export const PrintShopDashboard: React.FC = () => {
             const isToday = new Date().toISOString().split('T')[0] === dateStr;
 
             days.push(
-                <div key={day} className={`bg-[#121212] border border-gray-800/50 min-h-[120px] p-2 relative hover:bg-[#1a1a1a] transition-colors group`}>
+                <div key={day} className={`bg-[#202022] border border-gray-800/50 min-h-[120px] p-2 relative hover:bg-[#2a2a2c] transition-colors group`}>
                     <span className={`text-sm font-bold ${isToday ? 'bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-gray-400'}`}>
                         {day}
                     </span>
@@ -688,7 +688,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                 <div className="grid grid-cols-7 gap-px bg-gray-800 rounded-lg overflow-hidden shadow-2xl border border-gray-700">
                     {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
-                        <div key={d} className="bg-[#18181b] p-3 text-center font-bold text-gray-500 text-sm uppercase tracking-wider">
+                        <div key={d} className="bg-[#27272a] p-3 text-center font-bold text-gray-400 text-sm uppercase tracking-wider">
                             {d}
                         </div>
                     ))}
