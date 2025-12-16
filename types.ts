@@ -217,3 +217,25 @@ export interface LessonPlan {
   evaluationStrategies?: string; // Estratégias de Avaliação
   references?: string; // Fontes de Referência
 }
+
+// --- NOVOS TIPOS PARA AGENDA E KANBAN ---
+
+export type TaskStatus = 'todo' | 'doing' | 'done';
+
+export interface EventTask {
+  id: string;
+  description: string; // O processo a ser feito
+  materials: string; // Materiais necessários
+  assigneeId: string; // ID do membro da equipe
+  assigneeName: string; // Nome do membro
+  status: TaskStatus;
+}
+
+export interface SchoolEvent {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  type: 'event' | 'holiday' | 'exam' | 'meeting';
+  description?: string;
+  tasks: EventTask[]; // Array de tarefas Kanban
+}

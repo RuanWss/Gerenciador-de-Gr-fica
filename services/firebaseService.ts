@@ -10,7 +10,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
-    StaffAttendanceLog 
+    StaffAttendanceLog, SchoolEvent 
 } from '../types';
 
 const USERS_COLLECTION = 'users';
@@ -23,6 +23,7 @@ const SYSTEM_CONFIG_COLLECTION = 'system_config';
 const LESSON_PLANS_COLLECTION = 'lesson_plans';
 const STAFF_COLLECTION = 'staff';
 const STAFF_LOGS_COLLECTION = 'staff_logs';
+const EVENTS_COLLECTION = 'events';
 
 // --- USERS ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {
@@ -285,8 +286,6 @@ export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'succ
     try {
         const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
         
-        // Verifica duplicidade. Se falhar (ex: erro de permissão ou indice), IGNORA o erro e permite salvar.
-        // Isso garante que o ponto seja batido mesmo com instabilidade no índice.
         try {
             const q = query(
                 collection(db, STAFF_LOGS_COLLECTION),
@@ -298,15 +297,14 @@ export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'succ
                 return 'too_soon';
             }
         } catch (queryError) {
-            console.warn("Aviso: Verificação de duplicidade pulada (erro de índice ou permissão). Salvando registro...", queryError);
+            console.warn("Aviso: Verificação de duplicidade pulada.", queryError);
         }
 
         const { id, ...data } = log;
         
-        // Sanitização: Remove undefined para evitar rejeição do Firestore
         const safeData = {
             ...data,
-            staffPhotoUrl: data.staffPhotoUrl || null, // Garante que não é undefined
+            staffPhotoUrl: data.staffPhotoUrl || null,
         };
 
         await addDoc(collection(db, STAFF_LOGS_COLLECTION), safeData);
@@ -361,4 +359,25 @@ export const listenToSystemConfig = (callback: (config: SystemConfig) => void) =
 
 export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
     await setDoc(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), config);
+};
+
+// --- EVENTS & AGENDA (NEW) ---
+export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
+    return onSnapshot(collection(db, EVENTS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
+    });
+};
+
+export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
+    const { id, ...data } = event;
+    const sanitized = JSON.parse(JSON.stringify(data)); // Remove undefined
+    if (id) {
+        await setDoc(doc(db, EVENTS_COLLECTION, id), sanitized);
+    } else {
+        await addDoc(collection(db, EVENTS_COLLECTION), sanitized);
+    }
+};
+
+export const deleteSchoolEvent = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, EVENTS_COLLECTION, id));
 };

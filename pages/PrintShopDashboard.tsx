@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
     getExams, 
@@ -15,7 +15,10 @@ import {
     listenToSystemConfig,
     updateSystemConfig,
     listenToAttendanceLogs,
-    getStaffMembers
+    getStaffMembers,
+    listenToEvents,
+    saveSchoolEvent,
+    deleteSchoolEvent
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -25,7 +28,9 @@ import {
     LessonPlan, 
     SystemConfig, 
     AttendanceLog,
-    StaffMember
+    StaffMember,
+    SchoolEvent,
+    EventTask
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -60,7 +65,11 @@ import {
   ListPlus,
   Eraser,
   X,
-  Eye
+  Eye,
+  ChevronLeft,
+  ChevronRight,
+  ArrowLeft,
+  User
 } from 'lucide-react';
 // @ts-ignore
 import * as faceapi from 'face-api.js';
@@ -97,7 +106,7 @@ const CLASSES = [
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'classes' | 'attendance' | 'schedule' | 'planning' | 'config' | 'staff_board'>('exams');
+    const [activeTab, setActiveTab] = useState<'calendar' | 'exams' | 'students' | 'classes' | 'attendance' | 'schedule' | 'planning' | 'config' | 'staff_board'>('calendar');
     const [isLoading, setIsLoading] = useState(false);
 
     // --- STATES: EXAMS ---
@@ -147,8 +156,27 @@ export const PrintShopDashboard: React.FC = () => {
     // --- STATES: CONFIG ---
     const [config, setConfig] = useState<SystemConfig>({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
 
+    // --- STATES: CALENDAR (AGENDA) ---
+    const [events, setEvents] = useState<SchoolEvent[]>([]);
+    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
+    const [showEventModal, setShowEventModal] = useState(false);
+    
+    // Event Form State
+    const [newEventTitle, setNewEventTitle] = useState('');
+    const [newEventDate, setNewEventDate] = useState('');
+    const [newEventType, setNewEventType] = useState<'event'|'holiday'|'exam'|'meeting'>('event');
+    const [newEventDesc, setNewEventDesc] = useState('');
+    
+    // Kanban Task Form State
+    const [taskDesc, setTaskDesc] = useState('');
+    const [taskMaterials, setTaskMaterials] = useState('');
+    const [taskAssigneeId, setTaskAssigneeId] = useState('');
+
     // --- LOAD DATA ---
     useEffect(() => {
+        loadStaff(); // Load staff for both board and kanban assignment
+
         if (activeTab === 'exams') loadExams();
         
         if (activeTab === 'students' || activeTab === 'classes' || activeTab === 'attendance') {
@@ -157,11 +185,15 @@ export const PrintShopDashboard: React.FC = () => {
         }
         if (activeTab === 'schedule') loadSchedule();
         if (activeTab === 'planning') loadPlans();
-        if (activeTab === 'staff_board') loadStaff();
         if (activeTab === 'config') {
             const unsub = listenToSystemConfig((c) => setConfig(c));
             return () => unsub();
         }
+        
+        // Always listen to events for the default tab
+        const unsubEvents = listenToEvents((data) => setEvents(data));
+        return () => unsubEvents();
+
     }, [activeTab]);
 
     // Listener Real-time para Frequência
@@ -426,6 +458,111 @@ export const PrintShopDashboard: React.FC = () => {
         alert("Configurações atualizadas com sucesso!");
     };
 
+    // --- ACTIONS: CALENDAR & EVENTS ---
+    const handleAddEvent = async () => {
+        if (!newEventTitle || !newEventDate) return alert("Preencha título e data.");
+        
+        const newEvent: SchoolEvent = {
+            id: selectedEvent?.id || '',
+            title: newEventTitle,
+            date: newEventDate,
+            type: newEventType,
+            description: newEventDesc,
+            tasks: selectedEvent?.tasks || []
+        };
+
+        try {
+            await saveSchoolEvent(newEvent);
+            setShowEventModal(false);
+            setNewEventTitle(''); setNewEventDate(''); setNewEventDesc('');
+            setSelectedEvent(null);
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao salvar evento");
+        }
+    };
+
+    const handleDeleteEvent = async (id: string) => {
+        if (confirm("Excluir este evento e todas as tarefas?")) {
+            await deleteSchoolEvent(id);
+            setShowEventModal(false);
+        }
+    };
+
+    const handleAddTask = async () => {
+        if (!selectedEvent || !taskDesc) return;
+        
+        const assignee = staffList.find(s => s.id === taskAssigneeId);
+        
+        const newTask: EventTask = {
+            id: Date.now().toString(),
+            description: taskDesc,
+            materials: taskMaterials,
+            assigneeId: taskAssigneeId,
+            assigneeName: assignee ? assignee.name : 'Não atribuído',
+            status: 'todo'
+        };
+
+        const updatedEvent = {
+            ...selectedEvent,
+            tasks: [...selectedEvent.tasks, newTask]
+        };
+
+        // Otimistic update
+        setSelectedEvent(updatedEvent);
+        setTaskDesc(''); setTaskMaterials(''); setTaskAssigneeId('');
+        
+        // Save to DB
+        await saveSchoolEvent(updatedEvent);
+    };
+
+    const handleMoveTask = async (taskId: string, direction: 'forward' | 'back') => {
+        if (!selectedEvent) return;
+        
+        const updatedTasks = selectedEvent.tasks.map(t => {
+            if (t.id !== taskId) return t;
+            
+            let newStatus = t.status;
+            if (direction === 'forward') {
+                if (t.status === 'todo') newStatus = 'doing';
+                else if (t.status === 'doing') newStatus = 'done';
+            } else {
+                if (t.status === 'done') newStatus = 'doing';
+                else if (t.status === 'doing') newStatus = 'todo';
+            }
+            return { ...t, status: newStatus };
+        });
+
+        const updatedEvent = { ...selectedEvent, tasks: updatedTasks };
+        setSelectedEvent(updatedEvent); // Update UI immediately
+        await saveSchoolEvent(updatedEvent); // Sync DB
+    };
+
+    const handleDeleteTask = async (taskId: string) => {
+        if (!selectedEvent) return;
+        const updatedTasks = selectedEvent.tasks.filter(t => t.id !== taskId);
+        const updatedEvent = { ...selectedEvent, tasks: updatedTasks };
+        setSelectedEvent(updatedEvent);
+        await saveSchoolEvent(updatedEvent);
+    };
+
+    const openEventModal = (event?: SchoolEvent) => {
+        if (event) {
+            setSelectedEvent(event);
+            setNewEventTitle(event.title);
+            setNewEventDate(event.date);
+            setNewEventType(event.type);
+            setNewEventDesc(event.description || '');
+        } else {
+            setSelectedEvent(null);
+            setNewEventTitle('');
+            setNewEventDate('');
+            setNewEventType('event');
+            setNewEventDesc('');
+        }
+        setShowEventModal(true);
+    };
+
     // --- HELPERS ---
     const getStudentCountByClass = (classId: string) => {
         return students.filter(s => s.classId === classId).length;
@@ -469,6 +606,94 @@ export const PrintShopDashboard: React.FC = () => {
         return matchClass && matchType;
     });
 
+    // --- CALENDAR RENDER ---
+    const renderCalendar = () => {
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const startingDay = firstDay.getDay(); // 0 = Sunday
+        const totalDays = lastDay.getDate();
+        
+        const monthName = firstDay.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+        const days = [];
+        // Empty cells for previous month
+        for (let i = 0; i < startingDay; i++) {
+            days.push(<div key={`empty-${i}`} className="bg-[#121212] border border-gray-800/50 min-h-[100px]"></div>);
+        }
+        
+        // Days
+        for (let day = 1; day <= totalDays; day++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dayEvents = events.filter(e => e.date === dateStr);
+            const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+            days.push(
+                <div key={day} className={`bg-[#121212] border border-gray-800/50 min-h-[120px] p-2 relative hover:bg-[#1a1a1a] transition-colors group`}>
+                    <span className={`text-sm font-bold ${isToday ? 'bg-red-600 text-white w-6 h-6 flex items-center justify-center rounded-full' : 'text-gray-400'}`}>
+                        {day}
+                    </span>
+                    <button 
+                        onClick={() => {
+                            setNewEventDate(dateStr);
+                            openEventModal();
+                        }}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-700 rounded text-gray-400 transition-opacity"
+                    >
+                        <Plus size={14}/>
+                    </button>
+                    <div className="mt-2 space-y-1">
+                        {dayEvents.map(ev => (
+                            <div 
+                                key={ev.id} 
+                                onClick={(e) => { e.stopPropagation(); openEventModal(ev); }}
+                                className={`text-xs p-1.5 rounded cursor-pointer truncate font-medium border-l-2 ${
+                                    ev.type === 'holiday' ? 'bg-red-900/20 text-red-300 border-red-500' :
+                                    ev.type === 'exam' ? 'bg-purple-900/20 text-purple-300 border-purple-500' :
+                                    ev.type === 'meeting' ? 'bg-blue-900/20 text-blue-300 border-blue-500' :
+                                    'bg-green-900/20 text-green-300 border-green-500'
+                                }`}
+                            >
+                                {ev.title}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="animate-in fade-in slide-in-from-right-4">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h1 className="text-3xl font-bold text-white flex items-center gap-2"><CalendarDays className="text-red-500"/> Agenda Institucional</h1>
+                        <p className="text-gray-400">Controle de eventos, processos e gestão de materiais</p>
+                    </div>
+                    <div className="flex items-center gap-4 bg-white/5 p-1 rounded-lg">
+                        <button onClick={() => setCurrentMonth(new Date(year, month - 1))} className="p-2 hover:bg-white/10 rounded text-white"><ChevronLeft size={20}/></button>
+                        <span className="font-bold text-lg text-white w-48 text-center">{capitalizedMonth}</span>
+                        <button onClick={() => setCurrentMonth(new Date(year, month + 1))} className="p-2 hover:bg-white/10 rounded text-white"><ChevronRight size={20}/></button>
+                    </div>
+                    <Button onClick={() => openEventModal()}>
+                        <Plus size={18} className="mr-2"/> Novo Evento
+                    </Button>
+                </div>
+
+                <div className="grid grid-cols-7 gap-px bg-gray-800 rounded-lg overflow-hidden shadow-2xl border border-gray-700">
+                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                        <div key={d} className="bg-[#18181b] p-3 text-center font-bold text-gray-500 text-sm uppercase tracking-wider">
+                            {d}
+                        </div>
+                    ))}
+                    {days}
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
             
@@ -476,6 +701,7 @@ export const PrintShopDashboard: React.FC = () => {
             <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
                 <div className="mb-6">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Painel Escolar</p>
+                    <SidebarItem id="calendar" label="Agenda / Eventos" icon={CalendarDays} />
                     <SidebarItem id="exams" label="Gráfica / Impressão" icon={Printer} />
                     <SidebarItem id="classes" label="Gestão de Turmas" icon={School} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
@@ -491,6 +717,181 @@ export const PrintShopDashboard: React.FC = () => {
             {/* MAIN CONTENT */}
             <div className="flex-1 overflow-y-auto p-8">
                 
+                {/* --- TAB: CALENDAR (NEW DEFAULT) --- */}
+                {activeTab === 'calendar' && renderCalendar()}
+
+                {/* --- EVENT MODAL WITH KANBAN --- */}
+                {showEventModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-[#18181b] w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-2xl border border-gray-700 flex overflow-hidden">
+                            
+                            {/* Left Side: Event Details */}
+                            <div className="w-1/3 bg-[#121212] border-r border-gray-800 p-6 flex flex-col">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-xl font-bold text-white">{selectedEvent ? 'Detalhes do Evento' : 'Novo Evento'}</h2>
+                                    <button onClick={() => setShowEventModal(false)} className="text-gray-400 hover:text-white"><X size={20}/></button>
+                                </div>
+                                
+                                <div className="space-y-4 flex-1">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título</label>
+                                        <input className="w-full bg-[#18181b] border border-gray-700 rounded p-2 text-white" value={newEventTitle} onChange={e => setNewEventTitle(e.target.value)} placeholder="Ex: Festa Junina"/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data</label>
+                                        <input type="date" className="w-full bg-[#18181b] border border-gray-700 rounded p-2 text-white" value={newEventDate} onChange={e => setNewEventDate(e.target.value)}/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label>
+                                        <select className="w-full bg-[#18181b] border border-gray-700 rounded p-2 text-white" value={newEventType} onChange={e => setNewEventType(e.target.value as any)}>
+                                            <option value="event">Evento Escolar</option>
+                                            <option value="holiday">Feriado</option>
+                                            <option value="exam">Período de Provas</option>
+                                            <option value="meeting">Reunião</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
+                                        <textarea className="w-full bg-[#18181b] border border-gray-700 rounded p-2 text-white h-32" value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)} placeholder="Detalhes gerais..."/>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 flex justify-end gap-2 border-t border-gray-800 pt-4">
+                                    {selectedEvent && (
+                                        <Button variant="danger" onClick={() => handleDeleteEvent(selectedEvent.id)} className="bg-red-900/30 text-red-500 hover:bg-red-900/50 border-none">
+                                            Excluir
+                                        </Button>
+                                    )}
+                                    <Button onClick={handleAddEvent}>
+                                        <Save size={16} className="mr-2"/> Salvar Detalhes
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Right Side: Kanban Board */}
+                            <div className="w-2/3 bg-[#0f0f10] p-6 flex flex-col">
+                                <div className="mb-4">
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2"><Layout size={18} className="text-blue-500"/> Processos e Materiais (Kanban)</h3>
+                                    <p className="text-sm text-gray-500">Gerencie as tarefas, responsáveis e materiais necessários para este evento.</p>
+                                </div>
+
+                                {selectedEvent ? (
+                                    <>
+                                        {/* New Task Input */}
+                                        <div className="bg-[#18181b] p-4 rounded-xl border border-gray-800 mb-6 grid grid-cols-12 gap-3">
+                                            <div className="col-span-4">
+                                                <input className="w-full bg-black/20 border border-gray-700 rounded p-2 text-sm text-white" placeholder="O que precisa ser feito?" value={taskDesc} onChange={e => setTaskDesc(e.target.value)} />
+                                            </div>
+                                            <div className="col-span-3">
+                                                <input className="w-full bg-black/20 border border-gray-700 rounded p-2 text-sm text-white" placeholder="Materiais necessários..." value={taskMaterials} onChange={e => setTaskMaterials(e.target.value)} />
+                                            </div>
+                                            <div className="col-span-3">
+                                                <select className="w-full bg-black/20 border border-gray-700 rounded p-2 text-sm text-white" value={taskAssigneeId} onChange={e => setTaskAssigneeId(e.target.value)}>
+                                                    <option value="">Responsável...</option>
+                                                    {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <Button onClick={handleAddTask} className="w-full h-full text-xs">Adicionar</Button>
+                                            </div>
+                                        </div>
+
+                                        {/* Board Columns */}
+                                        <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden">
+                                            {/* TODO */}
+                                            <div className="bg-[#18181b] rounded-xl flex flex-col h-full border border-gray-800">
+                                                <div className="p-3 border-b border-gray-800 font-bold text-gray-400 text-xs uppercase tracking-wider flex justify-between">
+                                                    <span>A Fazer</span>
+                                                    <span className="bg-gray-800 px-2 rounded text-white">{selectedEvent.tasks.filter(t => t.status === 'todo').length}</span>
+                                                </div>
+                                                <div className="p-2 space-y-2 overflow-y-auto flex-1">
+                                                    {selectedEvent.tasks.filter(t => t.status === 'todo').map(task => (
+                                                        <div key={task.id} className="bg-[#27272a] p-3 rounded-lg border border-gray-700 hover:border-blue-500 transition-colors group">
+                                                            <p className="text-sm font-bold text-white mb-1">{task.description}</p>
+                                                            {task.materials && <p className="text-xs text-gray-400 mb-2 flex items-center gap-1"><Briefcase size={10}/> {task.materials}</p>}
+                                                            <div className="flex justify-between items-center mt-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center text-[8px] font-bold text-white" title={task.assigneeName}>
+                                                                        {task.assigneeName.charAt(0)}
+                                                                    </div>
+                                                                    <span className="text-[10px] text-gray-500 truncate max-w-[60px]">{task.assigneeName.split(' ')[0]}</span>
+                                                                </div>
+                                                                <div className="flex gap-1">
+                                                                    <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-red-500 hover:bg-red-900/20 rounded"><Trash2 size={12}/></button>
+                                                                    <button onClick={() => handleMoveTask(task.id, 'forward')} className="p-1 text-blue-500 hover:bg-blue-900/20 rounded"><ArrowRight size={12}/></button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* DOING */}
+                                            <div className="bg-[#18181b] rounded-xl flex flex-col h-full border border-blue-900/30">
+                                                <div className="p-3 border-b border-gray-800 font-bold text-blue-400 text-xs uppercase tracking-wider flex justify-between">
+                                                    <span>Em Andamento</span>
+                                                    <span className="bg-blue-900/50 px-2 rounded text-white">{selectedEvent.tasks.filter(t => t.status === 'doing').length}</span>
+                                                </div>
+                                                <div className="p-2 space-y-2 overflow-y-auto flex-1">
+                                                    {selectedEvent.tasks.filter(t => t.status === 'doing').map(task => (
+                                                        <div key={task.id} className="bg-[#1e293b] p-3 rounded-lg border border-blue-800 hover:border-blue-500 transition-colors group">
+                                                            <p className="text-sm font-bold text-white mb-1">{task.description}</p>
+                                                            {task.materials && <p className="text-xs text-blue-200/70 mb-2 flex items-center gap-1"><Briefcase size={10}/> {task.materials}</p>}
+                                                            <div className="flex justify-between items-center mt-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white" title={task.assigneeName}>
+                                                                        {task.assigneeName.charAt(0)}
+                                                                    </div>
+                                                                    <span className="text-[10px] text-blue-300 truncate max-w-[60px]">{task.assigneeName.split(' ')[0]}</span>
+                                                                </div>
+                                                                <div className="flex gap-1">
+                                                                    <button onClick={() => handleMoveTask(task.id, 'back')} className="p-1 text-gray-400 hover:bg-gray-700 rounded"><ArrowLeft size={12}/></button>
+                                                                    <button onClick={() => handleMoveTask(task.id, 'forward')} className="p-1 text-green-500 hover:bg-green-900/20 rounded"><ArrowRight size={12}/></button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* DONE */}
+                                            <div className="bg-[#18181b] rounded-xl flex flex-col h-full border border-green-900/30">
+                                                <div className="p-3 border-b border-gray-800 font-bold text-green-400 text-xs uppercase tracking-wider flex justify-between">
+                                                    <span>Concluído</span>
+                                                    <span className="bg-green-900/50 px-2 rounded text-white">{selectedEvent.tasks.filter(t => t.status === 'done').length}</span>
+                                                </div>
+                                                <div className="p-2 space-y-2 overflow-y-auto flex-1">
+                                                    {selectedEvent.tasks.filter(t => t.status === 'done').map(task => (
+                                                        <div key={task.id} className="bg-[#142319] p-3 rounded-lg border border-green-900 hover:border-green-600 transition-colors group opacity-70 hover:opacity-100">
+                                                            <p className="text-sm font-bold text-gray-300 mb-1 line-through decoration-green-500">{task.description}</p>
+                                                            <div className="flex justify-between items-center mt-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-5 h-5 rounded-full bg-green-800 flex items-center justify-center text-[8px] font-bold text-white" title={task.assigneeName}>
+                                                                        {task.assigneeName.charAt(0)}
+                                                                    </div>
+                                                                    <span className="text-[10px] text-green-600 font-bold">FEITO</span>
+                                                                </div>
+                                                                <div className="flex gap-1">
+                                                                    <button onClick={() => handleMoveTask(task.id, 'back')} className="p-1 text-gray-400 hover:bg-gray-700 rounded"><ArrowLeft size={12}/></button>
+                                                                    <button onClick={() => handleDeleteTask(task.id)} className="p-1 text-red-900 hover:text-red-500 hover:bg-red-900/20 rounded"><Trash2 size={12}/></button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-gray-500 border-2 border-dashed border-gray-800 rounded-xl">
+                                        <p>Salve o evento primeiro para gerenciar tarefas.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* --- TAB: EXAMS --- */}
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
