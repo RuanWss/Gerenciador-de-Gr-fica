@@ -27,7 +27,7 @@ import {
     ScheduleEntry, 
     LessonPlan, 
     SystemConfig, 
-    AttendanceLog,
+    AttendanceLog, 
     StaffMember,
     SchoolEvent,
     EventTask
@@ -550,7 +550,7 @@ export const PrintShopDashboard: React.FC = () => {
         await saveSchoolEvent(updatedEvent);
     };
 
-    const openEventModal = (event?: SchoolEvent) => {
+    const openEventModal = (event?: SchoolEvent, prefillDate?: string) => {
         if (event) {
             setSelectedEvent(event);
             setNewEventTitle(event.title);
@@ -560,7 +560,7 @@ export const PrintShopDashboard: React.FC = () => {
         } else {
             setSelectedEvent(null);
             setNewEventTitle('');
-            setNewEventDate('');
+            setNewEventDate(prefillDate || '');
             setNewEventType('event');
             setNewEventDesc('');
         }
@@ -642,8 +642,7 @@ export const PrintShopDashboard: React.FC = () => {
                     </span>
                     <button 
                         onClick={() => {
-                            setNewEventDate(dateStr);
-                            openEventModal();
+                            openEventModal(undefined, dateStr);
                         }}
                         className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-700 rounded text-gray-400 transition-opacity"
                     >
