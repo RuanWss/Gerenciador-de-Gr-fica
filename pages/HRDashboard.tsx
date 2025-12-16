@@ -7,7 +7,8 @@ import {
     uploadStaffPhoto, 
     listenToStaffMembers, 
     listenToStaffLogs,
-    createSystemUserAuth
+    createSystemUserAuth,
+    updateSystemUserRoles
 } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog, UserRole } from '../types';
 import { Button } from '../components/Button';
@@ -121,21 +122,33 @@ export const HRDashboard: React.FC = () => {
                 await saveStaffMember(dataToSave);
             }
 
-            // LOGIN CREATION LOGIC
-            if (createLogin && formData.email) {
-                try {
-                    const roles: UserRole[] = [];
-                    if (formData.isAdmin) roles.push(UserRole.PRINTSHOP);
-                    if (formData.isTeacher) roles.push(UserRole.TEACHER);
-                    
-                    if (roles.length === 0) roles.push(UserRole.HR);
+            // LOGIN / PERMISSION UPDATE LOGIC
+            if (formData.email) {
+                const roles: UserRole[] = [];
+                if (formData.isAdmin) roles.push(UserRole.PRINTSHOP);
+                if (formData.isTeacher) roles.push(UserRole.TEACHER);
+                if (roles.length === 0) roles.push(UserRole.HR); // Fallback
 
-                    await createSystemUserAuth(formData.email, formData.name || 'Funcionário', roles);
-                } catch (err: any) {
-                    if (err.code !== 'auth/email-already-in-use') {
-                         console.error("Erro ao criar login:", err);
-                         alert("Aviso: O cadastro foi salvo, mas houve erro ao criar o login de acesso: " + err.message);
+                // Caso 1: Usuário quer criar login explicitamente
+                if (createLogin) {
+                    try {
+                        await createSystemUserAuth(formData.email, formData.name || 'Funcionário', roles);
+                        alert("Login criado com sucesso!");
+                    } catch (err: any) {
+                        if (err.code === 'auth/email-already-in-use') {
+                             // Se já existe, atualizamos as roles (útil se mudou isAdmin ou isTeacher)
+                             console.log("Email já existe, atualizando permissões...");
+                             await updateSystemUserRoles(formData.email, roles);
+                             alert("Cadastro salvo. As permissões de acesso foram atualizadas para o login existente.");
+                        } else {
+                             console.error("Erro ao criar login:", err);
+                             alert("Aviso: O cadastro foi salvo, mas houve erro ao criar o login de acesso: " + err.message);
+                        }
                     }
+                } 
+                // Caso 2: Usuário já existia (edição) e tem email, atualizamos roles silenciosamente ou explicitamente se estiver editando
+                else if (editingId) {
+                    await updateSystemUserRoles(formData.email, roles);
                 }
             }
 

@@ -85,6 +85,24 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
     }
 };
 
+export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const userData = userDoc.data();
+        
+        // Determine active role: maintain current if valid, otherwise pick first from new list
+        const newActiveRole = roles.includes(userData.role) ? userData.role : roles[0];
+
+        await updateDoc(userDoc.ref, { 
+            roles: roles,
+            role: newActiveRole
+        });
+    }
+};
+
 // --- EXAMS ---
 export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
     let q;
