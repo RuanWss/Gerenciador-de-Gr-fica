@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
     saveStaffMember, 
@@ -40,7 +41,7 @@ export const HRDashboard: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<Partial<StaffMember>>({
-        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, email: ''
+        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: ''
     });
     const [createLogin, setCreateLogin] = useState(false);
     const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -109,6 +110,7 @@ export const HRDashboard: React.FC = () => {
                 photoUrl: photoUrl,
                 workPeriod: formData.workPeriod || 'morning',
                 isTeacher: formData.isTeacher || false,
+                isAdmin: formData.isAdmin || false,
                 weeklyClasses: formData.weeklyClasses,
                 email: formData.email || ''
             };
@@ -122,8 +124,13 @@ export const HRDashboard: React.FC = () => {
             // LOGIN CREATION LOGIC
             if (createLogin && formData.email) {
                 try {
-                    const role = formData.isTeacher ? UserRole.TEACHER : UserRole.HR;
-                    await createSystemUserAuth(formData.email, formData.name || 'Funcionário', role);
+                    const roles: UserRole[] = [];
+                    if (formData.isAdmin) roles.push(UserRole.PRINTSHOP);
+                    if (formData.isTeacher) roles.push(UserRole.TEACHER);
+                    
+                    if (roles.length === 0) roles.push(UserRole.HR);
+
+                    await createSystemUserAuth(formData.email, formData.name || 'Funcionário', roles);
                 } catch (err: any) {
                     if (err.code !== 'auth/email-already-in-use') {
                          console.error("Erro ao criar login:", err);
@@ -144,7 +151,7 @@ export const HRDashboard: React.FC = () => {
 
     const resetForm = () => {
         setEditingId(null);
-        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, email: '' });
+        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '' });
         setCreateLogin(false);
         setPhotoFile(null);
         setPhotoPreview(null);
@@ -237,7 +244,7 @@ export const HRDashboard: React.FC = () => {
 
                                             {/* ÁREA DE LOGIN E PERMISSÕES */}
                                             <div className="md:col-span-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100 mt-2">
-                                                <div className="flex items-center gap-6 mb-4">
+                                                <div className="flex flex-wrap items-center gap-6 mb-4">
                                                     <label className="flex items-center gap-2 cursor-pointer">
                                                         <input type="checkbox" className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500" checked={formData.active} onChange={e => setFormData({...formData, active: e.target.checked})} />
                                                         <span className="text-sm font-bold text-gray-700">Cadastro Ativo</span>
@@ -245,6 +252,10 @@ export const HRDashboard: React.FC = () => {
                                                     <label className="flex items-center gap-2 cursor-pointer">
                                                         <input type="checkbox" className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500" checked={formData.isTeacher} onChange={e => setFormData({...formData, isTeacher: e.target.checked})} />
                                                         <span className="text-sm font-bold text-gray-700">É Professor?</span>
+                                                    </label>
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" className="w-5 h-5 text-brand-600 rounded focus:ring-brand-500" checked={formData.isAdmin} onChange={e => setFormData({...formData, isAdmin: e.target.checked})} />
+                                                        <span className="text-sm font-bold text-gray-700">Acesso Painel Admin</span>
                                                     </label>
                                                 </div>
 

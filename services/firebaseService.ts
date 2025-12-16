@@ -49,7 +49,7 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
     }
 };
 
-export const createSystemUserAuth = async (email: string, name: string, role: UserRole): Promise<void> => {
+export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
     // Use a unique app name to avoid conflicts and signing out the current user
     const appName = "SecondaryApp-" + Date.now();
     const secondaryApp = initializeApp(firebaseConfig, appName);
@@ -64,7 +64,8 @@ export const createSystemUserAuth = async (email: string, name: string, role: Us
             id: userCredential.user.uid,
             name: name,
             email: email,
-            role: role,
+            role: roles[0], // Role ativa padrão (primeira da lista)
+            roles: roles,   // Lista de roles permitidas
             subject: '',
             classes: []
         };

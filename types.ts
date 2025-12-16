@@ -99,6 +99,7 @@ export interface StaffMember {
   // Novos campos de Jornada
   workPeriod?: 'morning' | 'afternoon' | 'full';
   isTeacher?: boolean;
+  isAdmin?: boolean; // Novo: Acesso ao Painel Administrativo
   weeklyClasses?: {
       monday: number;
       tuesday: number;
