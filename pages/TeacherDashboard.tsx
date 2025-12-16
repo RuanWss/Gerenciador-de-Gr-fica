@@ -728,20 +728,20 @@ export const TeacherDashboard: React.FC = () => {
   // Helper para renderizar a Pré-visualização
   const renderPreviewContent = () => {
       if (aiGeneratedContent) {
-          return <div className="prose prose-sm max-w-none text-justify font-serif" dangerouslySetInnerHTML={{ __html: aiGeneratedContent }} />;
+          return <div className="prose prose-sm max-w-none text-justify font-serif text-gray-800" dangerouslySetInnerHTML={{ __html: aiGeneratedContent }} />;
       }
       
       if (filePreviewUrl || existingFileUrl) {
           return (
-              <div className="w-full flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-lg p-8 bg-gray-50 min-h-[400px]">
+              <div className="w-full flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-8 bg-white min-h-[400px]">
                   <img src={filePreviewUrl || existingFileUrl || ''} alt="Preview" className="max-w-full h-auto shadow-md" />
               </div>
           );
       }
 
       return (
-          <div className="text-center py-20 text-gray-300">
-              <p>Área de Conteúdo</p>
+          <div className="text-center py-20 text-gray-300 border-2 border-dashed border-gray-200 rounded-lg">
+              <p>Área de Conteúdo (Vazia)</p>
           </div>
       );
   };
@@ -1501,21 +1501,74 @@ export const TeacherDashboard: React.FC = () => {
                         </div>
                     </div>
                     {/* Right Panel (Preview) */}
-                    <div className="flex-1 bg-gray-100 p-8 overflow-y-auto flex justify-center relative">
-                        <div className="absolute top-4 right-4 flex bg-white rounded-lg shadow-sm border border-gray-200 p-1">
+                    <div className="flex-1 bg-gray-200/80 p-8 overflow-y-auto flex justify-center relative custom-scrollbar">
+                        <div className="absolute top-4 right-4 flex bg-white rounded-lg shadow-sm border border-gray-200 p-1 z-10">
                             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-2 hover:bg-gray-100 rounded text-gray-500"><ZoomOut size={16}/></button>
                             <button onClick={() => setZoomLevel(z => Math.min(1.5, z + 0.1))} className="p-2 hover:bg-gray-100 rounded text-gray-500"><ZoomIn size={16}/></button>
                         </div>
-                        <div className="bg-white shadow-2xl transition-all duration-300 origin-top" style={{ width: '210mm', minHeight: '297mm', padding: '20mm', transform: `scale(${zoomLevel})`, marginBottom: '100px' }}>
-                            <div className="mb-6">
+                        <div className="bg-white shadow-2xl transition-all duration-300 origin-top text-gray-900" style={{ width: '210mm', minHeight: '297mm', padding: '15mm', transform: `scale(${zoomLevel})`, marginBottom: '100px' }}>
+                            
+                            {/* 1. Official Header Image */}
+                            <div className="mb-4">
                                 <img src={materialType === 'exam' ? HEADER_EXAM_URL : HEADER_HANDOUT_URL} alt="Cabeçalho" className="w-full h-auto object-contain" />
-                                <div className="mt-4 flex flex-col gap-2 border-b border-gray-300 pb-4 mb-4 font-sans text-sm">
-                                    <div className="flex justify-between"><p><span className="font-bold">Professor:</span> {user?.name}</p><p><span className="font-bold">Disciplina:</span> {user?.subject}</p></div>
-                                    <div className="flex justify-between"><p><span className="font-bold">Turma:</span> {selectedClassForExam}</p><p><span className="font-bold">Data:</span> ____/____/____</p></div>
-                                </div>
-                                <div className="mb-6"><h2 className="text-xl font-bold text-center uppercase tracking-wide text-gray-900">{docTitle}</h2>{docSubtitle && <p className="text-center text-gray-500 text-sm italic mt-1">{docSubtitle}</p>}</div>
                             </div>
-                            <div className={docColumns === 2 ? "columns-2 gap-8" : ""}>
+
+                            {/* 2. Structured Metadata Box */}
+                            <div className="border-2 border-gray-800 rounded-sm mb-6 font-sans text-sm">
+                                {/* Student Name Row */}
+                                <div className="border-b border-gray-800 p-2 flex items-end">
+                                    <span className="font-bold mr-2 uppercase text-xs">Aluno(a):</span>
+                                    <div className="flex-1 border-b border-gray-400 border-dashed h-4"></div>
+                                </div>
+                                
+                                {/* Info Grid */}
+                                <div className="grid grid-cols-12 divide-x-2 divide-gray-800">
+                                    <div className="col-span-6 p-2">
+                                        <span className="font-bold block text-[10px] uppercase text-gray-500">Professor(a)</span>
+                                        <span className="truncate block font-medium">{user?.name}</span>
+                                    </div>
+                                    <div className="col-span-3 p-2">
+                                        <span className="font-bold block text-[10px] uppercase text-gray-500">Turma</span>
+                                        <span className="truncate block font-medium">{selectedClassForExam}</span>
+                                    </div>
+                                    <div className="col-span-3 p-2">
+                                        <span className="font-bold block text-[10px] uppercase text-gray-500">Data</span>
+                                        <span className="block font-medium">___/___/____</span>
+                                    </div>
+                                </div>
+
+                                {/* Subject & Score Row */}
+                                <div className="border-t-2 border-gray-800 grid grid-cols-12 divide-x-2 divide-gray-800">
+                                     <div className="col-span-8 p-2">
+                                        <span className="font-bold block text-[10px] uppercase text-gray-500">Componente Curricular</span>
+                                        <span className="truncate block font-bold uppercase">{user?.subject || 'Geral'}</span>
+                                    </div>
+                                    {materialType === 'exam' && (
+                                        <div className="col-span-4 p-2 bg-gray-50 flex flex-col justify-center items-center">
+                                            <div className="flex items-center gap-2 w-full">
+                                                <span className="font-bold text-xs uppercase">Nota:</span>
+                                                <div className="flex-1 border-b border-gray-800 h-4"></div>
+                                            </div>
+                                            <span className="text-[10px] text-gray-400 mt-1">Valor: {maxScore.toFixed(1)}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* 3. Title & Instructions */}
+                            <div className="mb-8 text-center">
+                                <h2 className="text-2xl font-black uppercase tracking-wide text-gray-900 border-b-2 border-black inline-block pb-1 px-4 mb-2">
+                                    {docTitle || 'TÍTULO DA ATIVIDADE'}
+                                </h2>
+                                {docSubtitle && (
+                                    <div className="mt-2 text-sm text-gray-600 italic border border-gray-300 p-2 rounded bg-gray-50 mx-8">
+                                        {docSubtitle}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* 4. Content Area with improved typography and layout */}
+                            <div className={`${docColumns === 2 ? "columns-2 gap-8 [column-rule:1px_solid_#e5e7eb]" : ""} text-justify leading-relaxed font-serif text-gray-800`}>
                                 {renderPreviewContent()}
                             </div>
                         </div>

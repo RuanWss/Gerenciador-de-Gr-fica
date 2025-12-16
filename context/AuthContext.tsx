@@ -2,13 +2,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { auth } from '../firebaseConfig';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from 'firebase/auth';
 import { getUserProfile } from '../services/firebaseService';
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password?: string) => Promise<boolean>;
   logout: () => void;
+  changePassword: (newPassword: string) => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
 }
@@ -141,8 +142,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const changePassword = async (newPassword: string) => {
+    if (auth.currentUser) {
+      await updatePassword(auth.currentUser, newPassword);
+    } else {
+      throw new Error("Usuário não autenticado");
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, changePassword, isAuthenticated: !!user, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );

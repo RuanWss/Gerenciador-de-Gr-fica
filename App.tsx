@@ -10,15 +10,23 @@ import { StaffAttendanceTerminal } from './pages/StaffAttendanceTerminal';
 import { HRDashboard } from './pages/HRDashboard';
 import { ClassroomFiles } from './pages/ClassroomFiles';
 import { UserRole } from './types';
-import { LogOut, LayoutGrid, Printer } from 'lucide-react';
+import { LogOut, LayoutGrid, Printer, KeyRound, X, Save, AlertCircle } from 'lucide-react';
+import { Button } from './components/Button';
 
 const AppContent: React.FC = () => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, changePassword } = useAuth();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [currentHash, setCurrentHash] = useState(window.location.hash);
   
   // Estado para controlar a role selecionada na sessão (se o usuário tiver múltiplas)
   const [sessionRole, setSessionRole] = useState<UserRole | null>(null);
+
+  // Estados para o Modal de Senha
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -40,6 +48,39 @@ const AppContent: React.FC = () => {
           setSessionRole(null);
       }
   }, [isAuthenticated]);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setPasswordError('');
+
+      if (newPassword.length < 6) {
+          setPasswordError("A senha deve ter pelo menos 6 caracteres.");
+          return;
+      }
+
+      if (newPassword !== confirmPassword) {
+          setPasswordError("As senhas não coincidem.");
+          return;
+      }
+
+      setIsChangingPassword(true);
+      try {
+          await changePassword(newPassword);
+          alert("Senha alterada com sucesso!");
+          setShowPasswordModal(false);
+          setNewPassword('');
+          setConfirmPassword('');
+      } catch (error: any) {
+          console.error(error);
+          if (error.code === 'auth/requires-recent-login') {
+              setPasswordError("Por segurança, faça login novamente antes de alterar a senha.");
+          } else {
+              setPasswordError("Erro ao alterar senha: " + error.message);
+          }
+      } finally {
+          setIsChangingPassword(false);
+      }
+  };
   
   if (currentPath === '/horarios' || currentHash === '#horarios') {
       return <PublicSchedule />;
@@ -156,6 +197,14 @@ const AppContent: React.FC = () => {
                )}
 
                <button 
+                onClick={() => setShowPasswordModal(true)}
+                className="p-2 rounded-md text-gray-400 hover:text-brand-500 hover:bg-brand-500/10 transition-colors"
+                title="Alterar Senha"
+               >
+                 <KeyRound size={20} />
+               </button>
+
+               <button 
                 onClick={logout}
                 className="p-2 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 title="Sair"
@@ -172,6 +221,64 @@ const AppContent: React.FC = () => {
         {activeRole === UserRole.PRINTSHOP && <PrintShopDashboard />}
         {activeRole === UserRole.HR && <HRDashboard />}
       </main>
+
+      {/* MODAL DE ALTERAÇÃO DE SENHA */}
+      {showPasswordModal && (
+          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in zoom-in-95">
+              <div className="bg-[#18181b] border border-gray-800 w-full max-w-md rounded-2xl shadow-2xl p-6">
+                  <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+                      <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                          <KeyRound className="text-brand-500" size={20}/> Alterar Senha
+                      </h3>
+                      <button onClick={() => setShowPasswordModal(false)} className="text-gray-400 hover:text-white transition-colors">
+                          <X size={20}/>
+                      </button>
+                  </div>
+                  
+                  <form onSubmit={handleChangePassword} className="space-y-4">
+                      {passwordError && (
+                          <div className="bg-red-900/20 border border-red-500/50 text-red-400 p-3 rounded-lg text-sm flex items-start gap-2">
+                              <AlertCircle size={16} className="mt-0.5 shrink-0"/>
+                              <span>{passwordError}</span>
+                          </div>
+                      )}
+                      
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nova Senha</label>
+                          <input 
+                              type="password" 
+                              className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all"
+                              placeholder="Mínimo 6 caracteres"
+                              value={newPassword}
+                              onChange={e => setNewPassword(e.target.value)}
+                              required
+                          />
+                      </div>
+                      
+                      <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Confirmar Nova Senha</label>
+                          <input 
+                              type="password" 
+                              className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all"
+                              placeholder="Repita a senha"
+                              value={confirmPassword}
+                              onChange={e => setConfirmPassword(e.target.value)}
+                              required
+                          />
+                      </div>
+
+                      <div className="pt-4 flex justify-end gap-3">
+                          <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="border-gray-700 text-gray-400 hover:bg-white/5 hover:text-white">
+                              Cancelar
+                          </Button>
+                          <Button type="submit" isLoading={isChangingPassword} className="shadow-lg shadow-brand-900/20">
+                              <Save size={16} className="mr-2"/> Salvar Nova Senha
+                          </Button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
     </div>
   );
 };
