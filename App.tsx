@@ -11,7 +11,7 @@ import { HRDashboard } from './pages/HRDashboard';
 import { ClassroomFiles } from './pages/ClassroomFiles';
 import { LibraryDashboard } from './pages/LibraryDashboard';
 import { UserRole } from './types';
-import { LogOut, LayoutGrid, Printer, KeyRound, X, Save, AlertCircle, Book } from 'lucide-react';
+import { LogOut, LayoutGrid, Printer, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School } from 'lucide-react';
 import { Button } from './components/Button';
 
 const AppContent: React.FC = () => {
@@ -131,7 +131,7 @@ const AppContent: React.FC = () => {
                           >
                               <div className="absolute top-0 left-0 w-full h-2 bg-red-600"></div>
                               <div className="h-24 w-24 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-6 group-hover:bg-red-600 group-hover:text-white transition-colors shadow-lg group-hover:scale-110 duration-300">
-                                  <LayoutGrid size={48} />
+                                  <GraduationCap size={48} />
                               </div>
                               <h3 className="text-2xl font-bold text-gray-900 mb-3">Portal do Professor</h3>
                               <p className="text-gray-500 text-sm leading-relaxed">
@@ -147,7 +147,7 @@ const AppContent: React.FC = () => {
                           >
                                <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
                                <div className="h-24 w-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors shadow-lg group-hover:scale-110 duration-300">
-                                  <Printer size={48} />
+                                  <School size={48} />
                               </div>
                               <h3 className="text-2xl font-bold text-gray-900 mb-3">Painel da Escola</h3>
                               <p className="text-gray-500 text-sm leading-relaxed">
