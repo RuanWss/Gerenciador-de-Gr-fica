@@ -65,6 +65,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 classes: []
               });
         }
+        else if (firebaseUser.email === 'loyseferr.biblio@gmail.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Bibliotecária',
+                email: firebaseUser.email,
+                role: UserRole.LIBRARY,
+                subject: '',
+                classes: []
+              });
+        }
         else if (
              firebaseUser.uid === 'QX1GxorHhxU3jPUVXAJVLRndb7E2' || 
              firebaseUser.email === 'graficacemal@gmail.com'

@@ -4,13 +4,13 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
 import { 
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
-    query, where, orderBy, onSnapshot, setDoc, limit 
+    query, where, orderBy, onSnapshot, setDoc, limit, increment 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
-    StaffAttendanceLog, SchoolEvent 
+    StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan 
 } from '../types';
 
 const USERS_COLLECTION = 'users';
@@ -24,6 +24,8 @@ const LESSON_PLANS_COLLECTION = 'lesson_plans';
 const STAFF_COLLECTION = 'staff';
 const STAFF_LOGS_COLLECTION = 'staff_logs';
 const EVENTS_COLLECTION = 'events';
+const LIBRARY_BOOKS_COLLECTION = 'library_books';
+const LIBRARY_LOANS_COLLECTION = 'library_loans';
 
 // --- USERS ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {
@@ -401,4 +403,58 @@ export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
 
 export const deleteSchoolEvent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EVENTS_COLLECTION, id));
+};
+
+// --- LIBRARY ---
+
+export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
+    return onSnapshot(collection(db, LIBRARY_BOOKS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
+    }, (error) => console.error("Error listening to books:", error));
+};
+
+export const saveLibraryBook = async (book: LibraryBook): Promise<void> => {
+    const { id, ...data } = book;
+    if (id) {
+        await setDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id), data);
+    } else {
+        await addDoc(collection(db, LIBRARY_BOOKS_COLLECTION), data);
+    }
+};
+
+export const deleteLibraryBook = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id));
+};
+
+export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) => {
+    return onSnapshot(collection(db, LIBRARY_LOANS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
+    }, (error) => console.error("Error listening to loans:", error));
+};
+
+export const createLoan = async (loan: LibraryLoan): Promise<void> => {
+    // 1. Save Loan
+    const { id, ...data } = loan;
+    await addDoc(collection(db, LIBRARY_LOANS_COLLECTION), data);
+    
+    // 2. Decrement Book Availability
+    const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
+    await updateDoc(bookRef, {
+        availableQuantity: increment(-1)
+    });
+};
+
+export const returnLoan = async (loanId: string, bookId: string): Promise<void> => {
+    // 1. Update Loan Status
+    const loanRef = doc(db, LIBRARY_LOANS_COLLECTION, loanId);
+    await updateDoc(loanRef, {
+        status: 'returned',
+        returnDate: new Date().toISOString().split('T')[0]
+    });
+
+    // 2. Increment Book Availability
+    const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
+    await updateDoc(bookRef, {
+        availableQuantity: increment(1)
+    });
 };

@@ -9,6 +9,7 @@ import { AttendanceTerminal } from './pages/AttendanceTerminal';
 import { StaffAttendanceTerminal } from './pages/StaffAttendanceTerminal';
 import { HRDashboard } from './pages/HRDashboard';
 import { ClassroomFiles } from './pages/ClassroomFiles';
+import { LibraryDashboard } from './pages/LibraryDashboard';
 import { UserRole } from './types';
 import { LogOut, LayoutGrid, Printer, KeyRound, X, Save, AlertCircle } from 'lucide-react';
 import { Button } from './components/Button';
@@ -180,7 +181,10 @@ const AppContent: React.FC = () => {
               />
               <div className="h-8 w-px bg-white/10 hidden sm:block"></div>
               <span className="text-lg font-bold text-gray-200 hidden sm:block">
-                {activeRole === UserRole.TEACHER ? 'Portal do Professor' : activeRole === UserRole.HR ? 'Gestão de RH' : 'Painel da Escola'}
+                {activeRole === UserRole.TEACHER ? 'Portal do Professor' : 
+                 activeRole === UserRole.HR ? 'Gestão de RH' : 
+                 activeRole === UserRole.LIBRARY ? 'Painel da Biblioteca' :
+                 'Painel da Escola'}
               </span>
             </div>
             <div className="flex items-center gap-4">
@@ -220,6 +224,7 @@ const AppContent: React.FC = () => {
         {activeRole === UserRole.TEACHER && <TeacherDashboard />}
         {activeRole === UserRole.PRINTSHOP && <PrintShopDashboard />}
         {activeRole === UserRole.HR && <HRDashboard />}
+        {activeRole === UserRole.LIBRARY && <LibraryDashboard />}
       </main>
 
       {/* MODAL DE ALTERAÇÃO DE SENHA */}

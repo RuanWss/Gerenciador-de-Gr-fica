@@ -5,7 +5,8 @@ export enum UserRole {
   ATTENDANCE_TERMINAL = 'ATTENDANCE_TERMINAL',
   STAFF_TERMINAL = 'STAFF_TERMINAL', // Novo: Quiosque de Ponto da Equipe
   HR = 'HR', // Novo: Recursos Humanos
-  CLASSROOM = 'CLASSROOM' // Novo: Acesso específico para Arquivos da Turma
+  CLASSROOM = 'CLASSROOM', // Novo: Acesso específico para Arquivos da Turma
+  LIBRARY = 'LIBRARY' // Novo: Acesso Bibliotecária
 }
 
 export interface User {
@@ -239,4 +240,31 @@ export interface SchoolEvent {
   type: 'event' | 'holiday' | 'exam' | 'meeting';
   description?: string;
   tasks: EventTask[]; // Array de tarefas Kanban
+}
+
+// --- BIBLIOTECA ---
+
+export interface LibraryBook {
+  id: string;
+  title: string;
+  author: string;
+  isbn?: string;
+  category: string; // Ex: Literatura, Didático, Enciclopédia
+  totalQuantity: number;
+  availableQuantity: number;
+  location?: string; // Ex: Estante A2
+  createdAt: number;
+}
+
+export interface LibraryLoan {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  studentId: string;
+  studentName: string;
+  studentClass: string;
+  loanDate: string; // YYYY-MM-DD
+  dueDate: string; // YYYY-MM-DD
+  returnDate?: string; // YYYY-MM-DD (se devolvido)
+  status: 'active' | 'returned' | 'late';
 }
