@@ -1,4 +1,3 @@
-
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
@@ -10,7 +9,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
-    StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan 
+    StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan, AnswerKey, StudentCorrection 
 } from '../types';
 
 const USERS_COLLECTION = 'users';
@@ -26,6 +25,8 @@ const STAFF_LOGS_COLLECTION = 'staff_logs';
 const EVENTS_COLLECTION = 'events';
 const LIBRARY_BOOKS_COLLECTION = 'library_books';
 const LIBRARY_LOANS_COLLECTION = 'library_loans';
+const ANSWER_KEYS_COLLECTION = 'answer_keys';
+const CORRECTIONS_COLLECTION = 'corrections';
 
 // --- USERS ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {
@@ -52,13 +53,11 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
 };
 
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    // Use a unique app name to avoid conflicts and signing out the current user
     const appName = "SecondaryApp-" + Date.now();
     const secondaryApp = initializeApp(firebaseConfig, appName);
     const secondaryAuth = getAuth(secondaryApp);
     
     try {
-        // Criação com senha padrão solicitada: cemal2016
         const userCredential = await createUser(secondaryAuth, email, "cemal2016");
         await updateProfileAuth(userCredential.user, { displayName: name });
         
@@ -66,19 +65,16 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
             id: userCredential.user.uid,
             name: name,
             email: email,
-            role: roles[0], // Role ativa padrão (primeira da lista)
-            roles: roles,   // Lista de roles permitidas
+            role: roles[0],
+            roles: roles,
             subject: '',
             classes: []
         };
-        // Use main DB instance to save profile
         await setDoc(doc(db, USERS_COLLECTION, user.id), user);
-        
         await signOut(secondaryAuth);
     } catch (error) {
         throw error;
     } finally {
-        // Clean up the secondary app to prevent memory leaks and name conflicts
         try {
             await deleteApp(secondaryApp);
         } catch (e) {
@@ -94,10 +90,7 @@ export const updateSystemUserRoles = async (email: string, roles: UserRole[]): P
     if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
         const userData = userDoc.data();
-        
-        // Determine active role: maintain current if valid, otherwise pick first from new list
         const newActiveRole = roles.includes(userData.role) ? userData.role : roles[0];
-
         await updateDoc(userDoc.ref, { 
             roles: roles,
             role: newActiveRole
@@ -126,17 +119,19 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
     }
 };
 
+// Fix: Added missing updateExamRequest as required by TeacherDashboard.tsx
 export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
     const { id, ...data } = exam;
-    await updateDoc(doc(db, EXAMS_COLLECTION, id), data);
-};
-
-export const deleteExamRequest = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, EXAMS_COLLECTION, id));
+    if (!id) throw new Error("ID is required for updateExamRequest");
+    await updateDoc(doc(db, EXAMS_COLLECTION, id), data as any);
 };
 
 export const updateExamStatus = async (id: string, status: ExamStatus): Promise<void> => {
     await updateDoc(doc(db, EXAMS_COLLECTION, id), { status });
+};
+
+export const deleteExamRequest = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, EXAMS_COLLECTION, id));
 };
 
 export const uploadExamFile = async (file: File): Promise<string> => {
@@ -145,71 +140,37 @@ export const uploadExamFile = async (file: File): Promise<string> => {
     return await getDownloadURL(storageRef);
 };
 
-// --- CLASS MATERIALS ---
-export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
-    let q;
-    if (teacherId) {
-        q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("teacherId", "==", teacherId));
+// --- GABARITOS & CORREÇÃO ---
+export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
+    const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
+};
+
+export const saveAnswerKey = async (key: AnswerKey): Promise<void> => {
+    const { id, ...data } = key;
+    if (id) {
+        await setDoc(doc(db, ANSWER_KEYS_COLLECTION, id), data);
     } else {
-        q = collection(db, CLASS_MATERIALS_COLLECTION);
+        await addDoc(collection(db, ANSWER_KEYS_COLLECTION), data);
     }
+};
+
+export const deleteAnswerKey = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, ANSWER_KEYS_COLLECTION, id));
+};
+
+export const getCorrections = async (answerKeyId: string): Promise<StudentCorrection[]> => {
+    const q = query(collection(db, CORRECTIONS_COLLECTION), where("answerKeyId", "==", answerKeyId));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StudentCorrection));
 };
 
-export const listenToClassMaterials = (className: string, onSuccess: (data: ClassMaterial[]) => void, onError: (error: any) => void) => {
-    const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
-    return onSnapshot(q, (snapshot) => {
-        const materials = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
-        onSuccess(materials);
-    }, onError);
+export const saveCorrection = async (correction: StudentCorrection): Promise<void> => {
+    const { id, ...data } = correction;
+    await addDoc(collection(db, CORRECTIONS_COLLECTION), data);
 };
 
-export const saveClassMaterial = async (material: ClassMaterial): Promise<string> => {
-    const { id, ...data } = material;
-    const docRef = await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), data);
-    return docRef.id;
-};
-
-export const deleteClassMaterial = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, CLASS_MATERIALS_COLLECTION, id));
-};
-
-export const uploadClassMaterialFile = async (file: File, className: string): Promise<string> => {
-    const storageRef = ref(storage, `materials/${className}/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-};
-
-// --- LESSON PLANS ---
-export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
-    let q;
-    if (teacherId) {
-        q = query(collection(db, LESSON_PLANS_COLLECTION), where("teacherId", "==", teacherId));
-    } else {
-        q = collection(db, LESSON_PLANS_COLLECTION);
-    }
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
-};
-
-export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
-    const { id, ...data } = plan;
-    const docRef = await addDoc(collection(db, LESSON_PLANS_COLLECTION), data);
-    return docRef.id;
-};
-
-export const updateLessonPlan = async (plan: LessonPlan): Promise<void> => {
-    const { id, ...data } = plan;
-    if (!id) throw new Error("ID is required for update");
-    await updateDoc(doc(db, LESSON_PLANS_COLLECTION, id), data);
-};
-
-export const deleteLessonPlan = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
-};
-
-// --- STUDENTS ---
+// --- OUTROS MÉTODOS (STUDENTS, ATTENDANCE, STAFF, ETC) ---
 export const getStudents = async (): Promise<Student[]> => {
     const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
@@ -241,7 +202,6 @@ export const uploadStudentPhoto = async (file: File): Promise<string> => {
     return await getDownloadURL(storageRef);
 };
 
-// --- ATTENDANCE ---
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     const q = query(
@@ -250,28 +210,21 @@ export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
         where("timestamp", ">", fiveMinutesAgo)
     );
     const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        return false;
-    }
-    
+    if (!snapshot.empty) return false;
     const { id, ...data } = log;
     await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), data);
     return true;
 };
 
 export const listenToAttendanceLogs = (dateString: string, callback: (logs: AttendanceLog[]) => void) => {
-    const q = query(
-        collection(db, ATTENDANCE_LOGS_COLLECTION), 
-        where("dateString", "==", dateString)
-    );
+    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
     return onSnapshot(q, (snapshot) => {
         const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
         logs.sort((a,b) => b.timestamp - a.timestamp);
         callback(logs);
-    }, (error) => console.error("Error listening to attendance logs:", error));
+    });
 };
 
-// --- STAFF ---
 export const getStaffMembers = async (): Promise<StaffMember[]> => {
     const snapshot = await getDocs(collection(db, STAFF_COLLECTION));
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember));
@@ -280,7 +233,7 @@ export const getStaffMembers = async (): Promise<StaffMember[]> => {
 export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
     return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
-    }, (error) => console.error("Error listening to staff members:", error));
+    });
 };
 
 export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
@@ -306,49 +259,26 @@ export const uploadStaffPhoto = async (file: File): Promise<string> => {
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
     try {
         const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-        
-        try {
-            const q = query(
-                collection(db, STAFF_LOGS_COLLECTION),
-                where("staffId", "==", log.staffId),
-                where("timestamp", ">", twoMinutesAgo)
-            );
-            const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                return 'too_soon';
-            }
-        } catch (queryError) {
-            console.warn("Aviso: Verificação de duplicidade pulada.", queryError);
-        }
-
+        const q = query(collection(db, STAFF_LOGS_COLLECTION), where("staffId", "==", log.staffId), where("timestamp", ">", twoMinutesAgo));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) return 'too_soon';
         const { id, ...data } = log;
-        
-        const safeData = {
-            ...data,
-            staffPhotoUrl: data.staffPhotoUrl || null,
-        };
-
-        await addDoc(collection(db, STAFF_LOGS_COLLECTION), safeData);
+        await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
         return 'success';
     } catch (e) {
-        console.error("Erro fatal ao registrar ponto:", e);
         return 'error';
     }
 };
 
 export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
-    const q = query(
-        collection(db, STAFF_LOGS_COLLECTION), 
-        where("dateString", "==", dateString)
-    );
+    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
     return onSnapshot(q, (snapshot) => {
         const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
         logs.sort((a,b) => b.timestamp - a.timestamp);
         callback(logs);
-    }, (error) => console.error("Error listening to staff logs:", error));
+    });
 };
 
-// --- SCHEDULE ---
 export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
     const snapshot = await getDocs(collection(db, SCHEDULE_COLLECTION));
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry));
@@ -356,27 +286,19 @@ export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
 
 export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
     const { id, ...data } = entry;
-    const docRef = doc(db, SCHEDULE_COLLECTION, id);
-    await setDoc(docRef, data);
+    await setDoc(doc(db, SCHEDULE_COLLECTION, id), data);
 };
 
 export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
-    }, (error) => console.error("Error listening to schedule:", error));
+    });
 };
 
-// --- SYSTEM CONFIG ---
 export const listenToSystemConfig = (callback: (config: SystemConfig) => void) => {
-    const docRef = doc(db, SYSTEM_CONFIG_COLLECTION, 'main');
-    return onSnapshot(docRef, (docSnap) => {
-        if (docSnap.exists()) {
-            callback(docSnap.data() as SystemConfig);
-        } else {
-            callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
-        }
-    }, (error) => {
-        console.warn("System config listener warning (possible permission denied):", error.message);
+    return onSnapshot(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), (docSnap) => {
+        if (docSnap.exists()) callback(docSnap.data() as SystemConfig);
+        else callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
     });
 };
 
@@ -384,42 +306,83 @@ export const updateSystemConfig = async (config: SystemConfig): Promise<void> =>
     await setDoc(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), config);
 };
 
-// --- EVENTS & AGENDA (NEW) ---
 export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
     return onSnapshot(collection(db, EVENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
-    }, (error) => console.error("Error listening to events:", error));
+    });
 };
 
 export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
     const { id, ...data } = event;
-    const sanitized = JSON.parse(JSON.stringify(data)); // Remove undefined
-    if (id) {
-        await setDoc(doc(db, EVENTS_COLLECTION, id), sanitized);
-    } else {
-        await addDoc(collection(db, EVENTS_COLLECTION), sanitized);
-    }
+    if (id) await setDoc(doc(db, EVENTS_COLLECTION, id), data);
+    else await addDoc(collection(db, EVENTS_COLLECTION), data);
 };
 
 export const deleteSchoolEvent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EVENTS_COLLECTION, id));
 };
 
-// --- LIBRARY ---
+// Fix: Added missing getClassMaterials as required by TeacherDashboard.tsx
+export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
+    let q = teacherId 
+        ? query(collection(db, CLASS_MATERIALS_COLLECTION), where("teacherId", "==", teacherId)) 
+        : collection(db, CLASS_MATERIALS_COLLECTION);
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
+};
+
+export const listenToClassMaterials = (className: string, onSuccess: (data: ClassMaterial[]) => void, onError: (error: any) => void) => {
+    const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
+    return onSnapshot(q, (snapshot) => {
+        onSuccess(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial)));
+    }, onError);
+};
+
+export const uploadClassMaterialFile = async (file: File, className: string): Promise<string> => {
+    const storageRef = ref(storage, `materials/${className}/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+};
+
+export const saveClassMaterial = async (material: ClassMaterial): Promise<string> => {
+    const docRef = await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), material);
+    return docRef.id;
+};
+
+export const deleteClassMaterial = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, CLASS_MATERIALS_COLLECTION, id));
+};
+
+export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
+    let q = teacherId ? query(collection(db, LESSON_PLANS_COLLECTION), where("teacherId", "==", teacherId)) : collection(db, LESSON_PLANS_COLLECTION);
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
+};
+
+export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
+    const docRef = await addDoc(collection(db, LESSON_PLANS_COLLECTION), plan);
+    return docRef.id;
+};
+
+export const updateLessonPlan = async (plan: LessonPlan): Promise<void> => {
+    const { id, ...data } = plan;
+    await updateDoc(doc(db, LESSON_PLANS_COLLECTION, id!), data);
+};
+
+export const deleteLessonPlan = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
+};
 
 export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
     return onSnapshot(collection(db, LIBRARY_BOOKS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
-    }, (error) => console.error("Error listening to books:", error));
+    });
 };
 
 export const saveLibraryBook = async (book: LibraryBook): Promise<void> => {
     const { id, ...data } = book;
-    if (id) {
-        await setDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id), data);
-    } else {
-        await addDoc(collection(db, LIBRARY_BOOKS_COLLECTION), data);
-    }
+    if (id) await setDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id), data);
+    else await addDoc(collection(db, LIBRARY_BOOKS_COLLECTION), data);
 };
 
 export const deleteLibraryBook = async (id: string): Promise<void> => {
@@ -429,32 +392,16 @@ export const deleteLibraryBook = async (id: string): Promise<void> => {
 export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) => {
     return onSnapshot(collection(db, LIBRARY_LOANS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
-    }, (error) => console.error("Error listening to loans:", error));
+    });
 };
 
 export const createLoan = async (loan: LibraryLoan): Promise<void> => {
-    // 1. Save Loan
     const { id, ...data } = loan;
     await addDoc(collection(db, LIBRARY_LOANS_COLLECTION), data);
-    
-    // 2. Decrement Book Availability
-    const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
-    await updateDoc(bookRef, {
-        availableQuantity: increment(-1)
-    });
+    await updateDoc(doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId), { availableQuantity: increment(-1) });
 };
 
 export const returnLoan = async (loanId: string, bookId: string): Promise<void> => {
-    // 1. Update Loan Status
-    const loanRef = doc(db, LIBRARY_LOANS_COLLECTION, loanId);
-    await updateDoc(loanRef, {
-        status: 'returned',
-        returnDate: new Date().toISOString().split('T')[0]
-    });
-
-    // 2. Increment Book Availability
-    const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
-    await updateDoc(bookRef, {
-        availableQuantity: increment(1)
-    });
+    await updateDoc(doc(db, LIBRARY_LOANS_COLLECTION, loanId), { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
+    await updateDoc(doc(db, LIBRARY_BOOKS_COLLECTION, bookId), { availableQuantity: increment(1) });
 };
