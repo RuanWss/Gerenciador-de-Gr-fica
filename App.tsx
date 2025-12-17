@@ -11,7 +11,7 @@ import { HRDashboard } from './pages/HRDashboard';
 import { ClassroomFiles } from './pages/ClassroomFiles';
 import { LibraryDashboard } from './pages/LibraryDashboard';
 import { UserRole } from './types';
-import { LogOut, LayoutGrid, Printer, KeyRound, X, Save, AlertCircle } from 'lucide-react';
+import { LogOut, LayoutGrid, Printer, KeyRound, X, Save, AlertCircle, Book } from 'lucide-react';
 import { Button } from './components/Button';
 
 const AppContent: React.FC = () => {
@@ -152,6 +152,22 @@ const AppContent: React.FC = () => {
                               <h3 className="text-2xl font-bold text-gray-900 mb-3">Painel da Escola</h3>
                               <p className="text-gray-500 text-sm leading-relaxed">
                                   Gestão de impressões, calendário escolar, turmas, alunos e configurações do sistema.
+                              </p>
+                          </button>
+                      )}
+
+                      {user.roles.includes(UserRole.LIBRARY) && (
+                          <button 
+                            onClick={() => setSessionRole(UserRole.LIBRARY)}
+                            className="group bg-white p-10 rounded-3xl shadow-2xl border border-gray-100 hover:scale-[1.02] transition-all duration-300 flex flex-col items-center text-center relative overflow-hidden"
+                          >
+                               <div className="absolute top-0 left-0 w-full h-2 bg-emerald-600"></div>
+                               <div className="h-24 w-24 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-colors shadow-lg group-hover:scale-110 duration-300">
+                                  <Book size={48} />
+                              </div>
+                              <h3 className="text-2xl font-bold text-gray-900 mb-3">Painel da Biblioteca</h3>
+                              <p className="text-gray-500 text-sm leading-relaxed">
+                                  Gestão de acervo, controle de empréstimos, alunos e impressão de recibos.
                               </p>
                           </button>
                       )}

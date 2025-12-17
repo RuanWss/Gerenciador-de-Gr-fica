@@ -70,7 +70,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: firebaseUser.uid,
                 name: 'Bibliotecária',
                 email: firebaseUser.email,
-                role: UserRole.LIBRARY,
+                role: UserRole.LIBRARY, // Role padrão
+                roles: [UserRole.LIBRARY, UserRole.TEACHER], // Permite acesso a ambos
                 subject: '',
                 classes: []
               });
