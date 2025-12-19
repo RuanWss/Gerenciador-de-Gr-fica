@@ -237,6 +237,7 @@ export interface SchoolEvent {
   id: string;
   title: string;
   date: string; // YYYY-MM-DD
+  endDate?: string; // NOVO: Data final para períodos
   type: 'event' | 'holiday' | 'exam' | 'meeting';
   description?: string;
   tasks: EventTask[]; // Array de tarefas Kanban

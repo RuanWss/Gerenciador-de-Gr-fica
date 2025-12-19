@@ -108,6 +108,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
     const [newEventTitle, setNewEventTitle] = useState('');
     const [newEventDate, setNewEventDate] = useState('');
+    const [newEventEndDate, setNewEventEndDate] = useState('');
     const [newEventType, setNewEventType] = useState<'event' | 'holiday' | 'exam' | 'meeting'>('event');
     const [newEventDesc, setNewEventDesc] = useState('');
 
@@ -194,12 +195,14 @@ export const PrintShopDashboard: React.FC = () => {
             setSelectedEvent(event);
             setNewEventTitle(event.title);
             setNewEventDate(event.date);
+            setNewEventEndDate(event.endDate || '');
             setNewEventType(event.type);
             setNewEventDesc(event.description || '');
         } else {
             setSelectedEvent(null);
             setNewEventTitle('');
             setNewEventDate(prefillDate || new Date().toISOString().split('T')[0]);
+            setNewEventEndDate('');
             setNewEventType('event');
             setNewEventDesc('');
         }
@@ -212,6 +215,7 @@ export const PrintShopDashboard: React.FC = () => {
             id: selectedEvent?.id || '',
             title: newEventTitle,
             date: newEventDate,
+            endDate: newEventEndDate || undefined,
             type: newEventType,
             description: newEventDesc,
             tasks: selectedEvent?.tasks || []
@@ -356,7 +360,11 @@ export const PrintShopDashboard: React.FC = () => {
         for (let i = 0; i < firstDay; i++) days.push(<div key={`e-${i}`} className="bg-white/5 h-24 border border-white/5"></div>);
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            const dayEvents = events.filter(e => e.date === dateStr);
+            // Atualizado: Mostrar eventos se a data atual estiver no intervalo [e.date, e.endDate]
+            const dayEvents = events.filter(e => {
+                if (!e.endDate) return e.date === dateStr;
+                return dateStr >= e.date && dateStr <= e.endDate;
+            });
             days.push(
                 <div key={d} className="bg-white/5 h-24 border border-white/5 p-2 overflow-y-auto relative group">
                     <span className="text-xs font-bold text-gray-500">{d}</span>
@@ -824,7 +832,7 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data</label>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Início</label>
                                     <input 
                                         type="date" 
                                         className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
@@ -833,6 +841,18 @@ export const PrintShopDashboard: React.FC = () => {
                                     />
                                 </div>
                                 <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Fim (Opcional)</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
+                                        value={newEventEndDate} 
+                                        onChange={e => setNewEventEndDate(e.target.value)}
+                                        min={newEventDate}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label>
                                     <select 
                                         className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
