@@ -1,21 +1,23 @@
+
 import { GoogleGenAI } from "@google/genai";
 
+// Initialize the Google GenAI client using named parameter as per guidelines
 const getClient = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
     throw new Error("API Key not found in environment variables");
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: apiKey });
 };
 
-// Helper para converter File em Base64
+// Helper to convert File to Base64
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove o prefixo data:image/png;base64, para enviar apenas os bytes
+      // Remove the prefix data:image/png;base64, to send only the bytes
       const base64Data = result.split(',')[1];
       resolve(base64Data);
     };
@@ -23,6 +25,10 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+/**
+ * Generates multiple choice questions based on a topic and grade level.
+ * Uses gemini-3-pro-preview for complex reasoning and educational content quality.
+ */
 export const generateExamQuestions = async (
   topic: string,
   gradeLevel: string,
@@ -36,11 +42,10 @@ export const generateExamQuestions = async (
     Formate a saída como um texto claro e formatado em Markdown, pronto para copiar e colar em um documento Word.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
         temperature: 0.7,
-        maxOutputTokens: 2000,
       }
     });
 
@@ -51,6 +56,9 @@ export const generateExamQuestions = async (
   }
 };
 
+/**
+ * Suggests header instructions for school exams.
+ */
 export const suggestExamInstructions = async (examType: string): Promise<string> => {
     try {
         const ai = getClient();
@@ -58,7 +66,7 @@ export const suggestExamInstructions = async (examType: string): Promise<string>
         Inclua orientações sobre uso de caneta, rasuras e tempo de duração. Mantenha curto (max 3 parágrafos).`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt
         });
 
@@ -69,6 +77,9 @@ export const suggestExamInstructions = async (examType: string): Promise<string>
     }
 }
 
+/**
+ * Digitizes physical material (scanned images/PDFs) into structured HTML for document reconstruction.
+ */
 export const digitizeMaterial = async (file: File, type: 'exam' | 'handout'): Promise<string> => {
     try {
         const ai = getClient();
@@ -100,7 +111,7 @@ export const digitizeMaterial = async (file: File, type: 'exam' | 'handout'): Pr
                Retorne APENAS o código HTML.`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: {
                 parts: [
                     { inlineData: { mimeType, data: base64Data } },
@@ -109,13 +120,57 @@ export const digitizeMaterial = async (file: File, type: 'exam' | 'handout'): Pr
             }
         });
 
-        // Limpar blocos de código markdown se a IA retornar ```html ... ```
+        // Clean up markdown markers if returned
         let text = response.text || "";
-        text = text.replace(/```html/g, '').replace(/```/g, '');
+        text = text.replace(/```html/g, '').replace(/```/g, '').trim();
         return text;
 
     } catch (error) {
         console.error("Erro na diagramação com IA:", error);
         throw new Error("Não foi possível processar o arquivo. Certifique-se de que é uma imagem legível.");
     }
+};
+
+/**
+ * Analyzes an answer sheet image and extracts the student's marks.
+ * Required by PrintShopDashboard for auto-correction.
+ */
+export const analyzeAnswerSheet = async (file: File, numQuestions: number): Promise<Record<number, string>> => {
+  try {
+    const ai = getClient();
+    const base64Data = await fileToBase64(file);
+    const mimeType = file.type;
+
+    const prompt = `Analise a imagem deste cartão-resposta de uma prova escolar. 
+    Extraia as respostas marcadas pelo aluno para as ${numQuestions} questões.
+    O formato da resposta deve ser um objeto JSON onde a chave é o número da questão (de 1 a ${numQuestions}) e o valor é a letra da alternativa marcada (A, B, C, D ou E).
+    Se não for possível identificar a resposta de uma questão ou se ela estiver em branco, retorne uma string vazia "" para essa questão.
+    Retorne apenas o JSON puro, sem blocos de código Markdown.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: {
+        parts: [
+          { inlineData: { mimeType, data: base64Data } },
+          { text: prompt }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+      }
+    });
+
+    const text = response.text?.trim() || "{}";
+    try {
+      // Remove potential markdown code blocks if the model included them despite instructions
+      const sanitized = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(sanitized);
+    } catch (e) {
+      console.error("Failed to parse AI response as JSON:", text);
+      return {};
+    }
+  } catch (error) {
+    console.error("Error analyzing answer sheet:", error);
+    throw new Error("Falha ao analisar o cartão-resposta com IA.");
+  }
 };

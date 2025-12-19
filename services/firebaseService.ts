@@ -10,7 +10,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
-    StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan 
+    StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
+    AnswerKey, StudentCorrection
 } from '../types';
 
 const USERS_COLLECTION = 'users';
@@ -26,6 +27,8 @@ const STAFF_LOGS_COLLECTION = 'staff_logs';
 const EVENTS_COLLECTION = 'events';
 const LIBRARY_BOOKS_COLLECTION = 'library_books';
 const LIBRARY_LOANS_COLLECTION = 'library_loans';
+const ANSWER_KEYS_COLLECTION = 'answer_keys';
+const CORRECTIONS_COLLECTION = 'corrections';
 
 // --- USERS ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {
@@ -52,13 +55,11 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
 };
 
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    // Use a unique app name to avoid conflicts and signing out the current user
     const appName = "SecondaryApp-" + Date.now();
     const secondaryApp = initializeApp(firebaseConfig, appName);
     const secondaryAuth = getAuth(secondaryApp);
     
     try {
-        // Criação com senha padrão solicitada: cemal2016
         const userCredential = await createUser(secondaryAuth, email, "cemal2016");
         await updateProfileAuth(userCredential.user, { displayName: name });
         
@@ -66,19 +67,16 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
             id: userCredential.user.uid,
             name: name,
             email: email,
-            role: roles[0], // Role ativa padrão (primeira da lista)
-            roles: roles,   // Lista de roles permitidas
+            role: roles[0],
+            roles: roles,
             subject: '',
             classes: []
         };
-        // Use main DB instance to save profile
         await setDoc(doc(db, USERS_COLLECTION, user.id), user);
-        
         await signOut(secondaryAuth);
     } catch (error) {
         throw error;
     } finally {
-        // Clean up the secondary app to prevent memory leaks and name conflicts
         try {
             await deleteApp(secondaryApp);
         } catch (e) {
@@ -94,10 +92,7 @@ export const updateSystemUserRoles = async (email: string, roles: UserRole[]): P
     if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
         const userData = userDoc.data();
-        
-        // Determine active role: maintain current if valid, otherwise pick first from new list
         const newActiveRole = roles.includes(userData.role) ? userData.role : roles[0];
-
         await updateDoc(userDoc.ref, { 
             roles: roles,
             role: newActiveRole
@@ -206,6 +201,7 @@ export const updateLessonPlan = async (plan: LessonPlan): Promise<void> => {
 };
 
 export const deleteLessonPlan = async (id: string): Promise<void> => {
+    if (!id) return;
     await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
 };
 
@@ -306,32 +302,18 @@ export const uploadStaffPhoto = async (file: File): Promise<string> => {
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
     try {
         const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-        
-        try {
-            const q = query(
-                collection(db, STAFF_LOGS_COLLECTION),
-                where("staffId", "==", log.staffId),
-                where("timestamp", ">", twoMinutesAgo)
-            );
-            const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                return 'too_soon';
-            }
-        } catch (queryError) {
-            console.warn("Aviso: Verificação de duplicidade pulada.", queryError);
-        }
+        const q = query(
+            collection(db, STAFF_LOGS_COLLECTION),
+            where("staffId", "==", log.staffId),
+            where("timestamp", ">", twoMinutesAgo)
+        );
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) return 'too_soon';
 
         const { id, ...data } = log;
-        
-        const safeData = {
-            ...data,
-            staffPhotoUrl: data.staffPhotoUrl || null,
-        };
-
-        await addDoc(collection(db, STAFF_LOGS_COLLECTION), safeData);
+        await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
         return 'success';
     } catch (e) {
-        console.error("Erro fatal ao registrar ponto:", e);
         return 'error';
     }
 };
@@ -376,7 +358,7 @@ export const listenToSystemConfig = (callback: (config: SystemConfig) => void) =
             callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
         }
     }, (error) => {
-        console.warn("System config listener warning (possible permission denied):", error.message);
+        console.warn("System config listener warning:", error.message);
     });
 };
 
@@ -384,7 +366,7 @@ export const updateSystemConfig = async (config: SystemConfig): Promise<void> =>
     await setDoc(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), config);
 };
 
-// --- EVENTS & AGENDA (NEW) ---
+// --- EVENTS ---
 export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
     return onSnapshot(collection(db, EVENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
@@ -393,7 +375,7 @@ export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
 
 export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
     const { id, ...data } = event;
-    const sanitized = JSON.parse(JSON.stringify(data)); // Remove undefined
+    const sanitized = JSON.parse(JSON.stringify(data));
     if (id) {
         await setDoc(doc(db, EVENTS_COLLECTION, id), sanitized);
     } else {
@@ -405,8 +387,33 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EVENTS_COLLECTION, id));
 };
 
-// --- LIBRARY ---
+// --- GABARITOS E CORREÇÕES (ANSWER KEYS & CORRECTIONS) ---
+export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
+    const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
+};
 
+export const saveAnswerKey = async (key: AnswerKey): Promise<void> => {
+    const { id, ...data } = key;
+    await addDoc(collection(db, ANSWER_KEYS_COLLECTION), data);
+};
+
+export const deleteAnswerKey = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, ANSWER_KEYS_COLLECTION, id));
+};
+
+export const getCorrections = async (answerKeyId: string): Promise<StudentCorrection[]> => {
+    const q = query(collection(db, CORRECTIONS_COLLECTION), where("answerKeyId", "==", answerKeyId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StudentCorrection));
+};
+
+export const saveCorrection = async (correction: StudentCorrection): Promise<void> => {
+    const { id, ...data } = correction;
+    await addDoc(collection(db, CORRECTIONS_COLLECTION), data);
+};
+
+// --- LIBRARY ---
 export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
     return onSnapshot(collection(db, LIBRARY_BOOKS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
@@ -433,28 +440,15 @@ export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) =
 };
 
 export const createLoan = async (loan: LibraryLoan): Promise<void> => {
-    // 1. Save Loan
     const { id, ...data } = loan;
     await addDoc(collection(db, LIBRARY_LOANS_COLLECTION), data);
-    
-    // 2. Decrement Book Availability
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
-    await updateDoc(bookRef, {
-        availableQuantity: increment(-1)
-    });
+    await updateDoc(bookRef, { availableQuantity: increment(-1) });
 };
 
 export const returnLoan = async (loanId: string, bookId: string): Promise<void> => {
-    // 1. Update Loan Status
     const loanRef = doc(db, LIBRARY_LOANS_COLLECTION, loanId);
-    await updateDoc(loanRef, {
-        status: 'returned',
-        returnDate: new Date().toISOString().split('T')[0]
-    });
-
-    // 2. Increment Book Availability
+    await updateDoc(loanRef, { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
-    await updateDoc(bookRef, {
-        availableQuantity: increment(1)
-    });
+    await updateDoc(bookRef, { availableQuantity: increment(1) });
 };
