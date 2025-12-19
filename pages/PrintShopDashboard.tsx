@@ -17,7 +17,8 @@ import {
     saveAnswerKey,
     deleteAnswerKey,
     getCorrections,
-    saveCorrection
+    saveCorrection,
+    getStaffMembers
 } from '../services/firebaseService';
 import { analyzeAnswerSheet } from '../services/geminiService';
 import { 
@@ -29,7 +30,9 @@ import {
     SystemConfig, 
     SchoolEvent,
     AnswerKey,
-    StudentCorrection
+    StudentCorrection,
+    StaffMember,
+    EventTask
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -60,7 +63,9 @@ import {
     BookOpen,
     Clock,
     Filter,
-    ArrowLeft
+    ArrowLeft,
+    ClipboardList,
+    Briefcase
 } from 'lucide-react';
 
 const CLASSES = [
@@ -85,6 +90,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
     const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
+    const [staff, setStaff] = useState<StaffMember[]>([]);
 
     // Filter States for Students
     const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
@@ -111,6 +117,12 @@ export const PrintShopDashboard: React.FC = () => {
     const [newEventEndDate, setNewEventEndDate] = useState('');
     const [newEventType, setNewEventType] = useState<'event' | 'holiday' | 'exam' | 'meeting'>('event');
     const [newEventDesc, setNewEventDesc] = useState('');
+    const [eventTasks, setEventTasks] = useState<EventTask[]>([]);
+    
+    // Task Form
+    const [taskDesc, setTaskDesc] = useState('');
+    const [taskMaterials, setTaskMaterials] = useState('');
+    const [taskAssigneeId, setTaskAssigneeId] = useState('');
 
     // Modal de Planejamento
     const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
@@ -146,16 +158,18 @@ export const PrintShopDashboard: React.FC = () => {
     const loadInitialData = async () => {
         setIsLoading(true);
         try {
-            const [allExams, allStudents, keys, plans] = await Promise.all([
+            const [allExams, allStudents, keys, plans, allStaff] = await Promise.all([
                 getExams(),
                 getStudents(),
                 getAnswerKeys(),
-                getLessonPlans()
+                getLessonPlans(),
+                getStaffMembers()
             ]);
             setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
             setStudents(allStudents.sort((a,b) => a.name.localeCompare(b.name)));
             setAnswerKeys(keys.sort((a,b) => b.createdAt - a.createdAt));
             setLessonPlans(plans.sort((a,b) => b.createdAt - a.createdAt));
+            setStaff(allStaff.filter(s => s.active));
         } catch (e) {
             console.error("Erro ao carregar dados:", e);
         }
@@ -198,6 +212,7 @@ export const PrintShopDashboard: React.FC = () => {
             setNewEventEndDate(event.endDate || '');
             setNewEventType(event.type);
             setNewEventDesc(event.description || '');
+            setEventTasks(event.tasks || []);
         } else {
             setSelectedEvent(null);
             setNewEventTitle('');
@@ -205,8 +220,30 @@ export const PrintShopDashboard: React.FC = () => {
             setNewEventEndDate('');
             setNewEventType('event');
             setNewEventDesc('');
+            setEventTasks([]);
         }
         setShowEventModal(true);
+    };
+
+    const handleAddTask = () => {
+        if (!taskDesc || !taskAssigneeId) return alert("Preencha a descrição e o responsável.");
+        const member = staff.find(s => s.id === taskAssigneeId);
+        const newTask: EventTask = {
+            id: Math.random().toString(36).substr(2, 9),
+            description: taskDesc,
+            materials: taskMaterials,
+            assigneeId: taskAssigneeId,
+            assigneeName: member?.name || 'Equipe',
+            status: 'todo'
+        };
+        setEventTasks([...eventTasks, newTask]);
+        setTaskDesc('');
+        setTaskMaterials('');
+        setTaskAssigneeId('');
+    };
+
+    const handleRemoveTask = (taskId: string) => {
+        setEventTasks(eventTasks.filter(t => t.id !== taskId));
     };
 
     const handleSaveEvent = async () => {
@@ -218,7 +255,7 @@ export const PrintShopDashboard: React.FC = () => {
             endDate: newEventEndDate || undefined,
             type: newEventType,
             description: newEventDesc,
-            tasks: selectedEvent?.tasks || []
+            tasks: eventTasks
         };
         try {
             await saveSchoolEvent(event);
@@ -360,7 +397,6 @@ export const PrintShopDashboard: React.FC = () => {
         for (let i = 0; i < firstDay; i++) days.push(<div key={`e-${i}`} className="bg-white/5 h-24 border border-white/5"></div>);
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            // Atualizado: Mostrar eventos se a data atual estiver no intervalo [e.date, e.endDate]
             const dayEvents = events.filter(e => {
                 if (!e.endDate) return e.date === dateStr;
                 return dateStr >= e.date && dateStr <= e.endDate;
@@ -442,9 +478,9 @@ export const PrintShopDashboard: React.FC = () => {
                                     <Plus size={18} className="mr-2"/> Novo Evento
                                 </Button>
                                 <div className="flex items-center gap-4 bg-black/20 p-2 rounded-xl border border-white/10">
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded text-white"><ChevronLeft/></button>
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronLeft/></button>
                                     <span className="font-bold text-white uppercase tracking-widest text-sm min-w-[140px] text-center">{currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded text-white"><ChevronRight/></button>
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronRight/></button>
                                 </div>
                             </div>
                         </header>
@@ -808,11 +844,11 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* MODAL EVENTO (AGENDA) */}
+            {/* MODAL EVENTO (AGENDA) - ATUALIZADO COM PERÍODO E TAREFAS */}
             {showEventModal && (
                 <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-[#18181b] border border-gray-800 w-full max-w-md rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
-                        <div className="flex justify-between items-center mb-6">
+                    <div className="bg-[#18181b] border border-gray-800 w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                        <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-black/20 shrink-0">
                             <h3 className="text-xl font-bold text-white uppercase tracking-tight flex items-center gap-2">
                                 <CalendarDays className="text-red-600"/> {selectedEvent ? 'Editar Evento' : 'Novo Evento'}
                             </h3>
@@ -820,64 +856,120 @@ export const PrintShopDashboard: React.FC = () => {
                                 <X size={24}/>
                             </button>
                         </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título do Evento</label>
-                                <input 
-                                    className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none transition-all" 
-                                    value={newEventTitle} 
-                                    onChange={e => setNewEventTitle(e.target.value)} 
-                                    placeholder="Ex: Conselho de Classe"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+                        
+                        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
+                            {/* INFORMAÇÕES BÁSICAS */}
+                            <section className="space-y-4">
+                                <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5 pb-2">Informações Gerais</h4>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Início</label>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Título do Evento</label>
                                     <input 
-                                        type="date" 
-                                        className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
-                                        value={newEventDate} 
-                                        onChange={e => setNewEventDate(e.target.value)}
+                                        className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none transition-all" 
+                                        value={newEventTitle} 
+                                        onChange={e => setNewEventTitle(e.target.value)} 
+                                        placeholder="Ex: Conselho de Classe"
                                     />
                                 </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data Início</label>
+                                        <input 
+                                            type="date" 
+                                            className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
+                                            value={newEventDate} 
+                                            onChange={e => setNewEventDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data Fim (Período)</label>
+                                        <input 
+                                            type="date" 
+                                            className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
+                                            value={newEventEndDate} 
+                                            onChange={e => setNewEventEndDate(e.target.value)}
+                                            min={newEventDate}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Tipo</label>
+                                        <select 
+                                            className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
+                                            value={newEventType} 
+                                            onChange={e => setNewEventType(e.target.value as any)}
+                                        >
+                                            <option value="event">Geral</option>
+                                            <option value="holiday">Feriado</option>
+                                            <option value="exam">Prova</option>
+                                            <option value="meeting">Reunião</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data Fim (Opcional)</label>
-                                    <input 
-                                        type="date" 
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Descrição / Detalhes</label>
+                                    <textarea 
+                                        rows={3} 
                                         className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
-                                        value={newEventEndDate} 
-                                        onChange={e => setNewEventEndDate(e.target.value)}
-                                        min={newEventDate}
+                                        value={newEventDesc} 
+                                        onChange={e => setNewEventDesc(e.target.value)} 
+                                        placeholder="Detalhes opcionais sobre o evento..."
                                     />
                                 </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label>
-                                    <select 
-                                        className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
-                                        value={newEventType} 
-                                        onChange={e => setNewEventType(e.target.value as any)}
-                                    >
-                                        <option value="event">Geral</option>
-                                        <option value="holiday">Feriado</option>
-                                        <option value="exam">Prova</option>
-                                        <option value="meeting">Reunião</option>
-                                    </select>
+                            </section>
+
+                            {/* TAREFAS / KANBAN */}
+                            <section className="space-y-4">
+                                <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5 pb-2">Tarefas e Processos do Evento</h4>
+                                
+                                {/* NOVO FORM DE TAREFA */}
+                                <div className="bg-black/20 p-4 rounded-2xl border border-white/5 space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Descrição do Processo</label>
+                                            <input className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" value={taskDesc} onChange={e => setTaskDesc(e.target.value)} placeholder="Ex: Preparar som e projetor" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Responsável (Equipe)</label>
+                                            <select className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" value={taskAssigneeId} onChange={e => setTaskAssigneeId(e.target.value)}>
+                                                <option value="">Selecionar Membro...</option>
+                                                {staff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Materiais Necessários</label>
+                                        <input className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" value={taskMaterials} onChange={e => setTaskMaterials(e.target.value)} placeholder="Ex: Extensão, Microfone..." />
+                                    </div>
+                                    <button onClick={handleAddTask} className="w-full py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-xs font-black uppercase rounded-lg border border-blue-500/20 transition-all">
+                                        Adicionar Tarefa ao Planejamento
+                                    </button>
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
-                                <textarea 
-                                    rows={3} 
-                                    className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
-                                    value={newEventDesc} 
-                                    onChange={e => setNewEventDesc(e.target.value)} 
-                                    placeholder="Detalhes opcionais..."
-                                />
-                            </div>
+
+                                {/* LISTA DE TAREFAS ADICIONADAS */}
+                                <div className="space-y-2">
+                                    {eventTasks.map(task => (
+                                        <div key={task.id} className="flex items-center justify-between p-3 bg-[#202022] rounded-xl border border-gray-800 group">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-8 w-8 rounded-full bg-blue-900/20 text-blue-400 flex items-center justify-center shrink-0">
+                                                    <Briefcase size={16}/>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-white leading-tight">{task.description}</p>
+                                                    <p className="text-[10px] text-gray-500 mt-0.5">Resp: <span className="text-gray-300 font-bold">{task.assigneeName}</span> • Mat: <span className="text-gray-400 italic">{task.materials || 'Nenhum'}</span></p>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => handleRemoveTask(task.id)} className="text-gray-600 hover:text-red-500 p-1 transition-colors">
+                                                <Trash2 size={16}/>
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {eventTasks.length === 0 && (
+                                        <p className="text-center text-xs text-gray-600 py-4 italic">Nenhuma tarefa adicionada a este evento.</p>
+                                    )}
+                                </div>
+                            </section>
                         </div>
-                        <div className="flex justify-between items-center mt-8 pt-6 border-t border-white/5">
+
+                        <div className="p-6 border-t border-white/5 flex justify-between items-center bg-black/20 shrink-0">
                             {selectedEvent ? (
                                 <button onClick={handleDeleteEvent} className="text-red-500 hover:text-red-400 font-bold uppercase text-xs flex items-center gap-2">
                                     <Trash2 size={16}/> Excluir Registro
@@ -885,8 +977,8 @@ export const PrintShopDashboard: React.FC = () => {
                             ) : <div></div>}
                             <div className="flex gap-3">
                                 <Button variant="outline" onClick={() => setShowEventModal(false)} className="border-gray-700 text-gray-400">Cancelar</Button>
-                                <Button onClick={handleSaveEvent} className="bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/40">
-                                    <Save size={18} className="mr-2"/> Salvar
+                                <Button onClick={handleSaveEvent} className="bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/40 px-10">
+                                    <Save size={18} className="mr-2"/> Salvar Alterações
                                 </Button>
                             </div>
                         </div>
