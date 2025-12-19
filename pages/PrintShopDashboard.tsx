@@ -65,7 +65,8 @@ import {
     Filter,
     ArrowLeft,
     ClipboardList,
-    Briefcase
+    Briefcase,
+    UserCheck
 } from 'lucide-react';
 
 const CLASSES = [
@@ -246,6 +247,10 @@ export const PrintShopDashboard: React.FC = () => {
         setEventTasks(eventTasks.filter(t => t.id !== taskId));
     };
 
+    const handleUpdateTaskStatus = (taskId: string, newStatus: 'todo' | 'doing' | 'done') => {
+        setEventTasks(eventTasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+    };
+
     const handleSaveEvent = async () => {
         if (!newEventTitle || !newEventDate) return alert("Título e data são obrigatórios.");
         const event: SchoolEvent = {
@@ -386,6 +391,48 @@ export const PrintShopDashboard: React.FC = () => {
             <Icon size={18} />
             <span>{label}</span>
         </button>
+    );
+
+    const renderTaskCard = (task: EventTask) => (
+        <div key={task.id} className="bg-[#1c1c1e] p-4 rounded-2xl border border-gray-800 shadow-lg group hover:border-gray-700 transition-all flex flex-col h-full">
+            <div className="flex justify-between items-start mb-3 shrink-0">
+                <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                    task.status === 'done' ? 'bg-green-900/30 text-green-400' : 
+                    task.status === 'doing' ? 'bg-yellow-900/30 text-yellow-400' : 
+                    'bg-blue-900/30 text-blue-400'
+                }`}>
+                    {task.status === 'done' ? <CheckCircle size={16}/> : <Briefcase size={16}/>}
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {task.status !== 'todo' && (
+                        <button onClick={() => handleUpdateTaskStatus(task.id, task.status === 'done' ? 'doing' : 'todo')} className="p-1 hover:bg-white/5 rounded text-gray-500 hover:text-white" title="Mover para esquerda">
+                            <ChevronLeft size={14}/>
+                        </button>
+                    )}
+                    <button onClick={() => handleRemoveTask(task.id)} className="p-1 hover:bg-red-900/20 rounded text-gray-600 hover:text-red-500" title="Excluir">
+                        <Trash2 size={14}/>
+                    </button>
+                    {task.status !== 'done' && (
+                        <button onClick={() => handleUpdateTaskStatus(task.id, task.status === 'todo' ? 'doing' : 'done')} className="p-1 hover:bg-white/5 rounded text-gray-500 hover:text-white" title="Mover para direita">
+                            <ChevronRight size={14}/>
+                        </button>
+                    )}
+                </div>
+            </div>
+            <h6 className="text-sm font-bold text-white mb-2 leading-snug flex-1">{task.description}</h6>
+            <div className="space-y-1.5 shrink-0 border-t border-white/5 pt-2">
+                <div className="flex items-center gap-2">
+                    <UserCheck size={12} className="text-gray-500"/>
+                    <span className="text-[10px] text-gray-300 font-bold uppercase truncate">{task.assigneeName}</span>
+                </div>
+                {task.materials && (
+                    <div className="flex items-start gap-2">
+                        <ClipboardList size={12} className="text-gray-500 mt-0.5"/>
+                        <span className="text-[10px] text-gray-500 leading-tight italic line-clamp-2">{task.materials}</span>
+                    </div>
+                )}
+            </div>
+        </div>
     );
 
     const renderCalendar = () => {
@@ -844,10 +891,10 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* MODAL EVENTO (AGENDA) - ATUALIZADO COM PERÍODO E TAREFAS */}
+            {/* MODAL EVENTO (AGENDA) - TRELLO STYLE KANBAN */}
             {showEventModal && (
                 <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-[#18181b] border border-gray-800 w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                    <div className="bg-[#18181b] border border-gray-800 w-full max-w-4xl max-h-[95vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
                         <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-black/20 shrink-0">
                             <h3 className="text-xl font-bold text-white uppercase tracking-tight flex items-center gap-2">
                                 <CalendarDays className="text-red-600"/> {selectedEvent ? 'Editar Evento' : 'Novo Evento'}
@@ -867,7 +914,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none transition-all" 
                                         value={newEventTitle} 
                                         onChange={e => setNewEventTitle(e.target.value)} 
-                                        placeholder="Ex: Conselho de Classe"
+                                        placeholder="Ex: Jornada Pedagógica 2026"
                                     />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -907,7 +954,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 <div>
                                     <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Descrição / Detalhes</label>
                                     <textarea 
-                                        rows={3} 
+                                        rows={2} 
                                         className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
                                         value={newEventDesc} 
                                         onChange={e => setNewEventDesc(e.target.value)} 
@@ -916,55 +963,98 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                             </section>
 
-                            {/* TAREFAS / KANBAN */}
+                            {/* TAREFAS / KANBAN - TRELLO STYLE */}
                             <section className="space-y-4">
-                                <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5 pb-2">Tarefas e Processos do Evento</h4>
+                                <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                    <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Tarefas e Processos do Evento</h4>
+                                    <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full">{eventTasks.length} Total</span>
+                                </div>
                                 
-                                {/* NOVO FORM DE TAREFA */}
-                                <div className="bg-black/20 p-4 rounded-2xl border border-white/5 space-y-4">
+                                {/* KANBAN COLUMNS */}
+                                <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar-h min-h-[400px]">
+                                    {/* TODO COLUMN */}
+                                    <div className="flex flex-col w-72 shrink-0 bg-black/40 rounded-2xl border border-white/5 p-3">
+                                        <div className="flex items-center justify-between mb-4 px-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-gray-500"></div>
+                                                <h5 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">A Fazer</h5>
+                                            </div>
+                                            <span className="text-[10px] font-bold text-gray-600 bg-black/40 px-1.5 py-0.5 rounded">{eventTasks.filter(t => t.status === 'todo').length}</span>
+                                        </div>
+                                        <div className="space-y-3">
+                                             {eventTasks.filter(t => t.status === 'todo').map(task => renderTaskCard(task))}
+                                             {eventTasks.filter(t => t.status === 'todo').length === 0 && (
+                                                 <div className="py-8 border-2 border-dashed border-white/5 rounded-xl text-center">
+                                                     <p className="text-[10px] text-gray-600 font-bold uppercase">Vazio</p>
+                                                 </div>
+                                             )}
+                                        </div>
+                                    </div>
+
+                                    {/* DOING COLUMN */}
+                                    <div className="flex flex-col w-72 shrink-0 bg-black/40 rounded-2xl border border-white/5 p-3">
+                                        <div className="flex items-center justify-between mb-4 px-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></div>
+                                                <h5 className="text-[11px] font-black text-yellow-500/80 uppercase tracking-widest">Executando</h5>
+                                            </div>
+                                            <span className="text-[10px] font-bold text-yellow-900/50 bg-yellow-500/10 px-1.5 py-0.5 rounded">{eventTasks.filter(t => t.status === 'doing').length}</span>
+                                        </div>
+                                        <div className="space-y-3">
+                                             {eventTasks.filter(t => t.status === 'doing').map(task => renderTaskCard(task))}
+                                             {eventTasks.filter(t => t.status === 'doing').length === 0 && (
+                                                 <div className="py-8 border-2 border-dashed border-white/5 rounded-xl text-center">
+                                                     <p className="text-[10px] text-gray-600 font-bold uppercase">Vazio</p>
+                                                 </div>
+                                             )}
+                                        </div>
+                                    </div>
+
+                                    {/* DONE COLUMN */}
+                                    <div className="flex flex-col w-72 shrink-0 bg-black/40 rounded-2xl border border-white/5 p-3">
+                                        <div className="flex items-center justify-between mb-4 px-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
+                                                <h5 className="text-[11px] font-black text-green-500/80 uppercase tracking-widest">Finalizado</h5>
+                                            </div>
+                                            <span className="text-[10px] font-bold text-green-900/50 bg-green-500/10 px-1.5 py-0.5 rounded">{eventTasks.filter(t => t.status === 'done').length}</span>
+                                        </div>
+                                        <div className="space-y-3">
+                                             {eventTasks.filter(t => t.status === 'done').map(task => renderTaskCard(task))}
+                                             {eventTasks.filter(t => t.status === 'done').length === 0 && (
+                                                 <div className="py-8 border-2 border-dashed border-white/5 rounded-xl text-center">
+                                                     <p className="text-[10px] text-gray-600 font-bold uppercase">Vazio</p>
+                                                 </div>
+                                             )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* FORMULARIO DE NOVA TAREFA (ESTILIZADO) */}
+                                <div className="bg-black/20 p-5 rounded-2xl border border-white/5 space-y-4">
+                                    <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Plus size={14} className="text-blue-500"/> Adicionar Nova Tarefa
+                                    </h5>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Descrição do Processo</label>
-                                            <input className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" value={taskDesc} onChange={e => setTaskDesc(e.target.value)} placeholder="Ex: Preparar som e projetor" />
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5">Descrição do Processo</label>
+                                            <input className="w-full bg-black/40 border border-gray-700 rounded-xl p-3 text-sm text-white focus:border-blue-500 outline-none transition-all" value={taskDesc} onChange={e => setTaskDesc(e.target.value)} placeholder="Ex: Preparar som e projetor" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Responsável (Equipe)</label>
-                                            <select className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" value={taskAssigneeId} onChange={e => setTaskAssigneeId(e.target.value)}>
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5">Responsável (Equipe)</label>
+                                            <select className="w-full bg-black/40 border border-gray-700 rounded-xl p-3 text-sm text-white focus:border-blue-500 outline-none transition-all" value={taskAssigneeId} onChange={e => setTaskAssigneeId(e.target.value)}>
                                                 <option value="">Selecionar Membro...</option>
                                                 {staff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
                                             </select>
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Materiais Necessários</label>
-                                        <input className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" value={taskMaterials} onChange={e => setTaskMaterials(e.target.value)} placeholder="Ex: Extensão, Microfone..." />
+                                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5">Materiais Necessários</label>
+                                        <input className="w-full bg-black/40 border border-gray-700 rounded-xl p-3 text-sm text-white placeholder-gray-600 focus:border-blue-500 outline-none transition-all" value={taskMaterials} onChange={e => setTaskMaterials(e.target.value)} placeholder="Ex: Extensão, Microfone..." />
                                     </div>
-                                    <button onClick={handleAddTask} className="w-full py-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-xs font-black uppercase rounded-lg border border-blue-500/20 transition-all">
-                                        Adicionar Tarefa ao Planejamento
+                                    <button onClick={handleAddTask} className="w-full py-3 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 text-xs font-black uppercase rounded-xl border border-blue-500/20 transition-all flex items-center justify-center gap-2">
+                                        <Plus size={16}/> Adicionar Tarefa ao Planejamento
                                     </button>
-                                </div>
-
-                                {/* LISTA DE TAREFAS ADICIONADAS */}
-                                <div className="space-y-2">
-                                    {eventTasks.map(task => (
-                                        <div key={task.id} className="flex items-center justify-between p-3 bg-[#202022] rounded-xl border border-gray-800 group">
-                                            <div className="flex items-center gap-4">
-                                                <div className="h-8 w-8 rounded-full bg-blue-900/20 text-blue-400 flex items-center justify-center shrink-0">
-                                                    <Briefcase size={16}/>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-white leading-tight">{task.description}</p>
-                                                    <p className="text-[10px] text-gray-500 mt-0.5">Resp: <span className="text-gray-300 font-bold">{task.assigneeName}</span> • Mat: <span className="text-gray-400 italic">{task.materials || 'Nenhum'}</span></p>
-                                                </div>
-                                            </div>
-                                            <button onClick={() => handleRemoveTask(task.id)} className="text-gray-600 hover:text-red-500 p-1 transition-colors">
-                                                <Trash2 size={16}/>
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {eventTasks.length === 0 && (
-                                        <p className="text-center text-xs text-gray-600 py-4 italic">Nenhuma tarefa adicionada a este evento.</p>
-                                    )}
                                 </div>
                             </section>
                         </div>
