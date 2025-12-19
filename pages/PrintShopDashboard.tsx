@@ -336,45 +336,161 @@ export const PrintShopDashboard: React.FC = () => {
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
         
+        const qPerCol = 15;
+        const totalCols = 6;
+        const logoUrl = "https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png";
+        
         printWindow.document.write(`
             <html>
                 <head>
                     <title>Cartão Resposta - ${key.title}</title>
                     <style>
-                        body { font-family: sans-serif; padding: 40px; color: #333; }
-                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
-                        .bubble { width: 22px; height: 22px; border: 1.5px solid #000; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin: 0 8px; font-size: 10px; font-weight: bold; }
-                        .row { margin-bottom: 8px; display: flex; align-items: center; border-bottom: 1px dashed #eee; padding: 4px 0; }
-                        .num { width: 30px; font-weight: bold; font-size: 14px; }
-                        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; }
-                        .info-box { border: 1.5px solid #000; padding: 15px; margin-bottom: 25px; border-radius: 5px; }
+                        @page { size: A4; margin: 0; }
+                        body { font-family: 'Arial', sans-serif; color: #333; margin: 0; padding: 20mm; background: #fff; position: relative; }
+                        
+                        /* Marcadores de Scanner */
+                        .marker { position: absolute; width: 25px; height: 25px; border: 5px solid black; }
+                        .marker-tl { top: 10mm; left: 10mm; border-right: 0; border-bottom: 0; }
+                        .marker-tr { top: 10mm; right: 10mm; border-left: 0; border-bottom: 0; }
+                        .marker-bl { bottom: 10mm; left: 10mm; border-right: 0; border-top: 0; }
+                        .marker-br { bottom: 10mm; right: 10mm; border-left: 0; border-top: 0; }
+
+                        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+                        .logo-header { height: 50px; width: auto; }
+                        .header-center { flex: 1; text-align: center; margin: 0 20px; }
+                        .main-title { font-size: 32px; font-weight: 900; margin: 0; text-transform: uppercase; color: #222; }
+                        .red-line { height: 4px; background: #dc2626; width: 100%; margin-top: 4px; }
+                        .subtitle { font-size: 14px; font-weight: bold; margin-top: 5px; color: #666; }
+                        .qr-code { height: 80px; width: 80px; border: 1px solid #eee; }
+
+                        .id-section { display: grid; grid-template-columns: 2.2fr 1fr; gap: 0; border: 1.5px solid #000; margin-top: 10px; }
+                        .id-left { border-right: 1.5px solid #000; padding: 10px; }
+                        .label-small { font-size: 11px; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; }
+                        
+                        .name-grid { display: flex; gap: 1px; margin-bottom: 10px; }
+                        .box { width: 16px; height: 22px; border: 1px solid #444; border-radius: 1px; }
+                        
+                        .birth-grid { display: flex; align-items: center; gap: 5px; }
+                        .birth-group { display: flex; gap: 1px; }
+                        .slash { font-weight: 900; font-size: 16px; margin: 0 2px; }
+
+                        .signature-area { margin-top: 15px; border-top: 1.5px dashed #666; text-align: center; padding-top: 3px; font-size: 9px; font-weight: bold; color: #666; width: 80%; margin-left: auto; margin-right: auto; }
+
+                        .result-box { display: flex; flex-col flex-direction: column; height: 100%; }
+                        .result-header { background: #fee2e2; color: #dc2626; font-weight: 900; font-size: 12px; padding: 5px; text-align: center; }
+                        .result-content { flex: 1; min-height: 80px; }
+                        .result-footer { background: #ef4444; color: white; font-weight: 900; font-size: 12px; padding: 5px; text-align: center; }
+
+                        .instructions-title { font-size: 18px; font-weight: 900; color: #dc2626; text-align: center; margin: 15px 0 10px; text-transform: uppercase; }
+                        .instructions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 10px; line-height: 1.3; font-weight: bold; }
+                        .instructions-grid ol { padding-left: 15px; margin: 0; }
+
+                        .phrase-container { border: 1.5px solid #dc2626; padding: 10px; margin-top: 15px; border-radius: 2px; }
+                        .phrase-label { font-size: 10px; font-weight: 900; color: #dc2626; margin-bottom: 10px; display: block; }
+                        .phrase-line { border-bottom: 1.5px solid #ddd; height: 25px; width: 100%; margin-top: 5px; }
+
+                        .answers-grid { display: grid; grid-template-columns: repeat(${totalCols}, 1fr); gap: 5px; margin-top: 15px; }
+                        .ans-column { border: 1px solid #ddd; }
+                        .ans-header { font-size: 8px; font-weight: 900; padding: 3px; text-align: center; border-bottom: 1px solid #ddd; background: #f4f4f5; display: flex; justify-content: space-around; }
+                        .ans-row { display: flex; align-items: center; padding: 2px 0; border-bottom: 0.5px solid #eee; }
+                        .q-num { width: 16px; font-size: 10px; font-weight: 900; text-align: center; color: #000; }
+                        .bubble { width: 16px; height: 16px; border: 1.2px solid #333; border-radius: 50%; font-size: 9px; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 1px; color: #333; }
+                        
+                        .footer { margin-top: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 9px; color: #666; }
+                        .footer-brand { font-weight: 900; color: #dc2626; font-size: 11px; }
                     </style>
                 </head>
                 <body>
-                    <div class="header">
-                        <h2 style="margin:0">CEMAL EQUIPE</h2>
-                        <h3 style="margin:5px 0">CARTÃO RESPOSTA OFICIAL: ${key.title}</h3>
-                    </div>
-                    <div class="info-box">
-                        <div style="font-size:10px; font-weight:bold; text-transform:uppercase">Nome do Aluno</div><div style="border-bottom: 1px solid #ccc; height: 20px; margin-bottom: 10px;"></div>
-                        <div style="display:flex; gap:20px">
-                            <div style="flex:1"><div style="font-size:10px; font-weight:bold; text-transform:uppercase">Turma</div><div style="border-bottom: 1px solid #ccc; height: 20px;"></div></div>
-                            <div style="flex:1"><div style="font-size:10px; font-weight:bold; text-transform:uppercase">Data</div><div style="border-bottom: 1px solid #ccc; height: 20px;"></div></div>
+                    <div class="marker marker-tl"></div><div class="marker marker-tr"></div>
+                    <div class="marker marker-bl"></div><div class="marker marker-br"></div>
+
+                    <header>
+                        <div style="text-align: center;">
+                            <img src="${logoUrl}" class="logo-header" />
+                            <div style="font-size: 9px; font-weight: 900; color: #dc2626; margin-top: 2px;">#SouMaisCEMAL</div>
+                        </div>
+                        <div class="header-center">
+                            <h1 class="main-title">Cartão-Resposta</h1>
+                            <div class="red-line"></div>
+                            <div class="subtitle">${key.title.toUpperCase()}</div>
+                        </div>
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${key.id}" class="qr-code" />
+                    </header>
+
+                    <div class="id-section">
+                        <div class="id-left">
+                            <span class="label-small">Nome completo:</span>
+                            <div class="name-grid">
+                                ${Array.from({length: 30}).map(() => `<div class="box"></div>`).join('')}
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 20px;">
+                                <div>
+                                    <span class="label-small">Data de Nascimento:</span>
+                                    <div class="birth-grid">
+                                        <div class="birth-group"><div class="box"></div><div class="box"></div></div>
+                                        <span class="slash">/</span>
+                                        <div class="birth-group"><div class="box"></div><div class="box"></div></div>
+                                        <span class="slash">/</span>
+                                        <div class="birth-group"><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="signature-area">Assinatura do participante</div>
+                        </div>
+                        <div class="result-box">
+                            <div class="result-header">RESULTADO FINAL:</div>
+                            <div class="result-content"></div>
+                            <div class="result-footer">NOTA / ACERTOS</div>
                         </div>
                     </div>
-                    <div class="container">
-                        <div>${Array.from({length: Math.ceil(key.numQuestions/2)}).map((_, i) => `
-                            <div class="row">
-                                <span class="num">${String(i+1).padStart(2, '0')}</span>
-                                <span class="bubble">A</span><span class="bubble">B</span><span class="bubble">C</span><span class="bubble">D</span><span class="bubble">E</span>
+
+                    <div class="instructions-title">Instruções</div>
+                    <div class="instructions-grid">
+                        <div>
+                            1. Preencha seu nome completo e a data de nascimento.<br/>
+                            2. Assine o cartão no local indicado.<br/>
+                            3. Utilize caneta esferográfica de tinta PRETA.
+                        </div>
+                        <div>
+                            4. Preencha completamente a bolinha correspondente à sua resposta.<br/>
+                            5. Não amasse, não dobre e não rasure este cartão.<br/>
+                            6. A leitora ótica não registrará respostas rasuradas.
+                        </div>
+                    </div>
+
+                    <div class="phrase-container">
+                        <span class="phrase-label">ATENÇÃO: TRANSCREVA AQUI A FRASE APRESENTADA NA CAPA DO CADERNO DE QUESTÕES</span>
+                        <div class="phrase-line"></div>
+                    </div>
+
+                    <div class="answers-grid">
+                        ${Array.from({length: totalCols}).map((_, colIdx) => `
+                            <div class="ans-column">
+                                <div class="ans-header">
+                                    <span>Q.</span> | <span>RESPOSTA</span>
+                                </div>
+                                ${Array.from({length: qPerCol}).map((_, rowIdx) => {
+                                    const qNum = (colIdx * qPerCol) + rowIdx + 1;
+                                    if (qNum > key.numQuestions) return `<div class="ans-row" style="height: 20px; opacity: 0.1;"></div>`;
+                                    return `
+                                        <div class="ans-row">
+                                            <span class="q-num">${String(qNum).padStart(2, '0')}</span>
+                                            <span class="bubble">A</span>
+                                            <span class="bubble">B</span>
+                                            <span class="bubble">C</span>
+                                            <span class="bubble">D</span>
+                                            <span class="bubble">E</span>
+                                        </div>
+                                    `;
+                                }).join('')}
                             </div>
-                        `).join('')}</div>
-                        <div>${Array.from({length: Math.floor(key.numQuestions/2)}).map((_, i) => `
-                            <div class="row">
-                                <span class="num">${String(i+Math.ceil(key.numQuestions/2)+1).padStart(2, '0')}</span>
-                                <span class="bubble">A</span><span class="bubble">B</span><span class="bubble">C</span><span class="bubble">D</span><span class="bubble">E</span>
-                            </div>
-                        `).join('')}</div>
+                        `).join('')}
+                    </div>
+
+                    <div class="footer">
+                        <div>@cemalequipe</div>
+                        <div style="font-style: italic;">Educando no caminho da verdade. Da Ed. Infantil ao Ensino Médio.</div>
+                        <div class="footer-brand">CEMAL EQUIPE</div>
                     </div>
                 </body>
                 <script>window.onload = function() { window.print(); window.close(); }</script>
@@ -525,9 +641,9 @@ export const PrintShopDashboard: React.FC = () => {
                                     <Plus size={18} className="mr-2"/> Novo Evento
                                 </Button>
                                 <div className="flex items-center gap-4 bg-black/20 p-2 rounded-xl border border-white/10">
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronLeft/></button>
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronLeft size={20} /></button>
                                     <span className="font-bold text-white uppercase tracking-widest text-sm min-w-[140px] text-center">{currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronRight/></button>
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronRight size={20} /></button>
                                 </div>
                             </div>
                         </header>
