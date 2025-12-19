@@ -58,7 +58,9 @@ import {
     ArrowRight,
     Eye,
     BookOpen,
-    Clock
+    Clock,
+    Filter,
+    ArrowLeft
 } from 'lucide-react';
 
 const CLASSES = [
@@ -83,6 +85,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
     const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
+
+    // Filter States for Students
+    const [selectedClassName, setSelectedClassName] = useState<string | null>(null);
+    const [studentSearch, setStudentSearch] = useState('');
 
     // Gabaritos & Correção States
     const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
@@ -228,13 +234,6 @@ export const PrintShopDashboard: React.FC = () => {
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
         
-        const qHtml = Array.from({length: key.numQuestions}).map((_, i) => `
-            <div class="row">
-                <span class="num">${String(i+1).padStart(2, '0')}</span>
-                <span class="bubble">A</span><span class="bubble">B</span><span class="bubble">C</span><span class="bubble">D</span><span class="bubble">E</span>
-            </div>
-        `).join('');
-
         printWindow.document.write(`
             <html>
                 <head>
@@ -247,8 +246,6 @@ export const PrintShopDashboard: React.FC = () => {
                         .num { width: 30px; font-weight: bold; font-size: 14px; }
                         .container { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; }
                         .info-box { border: 1.5px solid #000; padding: 15px; margin-bottom: 25px; border-radius: 5px; }
-                        .label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #666; margin-bottom: 5px; }
-                        .field { border-bottom: 1px solid #ccc; height: 20px; margin-bottom: 10px; }
                     </style>
                 </head>
                 <body>
@@ -257,10 +254,10 @@ export const PrintShopDashboard: React.FC = () => {
                         <h3 style="margin:5px 0">CARTÃO RESPOSTA OFICIAL: ${key.title}</h3>
                     </div>
                     <div class="info-box">
-                        <div class="label">Nome do Aluno</div><div class="field"></div>
+                        <div style="font-size:10px; font-weight:bold; text-transform:uppercase">Nome do Aluno</div><div style="border-bottom: 1px solid #ccc; height: 20px; margin-bottom: 10px;"></div>
                         <div style="display:flex; gap:20px">
-                            <div style="flex:1"><div class="label">Turma</div><div class="field"></div></div>
-                            <div style="flex:1"><div class="label">Data</div><div class="field"></div></div>
+                            <div style="flex:1"><div style="font-size:10px; font-weight:bold; text-transform:uppercase">Turma</div><div style="border-bottom: 1px solid #ccc; height: 20px;"></div></div>
+                            <div style="flex:1"><div style="font-size:10px; font-weight:bold; text-transform:uppercase">Data</div><div style="border-bottom: 1px solid #ccc; height: 20px;"></div></div>
                         </div>
                     </div>
                     <div class="container">
@@ -323,6 +320,15 @@ export const PrintShopDashboard: React.FC = () => {
         );
     };
 
+    // Filtros de Alunos
+    const filteredStudents = students.filter(s => {
+        const matchesClass = selectedClassName ? s.className === selectedClassName : true;
+        const matchesSearch = s.name.toLowerCase().includes(studentSearch.toLowerCase());
+        return matchesClass && matchesSearch;
+    });
+
+    const presentStudentIds = new Set(attendanceLogs.map(log => log.studentId));
+
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
             {/* SIDEBAR */}
@@ -331,7 +337,6 @@ export const PrintShopDashboard: React.FC = () => {
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Painel Escolar</p>
                     <SidebarItem id="calendar" label="Agenda / Eventos" icon={CalendarDays} />
                     <SidebarItem id="exams" label="Gráfica / Impressão" icon={Printer} />
-                    <SidebarItem id="classes" label="Gestão de Turmas" icon={School} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
                     <SidebarItem id="attendance" label="Frequência" icon={ClipboardCheck} />
                     <SidebarItem id="planning" label="Planejamentos" icon={BookOpen} />
@@ -342,7 +347,7 @@ export const PrintShopDashboard: React.FC = () => {
             </div>
 
             {/* MAIN CONTENT AREA */}
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-transparent">
                 
                 {activeTab === 'calendar' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
@@ -396,61 +401,134 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'classes' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8">
-                            <h1 className="text-3xl font-bold text-white">Gestão de Turmas</h1>
-                            <p className="text-gray-400">Controle de alunos matriculados por sala.</p>
+                {activeTab === 'students' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 h-full flex flex-col">
+                        <header className="mb-8 flex justify-between items-end">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white">Gestão de Alunos</h1>
+                                <p className="text-gray-400">Filtragem por turma e status de biometria facial.</p>
+                            </div>
+                            {selectedClassName && (
+                                <button 
+                                    onClick={() => setSelectedClassName(null)}
+                                    className="flex items-center gap-2 text-red-500 hover:text-red-400 font-bold uppercase text-xs"
+                                >
+                                    <ArrowLeft size={16}/> Ver Todas as Turmas
+                                </button>
+                            )}
                         </header>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {CLASSES.map(c => (
-                                <div key={c.id} className="bg-[#18181b] border border-gray-800 p-6 rounded-2xl hover:border-red-500 transition-colors cursor-pointer group">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="h-12 w-12 bg-red-900/20 text-red-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                            <School size={28}/>
+
+                        {!selectedClassName ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in zoom-in-95">
+                                {CLASSES.map(c => (
+                                    <div 
+                                        key={c.id} 
+                                        onClick={() => setSelectedClassName(c.name)}
+                                        className="bg-[#18181b] border border-gray-800 p-6 rounded-3xl hover:border-red-600 hover:scale-[1.02] transition-all cursor-pointer group shadow-xl"
+                                    >
+                                        <div className="h-14 w-14 bg-red-900/20 text-red-500 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-red-600 group-hover:text-white transition-colors">
+                                            <Users size={32}/>
+                                        </div>
+                                        <h3 className="text-xl font-black text-white leading-tight uppercase">{c.name}</h3>
+                                        <div className="mt-4 flex justify-between items-center">
+                                            <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">{students.filter(s => s.className === c.name).length} Alunos</p>
+                                            <span className={`text-[10px] font-black px-2 py-1 rounded ${c.shift === 'morning' ? 'bg-blue-900/40 text-blue-400' : 'bg-orange-900/40 text-orange-400'}`}>
+                                                {c.shift === 'morning' ? 'MANHÃ' : 'TARDE'}
+                                            </span>
                                         </div>
                                     </div>
-                                    <h3 className="text-xl font-bold text-white">{c.name}</h3>
-                                    <p className="text-gray-500 text-sm mt-1">{students.filter(s => s.className === c.name).length} Alunos Matriculados</p>
+                                ))}
+                                {/* CARD ADICIONAL: TODOS */}
+                                <div 
+                                    onClick={() => setSelectedClassName('ALL')}
+                                    className="bg-red-600 p-6 rounded-3xl hover:bg-red-700 transition-all cursor-pointer group shadow-2xl flex flex-col justify-between"
+                                >
+                                    <div className="h-14 w-14 bg-white/20 text-white rounded-2xl flex items-center justify-center mb-6">
+                                        <Filter size={32}/>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-white leading-tight uppercase">Geral</h3>
+                                        <p className="text-red-100 text-xs font-bold uppercase tracking-widest mt-1">Todos os {students.length} Alunos</p>
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                            </div>
+                        ) : (
+                            <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6">
+                                <div className="bg-[#18181b] border border-gray-800 rounded-3xl p-6 flex flex-col md:flex-row gap-6 items-center justify-between shadow-2xl">
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-12 w-12 bg-red-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                                            <School size={24}/>
+                                        </div>
+                                        <div>
+                                            <h2 className="text-2xl font-black text-white uppercase">{selectedClassName === 'ALL' ? 'Todos os Alunos' : selectedClassName}</h2>
+                                            <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">{filteredStudents.length} Estudantes Filtrados</p>
+                                        </div>
+                                    </div>
+                                    <div className="relative w-full md:w-96">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18}/>
+                                        <input 
+                                            type="text" 
+                                            className="w-full bg-black/40 border border-gray-700 rounded-2xl py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-red-600 outline-none transition-all"
+                                            placeholder="Buscar aluno pelo nome..."
+                                            value={studentSearch}
+                                            onChange={e => setStudentSearch(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
 
-                {activeTab === 'students' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8">
-                            <h1 className="text-3xl font-bold text-white">Lista de Alunos</h1>
-                            <p className="text-gray-400">Cadastros e status de biometria facial.</p>
-                        </header>
-                        <div className="bg-white rounded-2xl overflow-hidden shadow-xl">
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-xs">
-                                    <tr>
-                                        <th className="p-4">Aluno</th>
-                                        <th className="p-4">Turma</th>
-                                        <th className="p-4 text-center">Status Foto</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {students.map(s => (
-                                        <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="p-4 flex items-center gap-3">
-                                                <div className="h-10 w-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center">
-                                                    {s.photoUrl ? <img src={s.photoUrl} className="h-full w-full object-cover"/> : <Users className="text-gray-400" size={20}/>}
-                                                </div>
-                                                <span className="font-bold text-gray-800">{s.name}</span>
-                                            </td>
-                                            <td className="p-4 text-gray-600">{s.className}</td>
-                                            <td className="p-4 text-center">
-                                                {s.photoUrl ? <CheckCircle size={18} className="text-green-500 mx-auto"/> : <XCircle size={18} className="text-red-400 mx-auto"/>}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-2xl border border-gray-100">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[10px] tracking-widest">
+                                            <tr>
+                                                <th className="p-6">Estudante</th>
+                                                <th className="p-6">Turma Atual</th>
+                                                <th className="p-6 text-center">Biometria</th>
+                                                <th className="p-6 text-center">Frequência Hoje</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {filteredStudents.map(s => {
+                                                const isPresent = presentStudentIds.has(s.id);
+                                                return (
+                                                    <tr key={s.id} className="hover:bg-gray-50 transition-colors group">
+                                                        <td className="p-6 flex items-center gap-4">
+                                                            <div className="h-12 w-12 rounded-full bg-gray-100 border border-gray-200 overflow-hidden shrink-0 shadow-inner group-hover:scale-110 transition-transform">
+                                                                {s.photoUrl ? <img src={s.photoUrl} className="h-full w-full object-cover"/> : <Users className="text-gray-300 w-full h-full p-3" />}
+                                                            </div>
+                                                            <span className="font-bold text-gray-800 text-lg">{s.name}</span>
+                                                        </td>
+                                                        <td className="p-6">
+                                                            <span className="text-gray-500 font-bold bg-gray-100 px-3 py-1 rounded-full text-xs">{s.className}</span>
+                                                        </td>
+                                                        <td className="p-6 text-center">
+                                                            {s.photoUrl ? (
+                                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 text-[10px] font-black uppercase border border-green-100">
+                                                                    <CheckCircle size={12}/> Ativo
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-600 text-[10px] font-black uppercase border border-red-100">
+                                                                    <XCircle size={12}/> Pendente
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-6 text-center">
+                                                            {isPresent ? (
+                                                                <span className="bg-blue-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-black uppercase shadow-lg shadow-blue-900/20">Presente</span>
+                                                            ) : (
+                                                                <span className="bg-gray-200 text-gray-500 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase">Ausente</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                            {filteredStudents.length === 0 && (
+                                                <tr><td colSpan={4} className="p-20 text-center text-gray-400 italic">Nenhum aluno encontrado para os critérios selecionados.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
