@@ -53,7 +53,11 @@ import {
   FileUp,
   PenTool,
   ExternalLink,
-  X
+  X,
+  Search,
+  ClipboardList,
+  // Fix: Added missing Users icon import from lucide-react
+  Users
 } from 'lucide-react';
 
 // --- CONSTANTES DE IMAGEM ---
@@ -96,7 +100,7 @@ export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials' | 'plans'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'provas' | 'create' | 'materials' | 'plans'>('requests');
   
   // Create Mode State: 'none' (selection screen), 'upload' (direct print), 'create' (AI editor)
   const [creationMode, setCreationMode] = useState<'none' | 'upload' | 'create'>('none');
@@ -130,6 +134,9 @@ export const TeacherDashboard: React.FC = () => {
 
   // Preview State
   const [zoomLevel, setZoomLevel] = useState(0.8);
+
+  // Provas Search
+  const [provasSearch, setProvasSearch] = useState('');
 
   // Materials State
   const [materials, setMaterials] = useState<ClassMaterial[]>([]);
@@ -659,6 +666,17 @@ export const TeacherDashboard: React.FC = () => {
             </button>
 
             <button
+                onClick={() => setActiveTab('provas')}
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
+                ${activeTab === 'provas' ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+            >
+                <div className="flex items-center gap-3">
+                <FileText size={18} />
+                <span>Provas</span>
+                </div>
+            </button>
+
+            <button
                 onClick={handleNewExam}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 font-medium text-sm
                 ${activeTab === 'create' ? 'bg-red-600 text-white shadow-lg shadow-red-900/50' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
@@ -743,6 +761,103 @@ export const TeacherDashboard: React.FC = () => {
           <div className="text-center py-20 text-gray-300 border-2 border-dashed border-gray-200 rounded-lg">
               <p>Área de Conteúdo (Vazia)</p>
           </div>
+      );
+  };
+
+  // Sub-render: Provas (Galeria de Provas)
+  const renderProvas = () => {
+      const filteredProvas = exams.filter(e => 
+          e.materialType === 'exam' && 
+          (e.title.toLowerCase().includes(provasSearch.toLowerCase()) || 
+           e.gradeLevel.toLowerCase().includes(provasSearch.toLowerCase()))
+      );
+
+      return (
+        <div className="flex-1 overflow-y-auto p-8 animate-in fade-in slide-in-from-right-4 duration-300">
+            <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-white">Minhas Provas</h1>
+                    <p className="text-gray-400">Repositório de avaliações enviadas e diagramadas.</p>
+                </div>
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por título ou turma..." 
+                        className="pl-10 pr-4 py-2.5 bg-white/10 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-red-500 outline-none w-full md:w-80"
+                        value={provasSearch}
+                        onChange={e => setProvasSearch(e.target.value)}
+                    />
+                </div>
+            </header>
+
+            {filteredProvas.length === 0 ? (
+                <Card className="flex flex-col items-center justify-center py-20 text-center bg-white/5 border-white/10">
+                    <ClipboardList size={64} className="text-gray-600 mb-4 opacity-30" />
+                    <p className="text-gray-400 font-medium">Nenhuma prova cadastrada nesta busca.</p>
+                    <Button onClick={handleNewExam} className="mt-6">
+                        <Plus className="w-4 h-4 mr-2" /> Criar Nova Prova
+                    </Button>
+                </Card>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredProvas.map(prova => (
+                        <div key={prova.id} className="bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-100 flex flex-col group hover:shadow-xl transition-all">
+                            {/* Card Header/Thumbnail Area */}
+                            <div className="h-32 bg-gray-100 flex items-center justify-center relative group-hover:bg-red-50 transition-colors">
+                                <FileText size={48} className="text-gray-400 group-hover:text-red-500 transition-colors" />
+                                <div className="absolute top-3 right-3">
+                                    <span className={`px-2 py-1 rounded text-[10px] font-black uppercase shadow-sm ${prova.status === ExamStatus.COMPLETED ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                        {prova.status === ExamStatus.COMPLETED ? 'Finalizada' : 'Pendente'}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            {/* Card Body */}
+                            <div className="p-5 flex-1 flex flex-col">
+                                <h3 className="font-bold text-gray-800 line-clamp-2 mb-2 group-hover:text-red-600 transition-colors" title={prova.title}>
+                                    {prova.title}
+                                </h3>
+                                <div className="space-y-1 mb-6">
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                                        <Users size={12} /> {prova.gradeLevel}
+                                    </p>
+                                    <p className="text-xs text-gray-400 font-medium">
+                                        {new Date(prova.createdAt).toLocaleDateString()}
+                                    </p>
+                                </div>
+
+                                <div className="mt-auto flex items-center gap-2 pt-4 border-t border-gray-50">
+                                    <a 
+                                        href={prova.fileUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-lg text-xs flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        <Download size={14} /> Baixar
+                                    </a>
+                                    <button 
+                                        onClick={() => handleEditExam(prova)}
+                                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                        title="Editar Prova"
+                                        disabled={prova.status !== ExamStatus.PENDING}
+                                    >
+                                        <Edit3 size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDeleteExam(prova.id)}
+                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                        title="Excluir"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
       );
   };
 
@@ -1586,6 +1701,7 @@ export const TeacherDashboard: React.FC = () => {
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 overflow-hidden flex flex-col bg-transparent">
             {activeTab === 'requests' && renderRequests()}
+            {activeTab === 'provas' && renderProvas()}
             {activeTab === 'materials' && renderMaterials()}
             {activeTab === 'plans' && renderPlans()}
             {activeTab === 'create' && renderCreate()}

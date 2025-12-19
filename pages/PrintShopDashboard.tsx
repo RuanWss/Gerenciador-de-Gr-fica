@@ -103,6 +103,14 @@ export const PrintShopDashboard: React.FC = () => {
     const [correctionResult, setCorrectionResult] = useState<StudentCorrection | null>(null);
     const [selectedStudentId, setSelectedStudentId] = useState('');
 
+    // Agenda / Eventos States
+    const [showEventModal, setShowEventModal] = useState(false);
+    const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
+    const [newEventTitle, setNewEventTitle] = useState('');
+    const [newEventDate, setNewEventDate] = useState('');
+    const [newEventType, setNewEventType] = useState<'event' | 'holiday' | 'exam' | 'meeting'>('event');
+    const [newEventDesc, setNewEventDesc] = useState('');
+
     // Modal de Planejamento
     const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
     const [showPlanModal, setShowPlanModal] = useState(false);
@@ -178,6 +186,54 @@ export const PrintShopDashboard: React.FC = () => {
             isBannerActive: configIsBannerActive
         });
         alert("Configurações atualizadas!");
+    };
+
+    // --- AGENDA HANDLERS ---
+    const openEventModal = (event?: SchoolEvent, prefillDate?: string) => {
+        if (event) {
+            setSelectedEvent(event);
+            setNewEventTitle(event.title);
+            setNewEventDate(event.date);
+            setNewEventType(event.type);
+            setNewEventDesc(event.description || '');
+        } else {
+            setSelectedEvent(null);
+            setNewEventTitle('');
+            setNewEventDate(prefillDate || new Date().toISOString().split('T')[0]);
+            setNewEventType('event');
+            setNewEventDesc('');
+        }
+        setShowEventModal(true);
+    };
+
+    const handleSaveEvent = async () => {
+        if (!newEventTitle || !newEventDate) return alert("Título e data são obrigatórios.");
+        const event: SchoolEvent = {
+            id: selectedEvent?.id || '',
+            title: newEventTitle,
+            date: newEventDate,
+            type: newEventType,
+            description: newEventDesc,
+            tasks: selectedEvent?.tasks || []
+        };
+        try {
+            await saveSchoolEvent(event);
+            setShowEventModal(false);
+        } catch (e) {
+            alert("Erro ao salvar evento.");
+        }
+    };
+
+    const handleDeleteEvent = async () => {
+        if (!selectedEvent) return;
+        if(confirm("Deseja excluir este evento permanentemente?")) {
+            try {
+                await deleteSchoolEvent(selectedEvent.id);
+                setShowEventModal(false);
+            } catch (e) {
+                alert("Erro ao excluir evento.");
+            }
+        }
     };
 
     const handleSelectKey = async (key: AnswerKey) => {
@@ -302,13 +358,30 @@ export const PrintShopDashboard: React.FC = () => {
             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
             const dayEvents = events.filter(e => e.date === dateStr);
             days.push(
-                <div key={d} className="bg-white/5 h-24 border border-white/5 p-2 overflow-y-auto">
+                <div key={d} className="bg-white/5 h-24 border border-white/5 p-2 overflow-y-auto relative group">
                     <span className="text-xs font-bold text-gray-500">{d}</span>
-                    {dayEvents.map(e => (
-                        <div key={e.id} className="mt-1 text-[10px] bg-red-600/20 text-red-400 p-1 rounded border border-red-500/20 truncate">
-                            {e.title}
-                        </div>
-                    ))}
+                    <button 
+                        onClick={() => openEventModal(undefined, dateStr)}
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 p-1 bg-white/10 hover:bg-red-600 rounded transition-all text-white"
+                    >
+                        <Plus size={10}/>
+                    </button>
+                    <div className="mt-1 space-y-1">
+                        {dayEvents.map(e => (
+                            <div 
+                                key={e.id} 
+                                onClick={() => openEventModal(e)}
+                                className={`text-[9px] p-1 rounded border truncate cursor-pointer transition-colors ${
+                                    e.type === 'holiday' ? 'bg-red-900/40 text-red-100 border-red-500/50' :
+                                    e.type === 'exam' ? 'bg-purple-900/40 text-purple-100 border-purple-500/50' :
+                                    e.type === 'meeting' ? 'bg-blue-900/40 text-blue-100 border-blue-500/50' :
+                                    'bg-green-900/40 text-green-100 border-green-500/50'
+                                } hover:brightness-125`}
+                            >
+                                {e.title}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             );
         }
@@ -337,7 +410,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Painel Escolar</p>
                     <SidebarItem id="calendar" label="Agenda / Eventos" icon={CalendarDays} />
                     <SidebarItem id="exams" label="Gráfica / Impressão" icon={Printer} />
-                    <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
+                    <SidebarItem id="students" label="Gestão de Turmas" icon={Users} />
                     <SidebarItem id="attendance" label="Frequência" icon={ClipboardCheck} />
                     <SidebarItem id="planning" label="Planejamentos" icon={BookOpen} />
                     <SidebarItem id="corrections" label="Correção via IA" icon={ScanLine} />
@@ -351,15 +424,20 @@ export const PrintShopDashboard: React.FC = () => {
                 
                 {activeTab === 'calendar' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex justify-between items-center">
+                        <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>
                                 <h1 className="text-3xl font-bold text-white">Agenda Institucional</h1>
                                 <p className="text-gray-400">Controle de eventos e calendário escolar.</p>
                             </div>
-                            <div className="flex items-center gap-4 bg-black/20 p-2 rounded-xl">
-                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded text-white"><ChevronLeft/></button>
-                                <span className="font-bold text-white uppercase tracking-widest text-sm">{currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded text-white"><ChevronRight/></button>
+                            <div className="flex items-center gap-4">
+                                <Button onClick={() => openEventModal()} className="bg-red-600 hover:bg-red-700">
+                                    <Plus size={18} className="mr-2"/> Novo Evento
+                                </Button>
+                                <div className="flex items-center gap-4 bg-black/20 p-2 rounded-xl border border-white/10">
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded text-white"><ChevronLeft/></button>
+                                    <span className="font-bold text-white uppercase tracking-widest text-sm min-w-[140px] text-center">{currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded text-white"><ChevronRight/></button>
+                                </div>
                             </div>
                         </header>
                         {renderCalendar()}
@@ -405,7 +483,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4 h-full flex flex-col">
                         <header className="mb-8 flex justify-between items-end">
                             <div>
-                                <h1 className="text-3xl font-bold text-white">Gestão de Alunos</h1>
+                                <h1 className="text-3xl font-bold text-white">Gestão de Turmas</h1>
                                 <p className="text-gray-400">Filtragem por turma e status de biometria facial.</p>
                             </div>
                             {selectedClassName && (
@@ -721,6 +799,80 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* MODAL EVENTO (AGENDA) */}
+            {showEventModal && (
+                <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-[#18181b] border border-gray-800 w-full max-w-md rounded-2xl shadow-2xl p-6 animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-white uppercase tracking-tight flex items-center gap-2">
+                                <CalendarDays className="text-red-600"/> {selectedEvent ? 'Editar Evento' : 'Novo Evento'}
+                            </h3>
+                            <button onClick={() => setShowEventModal(false)} className="text-gray-400 hover:text-white transition-colors">
+                                <X size={24}/>
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Título do Evento</label>
+                                <input 
+                                    className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none transition-all" 
+                                    value={newEventTitle} 
+                                    onChange={e => setNewEventTitle(e.target.value)} 
+                                    placeholder="Ex: Conselho de Classe"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
+                                        value={newEventDate} 
+                                        onChange={e => setNewEventDate(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tipo</label>
+                                    <select 
+                                        className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
+                                        value={newEventType} 
+                                        onChange={e => setNewEventType(e.target.value as any)}
+                                    >
+                                        <option value="event">Geral</option>
+                                        <option value="holiday">Feriado</option>
+                                        <option value="exam">Prova</option>
+                                        <option value="meeting">Reunião</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição</label>
+                                <textarea 
+                                    rows={3} 
+                                    className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
+                                    value={newEventDesc} 
+                                    onChange={e => setNewEventDesc(e.target.value)} 
+                                    placeholder="Detalhes opcionais..."
+                                />
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-center mt-8 pt-6 border-t border-white/5">
+                            {selectedEvent ? (
+                                <button onClick={handleDeleteEvent} className="text-red-500 hover:text-red-400 font-bold uppercase text-xs flex items-center gap-2">
+                                    <Trash2 size={16}/> Excluir Registro
+                                </button>
+                            ) : <div></div>}
+                            <div className="flex gap-3">
+                                <Button variant="outline" onClick={() => setShowEventModal(false)} className="border-gray-700 text-gray-400">Cancelar</Button>
+                                <Button onClick={handleSaveEvent} className="bg-red-600 hover:bg-red-700 shadow-lg shadow-red-900/40">
+                                    <Save size={18} className="mr-2"/> Salvar
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* MODAL DETALHES PLANEJAMENTO */}
             {showPlanModal && selectedPlan && (
