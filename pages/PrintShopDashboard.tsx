@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
     getExams, 
@@ -66,7 +66,11 @@ import {
     ArrowLeft,
     ClipboardList,
     Briefcase,
-    UserCheck
+    UserCheck,
+    Files,
+    Loader2,
+    Check,
+    LayoutList
 } from 'lucide-react';
 
 const CLASSES = [
@@ -104,18 +108,18 @@ export const PrintShopDashboard: React.FC = () => {
     const [keyTitle, setKeyTitle] = useState('');
     const [keyQuestions, setKeyQuestions] = useState(10);
     const [keyAnswers, setKeyAnswers] = useState<Record<number, string>>({});
-    const [corrections, setCorrections] = useState<StudentCorrection[]>([]);
-    const [correctingImage, setCorrectingImage] = useState<File | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [correctionResult, setCorrectionResult] = useState<StudentCorrection | null>(null);
-    const [selectedStudentId, setSelectedStudentId] = useState('');
+    
+    // Batch Correction States
+    const [batchFiles, setBatchFiles] = useState<File[]>([]);
+    const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+    const [batchProgress, setBatchProgress] = useState(0);
+    const [batchResults, setBatchResults] = useState<StudentCorrection[]>([]);
 
     // Agenda / Eventos States
     const [showEventModal, setShowEventModal] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
     const [newEventTitle, setNewEventTitle] = useState('');
     const [newEventDate, setNewEventDate] = useState('');
-    const [newEventEndDate, setNewEventEndDate] = useState('');
     const [newEventType, setNewEventType] = useState<'event' | 'holiday' | 'exam' | 'meeting'>('event');
     const [newEventDesc, setNewEventDesc] = useState('');
     const [eventTasks, setEventTasks] = useState<EventTask[]>([]);
@@ -210,7 +214,6 @@ export const PrintShopDashboard: React.FC = () => {
             setSelectedEvent(event);
             setNewEventTitle(event.title);
             setNewEventDate(event.date);
-            setNewEventEndDate(event.endDate || '');
             setNewEventType(event.type);
             setNewEventDesc(event.description || '');
             setEventTasks(event.tasks || []);
@@ -218,7 +221,6 @@ export const PrintShopDashboard: React.FC = () => {
             setSelectedEvent(null);
             setNewEventTitle('');
             setNewEventDate(prefillDate || new Date().toISOString().split('T')[0]);
-            setNewEventEndDate('');
             setNewEventType('event');
             setNewEventDesc('');
             setEventTasks([]);
@@ -257,7 +259,6 @@ export const PrintShopDashboard: React.FC = () => {
             id: selectedEvent?.id || '',
             title: newEventTitle,
             date: newEventDate,
-            endDate: newEventEndDate || undefined,
             type: newEventType,
             description: newEventDesc,
             tasks: eventTasks
@@ -284,8 +285,9 @@ export const PrintShopDashboard: React.FC = () => {
 
     const handleSelectKey = async (key: AnswerKey) => {
         setSelectedKey(key);
-        const data = await getCorrections(key.id);
-        setCorrections(data.sort((a,b) => b.date - a.date));
+        setBatchResults([]);
+        setBatchFiles([]);
+        setBatchProgress(0);
     };
 
     const handleCreateKey = async () => {
@@ -303,159 +305,160 @@ export const PrintShopDashboard: React.FC = () => {
         setKeyTitle(''); setKeyAnswers({});
     };
 
-    const handleAutoCorrect = async () => {
-        if (!correctingImage || !selectedKey || !selectedStudentId) return alert("Dados incompletos.");
-        setIsAnalyzing(true);
-        try {
-            const studentAnswers = await analyzeAnswerSheet(correctingImage, selectedKey.numQuestions);
-            const student = students.find(s => s.id === selectedStudentId);
-            let scoreCount = 0;
-            const hits: number[] = [];
-            for (let i = 1; i <= selectedKey.numQuestions; i++) {
-                if (studentAnswers[i] === selectedKey.correctAnswers[i]) {
-                    scoreCount++; hits.push(i);
-                }
-            }
-            const res: StudentCorrection = {
-                id: '',
-                answerKeyId: selectedKey.id,
-                studentName: student?.name || 'Aluno',
-                score: (scoreCount / selectedKey.numQuestions) * 10,
-                answers: studentAnswers,
-                hits: hits,
-                date: Date.now()
-            };
-            await saveCorrection(res);
-            setCorrectionResult(res);
-            setCorrections([res, ...corrections]);
-        } catch (e) { alert("Erro IA: " + (e as any).message); }
-        finally { setIsAnalyzing(false); }
+    // --- BATCH CORRECTION LOGIC ---
+    const handleFilesSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setBatchFiles(Array.from(e.target.files));
+            setBatchResults([]);
+            setBatchProgress(0);
+        }
     };
 
-    const printAnswerSheet = (key: AnswerKey) => {
+    const startBatchCorrection = async () => {
+        if (!selectedKey || batchFiles.length === 0) return alert("Selecione o gabarito e as imagens.");
+        
+        setIsProcessingBatch(true);
+        const results: StudentCorrection[] = [];
+        
+        for (let i = 0; i < batchFiles.length; i++) {
+            try {
+                setBatchProgress(i + 1);
+                const file = batchFiles[i];
+                const studentAnswers = await analyzeAnswerSheet(file, selectedKey.numQuestions);
+                
+                // Em um cenário real, a IA também extrairia o nome do aluno ou ID do QR Code
+                // Para este MVP, usaremos o nome do arquivo como referência de nome do aluno se não houver mapeamento
+                let scoreCount = 0;
+                const hits: number[] = [];
+                for (let k = 1; k <= selectedKey.numQuestions; k++) {
+                    if (studentAnswers[k] === selectedKey.correctAnswers[k]) {
+                        scoreCount++; hits.push(k);
+                    }
+                }
+
+                const res: StudentCorrection = {
+                    id: '',
+                    answerKeyId: selectedKey.id,
+                    studentName: file.name.split('.')[0].toUpperCase(), // Nome baseado no arquivo
+                    score: (scoreCount / selectedKey.numQuestions) * 10,
+                    answers: studentAnswers,
+                    hits: hits,
+                    date: Date.now()
+                };
+                
+                await saveCorrection(res);
+                results.push(res);
+                setBatchResults([...results]);
+            } catch (e) {
+                console.error("Erro no processamento do arquivo:", batchFiles[i].name, e);
+            }
+        }
+        
+        setIsProcessingBatch(false);
+        alert("Processamento do lote finalizado!");
+    };
+
+    // --- BATCH PRINT LOGIC ---
+    const printAnswerSheetsForClass = (key: AnswerKey, className: string) => {
+        const classStudents = students.filter(s => s.className === className);
+        if (classStudents.length === 0) return alert("Nenhum aluno cadastrado nesta turma.");
+
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
-        
+
+        const logoUrl = "https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png";
         const qPerCol = 15;
         const totalCols = 6;
-        const logoUrl = "https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png";
-        
-        printWindow.document.write(`
+
+        let html = `
             <html>
                 <head>
-                    <title>Cartão Resposta - ${key.title}</title>
+                    <title>Impressão em Lote - ${className}</title>
                     <style>
                         @page { size: A4; margin: 0; }
-                        body { font-family: 'Arial', sans-serif; color: #333; margin: 0; padding: 20mm; background: #fff; position: relative; }
+                        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #fff; }
+                        .page { position: relative; width: 210mm; height: 297mm; padding: 15mm; box-sizing: border-box; page-break-after: always; }
                         
                         /* Marcadores de Scanner */
-                        .marker { position: absolute; width: 25px; height: 25px; border: 5px solid black; }
+                        .marker { position: absolute; width: 22px; height: 22px; border: 5px solid black; }
                         .marker-tl { top: 10mm; left: 10mm; border-right: 0; border-bottom: 0; }
                         .marker-tr { top: 10mm; right: 10mm; border-left: 0; border-bottom: 0; }
                         .marker-bl { bottom: 10mm; left: 10mm; border-right: 0; border-top: 0; }
                         .marker-br { bottom: 10mm; right: 10mm; border-left: 0; border-top: 0; }
 
-                        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-                        .logo-header { height: 50px; width: auto; }
-                        .header-center { flex: 1; text-align: center; margin: 0 20px; }
-                        .main-title { font-size: 32px; font-weight: 900; margin: 0; text-transform: uppercase; color: #222; }
-                        .red-line { height: 4px; background: #dc2626; width: 100%; margin-top: 4px; }
-                        .subtitle { font-size: 14px; font-weight: bold; margin-top: 5px; color: #666; }
-                        .qr-code { height: 80px; width: 80px; border: 1px solid #eee; }
+                        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+                        .logo-header { height: 45px; width: auto; }
+                        .header-center { flex: 1; text-align: center; margin: 0 15px; }
+                        .main-title { font-size: 24px; font-weight: 900; margin: 0; text-transform: uppercase; }
+                        .red-line { height: 3px; background: #dc2626; width: 100%; margin-top: 3px; }
+                        .subtitle { font-size: 10px; font-weight: bold; margin-top: 4px; color: #444; }
+                        .qr-code { height: 60px; width: 60px; }
 
-                        .id-section { display: grid; grid-template-columns: 2.2fr 1fr; gap: 0; border: 1.5px solid #000; margin-top: 10px; }
-                        .id-left { border-right: 1.5px solid #000; padding: 10px; }
-                        .label-small { font-size: 11px; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 5px; }
+                        .id-section { display: grid; grid-template-columns: 2.5fr 1fr; gap: 0; border: 1.5px solid #000; margin-top: 8px; }
+                        .id-left { border-right: 1.5px solid #000; padding: 8px; }
+                        .label-small { font-size: 9px; font-weight: 900; text-transform: uppercase; display: block; margin-bottom: 4px; }
+                        .name-grid { display: flex; gap: 1px; margin-bottom: 8px; }
+                        .box { width: 15px; height: 20px; border: 1px solid #444; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-transform: uppercase; }
                         
-                        .name-grid { display: flex; gap: 1px; margin-bottom: 10px; }
-                        .box { width: 16px; height: 22px; border: 1px solid #444; border-radius: 1px; }
-                        
-                        .birth-grid { display: flex; align-items: center; gap: 5px; }
-                        .birth-group { display: flex; gap: 1px; }
-                        .slash { font-weight: 900; font-size: 16px; margin: 0 2px; }
+                        .result-box { display: flex; flex-direction: column; }
+                        .result-header { background: #fee2e2; color: #dc2626; font-weight: 900; font-size: 10px; padding: 4px; text-align: center; border-bottom: 1px solid #000; }
+                        .result-footer { background: #ef4444; color: white; font-weight: 900; font-size: 10px; padding: 4px; text-align: center; margin-top: auto; border-top: 1px solid #000; }
 
-                        .signature-area { margin-top: 15px; border-top: 1.5px dashed #666; text-align: center; padding-top: 3px; font-size: 9px; font-weight: bold; color: #666; width: 80%; margin-left: auto; margin-right: auto; }
+                        .instructions { font-size: 8px; line-height: 1.2; font-weight: bold; border: 1px solid #eee; padding: 4px; margin-top: 10px; }
+                        .phrase-container { border: 1.5px solid #dc2626; padding: 8px; margin-top: 10px; border-radius: 2px; }
+                        .phrase-label { font-size: 8px; font-weight: 900; color: #dc2626; margin-bottom: 6px; display: block; }
+                        .phrase-line { border-bottom: 1px solid #ddd; height: 20px; width: 100%; }
 
-                        .result-box { display: flex; flex-col flex-direction: column; height: 100%; }
-                        .result-header { background: #fee2e2; color: #dc2626; font-weight: 900; font-size: 12px; padding: 5px; text-align: center; }
-                        .result-content { flex: 1; min-height: 80px; }
-                        .result-footer { background: #ef4444; color: white; font-weight: 900; font-size: 12px; padding: 5px; text-align: center; }
-
-                        .instructions-title { font-size: 18px; font-weight: 900; color: #dc2626; text-align: center; margin: 15px 0 10px; text-transform: uppercase; }
-                        .instructions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 10px; line-height: 1.3; font-weight: bold; }
-                        .instructions-grid ol { padding-left: 15px; margin: 0; }
-
-                        .phrase-container { border: 1.5px solid #dc2626; padding: 10px; margin-top: 15px; border-radius: 2px; }
-                        .phrase-label { font-size: 10px; font-weight: 900; color: #dc2626; margin-bottom: 10px; display: block; }
-                        .phrase-line { border-bottom: 1.5px solid #ddd; height: 25px; width: 100%; margin-top: 5px; }
-
-                        .answers-grid { display: grid; grid-template-columns: repeat(${totalCols}, 1fr); gap: 5px; margin-top: 15px; }
+                        .answers-grid { display: grid; grid-template-columns: repeat(${totalCols}, 1fr); gap: 4px; margin-top: 12px; }
                         .ans-column { border: 1px solid #ddd; }
-                        .ans-header { font-size: 8px; font-weight: 900; padding: 3px; text-align: center; border-bottom: 1px solid #ddd; background: #f4f4f5; display: flex; justify-content: space-around; }
-                        .ans-row { display: flex; align-items: center; padding: 2px 0; border-bottom: 0.5px solid #eee; }
-                        .q-num { width: 16px; font-size: 10px; font-weight: 900; text-align: center; color: #000; }
-                        .bubble { width: 16px; height: 16px; border: 1.2px solid #333; border-radius: 50%; font-size: 9px; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 1px; color: #333; }
+                        .ans-header { font-size: 7px; font-weight: 900; padding: 2px; text-align: center; border-bottom: 1px solid #ddd; background: #f4f4f5; display: flex; justify-content: space-around; }
+                        .ans-row { display: flex; align-items: center; padding: 1.5px 0; border-bottom: 0.5px solid #eee; }
+                        .q-num { width: 14px; font-size: 9px; font-weight: 900; text-align: center; }
+                        .bubble { width: 14px; height: 14px; border: 1px solid #333; border-radius: 50%; font-size: 8px; font-weight: 900; display: flex; align-items: center; justify-content: center; margin: 0 1px; color: #333; }
                         
-                        .footer { margin-top: 20px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 9px; color: #666; }
-                        .footer-brand { font-weight: 900; color: #dc2626; font-size: 11px; }
+                        .footer { position: absolute; bottom: 15mm; width: calc(100% - 30mm); display: flex; justify-content: space-between; align-items: flex-end; font-size: 8px; color: #777; border-top: 1px solid #eee; padding-top: 5px; }
                     </style>
                 </head>
                 <body>
+        `;
+
+        classStudents.forEach(student => {
+            const studentName = student.name.padEnd(30, ' ').substring(0, 30);
+            html += `
+                <div class="page">
                     <div class="marker marker-tl"></div><div class="marker marker-tr"></div>
                     <div class="marker marker-bl"></div><div class="marker marker-br"></div>
 
                     <header>
                         <div style="text-align: center;">
                             <img src="${logoUrl}" class="logo-header" />
-                            <div style="font-size: 9px; font-weight: 900; color: #dc2626; margin-top: 2px;">#SouMaisCEMAL</div>
+                            <div style="font-size: 8px; font-weight: 900; color: #dc2626; margin-top: 2px;">#SouMaisCEMAL</div>
                         </div>
                         <div class="header-center">
                             <h1 class="main-title">Cartão-Resposta</h1>
                             <div class="red-line"></div>
                             <div class="subtitle">${key.title.toUpperCase()}</div>
                         </div>
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${key.id}" class="qr-code" />
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${student.id}_${key.id}" class="qr-code" />
                     </header>
 
                     <div class="id-section">
                         <div class="id-left">
                             <span class="label-small">Nome completo:</span>
                             <div class="name-grid">
-                                ${Array.from({length: 30}).map(() => `<div class="box"></div>`).join('')}
+                                ${studentName.split('').map(char => `<div class="box">${char.trim()}</div>`).join('')}
                             </div>
-                            <div style="display: flex; align-items: center; gap: 20px;">
-                                <div>
-                                    <span class="label-small">Data de Nascimento:</span>
-                                    <div class="birth-grid">
-                                        <div class="birth-group"><div class="box"></div><div class="box"></div></div>
-                                        <span class="slash">/</span>
-                                        <div class="birth-group"><div class="box"></div><div class="box"></div></div>
-                                        <span class="slash">/</span>
-                                        <div class="birth-group"><div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="signature-area">Assinatura do participante</div>
+                            <div style="margin-top: 8px; border-top: 1px dashed #666; text-align: center; padding-top: 2px; font-size: 8px; font-weight: bold; color: #666; width: 80%; margin-left: auto; margin-right: auto;">Assinatura do participante</div>
                         </div>
                         <div class="result-box">
                             <div class="result-header">RESULTADO FINAL:</div>
-                            <div class="result-content"></div>
+                            <div style="flex:1"></div>
                             <div class="result-footer">NOTA / ACERTOS</div>
                         </div>
                     </div>
 
-                    <div class="instructions-title">Instruções</div>
-                    <div class="instructions-grid">
-                        <div>
-                            1. Preencha seu nome completo e a data de nascimento.<br/>
-                            2. Assine o cartão no local indicado.<br/>
-                            3. Utilize caneta esferográfica de tinta PRETA.
-                        </div>
-                        <div>
-                            4. Preencha completamente a bolinha correspondente à sua resposta.<br/>
-                            5. Não amasse, não dobre e não rasure este cartão.<br/>
-                            6. A leitora ótica não registrará respostas rasuradas.
-                        </div>
+                    <div class="instructions">
+                        1. USE CANETA PRETA. 2. PINTE TOTALMENTE O CÍRCULO. 3. NÃO RASURE. 4. ENTREGE AO FISCAL.
                     </div>
 
                     <div class="phrase-container">
@@ -471,7 +474,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                                 ${Array.from({length: qPerCol}).map((_, rowIdx) => {
                                     const qNum = (colIdx * qPerCol) + rowIdx + 1;
-                                    if (qNum > key.numQuestions) return `<div class="ans-row" style="height: 20px; opacity: 0.1;"></div>`;
+                                    if (qNum > key.numQuestions) return '<div class="ans-row" style="height: 18px; opacity:0.05"></div>';
                                     return `
                                         <div class="ans-row">
                                             <span class="q-num">${String(qNum).padStart(2, '0')}</span>
@@ -488,14 +491,21 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
 
                     <div class="footer">
-                        <div>@cemalequipe</div>
+                        <div>@cemalequipe • CEMAL 10 ANOS</div>
                         <div style="font-style: italic;">Educando no caminho da verdade. Da Ed. Infantil ao Ensino Médio.</div>
-                        <div class="footer-brand">CEMAL EQUIPE</div>
+                        <div style="font-weight: 900; color: #dc2626;">CEMAL EQUIPE</div>
                     </div>
+                </div>
+            `;
+        });
+
+        html += `
                 </body>
                 <script>window.onload = function() { window.print(); window.close(); }</script>
             </html>
-        `);
+        `;
+
+        printWindow.document.write(html);
         printWindow.document.close();
     };
 
@@ -561,8 +571,7 @@ export const PrintShopDashboard: React.FC = () => {
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
             const dayEvents = events.filter(e => {
-                if (!e.endDate) return e.date === dateStr;
-                return dateStr >= e.date && dateStr <= e.endDate;
+                return dateStr === e.date;
             });
             days.push(
                 <div key={d} className="bg-white/5 h-24 border border-white/5 p-2 overflow-y-auto relative group">
@@ -620,7 +629,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="students" label="Gestão de Turmas" icon={Users} />
                     <SidebarItem id="attendance" label="Frequência" icon={ClipboardCheck} />
                     <SidebarItem id="planning" label="Planejamentos" icon={BookOpen} />
-                    <SidebarItem id="corrections" label="Correção via IA" icon={ScanLine} />
+                    <SidebarItem id="corrections" label="Correção Automática" icon={ScanLine} />
                     <div className="my-4 border-t border-white/10"></div>
                     <SidebarItem id="config" label="Configurações & TV" icon={Settings} />
                 </div>
@@ -723,7 +732,6 @@ export const PrintShopDashboard: React.FC = () => {
                                         </div>
                                     </div>
                                 ))}
-                                {/* CARD ADICIONAL: TODOS */}
                                 <div 
                                     onClick={() => setSelectedClassName('ALL')}
                                     className="bg-red-600 p-6 rounded-3xl hover:bg-red-700 transition-all cursor-pointer group shadow-2xl flex flex-col justify-between"
@@ -806,9 +814,6 @@ export const PrintShopDashboard: React.FC = () => {
                                                     </tr>
                                                 );
                                             })}
-                                            {filteredStudents.length === 0 && (
-                                                <tr><td colSpan={4} className="p-20 text-center text-gray-400 italic">Nenhum aluno encontrado para os critérios selecionados.</td></tr>
-                                            )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -887,7 +892,7 @@ export const PrintShopDashboard: React.FC = () => {
                         <header className="flex justify-between items-center mb-8">
                             <div>
                                 <h1 className="text-3xl font-bold text-white flex items-center gap-2"><ScanLine className="text-red-500"/> Correção Automática</h1>
-                                <p className="text-gray-400">Gabaritos oficiais e visão computacional para correção.</p>
+                                <p className="text-gray-400">Gabaritos oficiais e processamento em lote via IA.</p>
                             </div>
                             <Button onClick={() => setShowNewKeyModal(true)}>
                                 <Plus size={18} className="mr-2"/> Novo Gabarito
@@ -900,15 +905,30 @@ export const PrintShopDashboard: React.FC = () => {
                                 <div className="p-4 bg-gray-900/50 border-b border-gray-800 font-bold text-gray-300">Avaliações Ativas</div>
                                 <div className="overflow-y-auto flex-1 p-2 space-y-1">
                                     {answerKeys.map(key => (
-                                        <div key={key.id} onClick={() => handleSelectKey(key)} className={`p-3 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${selectedKey?.id === key.id ? 'bg-red-600/10 border-red-500/50' : 'bg-gray-900/30 border-gray-800 hover:border-gray-700'}`}>
-                                            <div>
-                                                <h4 className={`font-bold text-sm ${selectedKey?.id === key.id ? 'text-red-400' : 'text-white'}`}>{key.title}</h4>
-                                                <p className="text-[10px] text-gray-500 uppercase">{key.numQuestions} Questões</p>
+                                        <div key={key.id} onClick={() => handleSelectKey(key)} className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col gap-2 ${selectedKey?.id === key.id ? 'bg-red-600/10 border-red-500/50' : 'bg-gray-900/30 border-gray-800 hover:border-gray-700'}`}>
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <h4 className={`font-bold text-sm ${selectedKey?.id === key.id ? 'text-red-400' : 'text-white'}`}>{key.title}</h4>
+                                                    <p className="text-[10px] text-gray-500 uppercase">{key.numQuestions} Questões</p>
+                                                </div>
+                                                <button onClick={(e) => { e.stopPropagation(); deleteAnswerKey(key.id); loadInitialData(); }} className="p-1.5 bg-gray-800 text-gray-400 rounded-lg hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
                                             </div>
+                                            
                                             {selectedKey?.id === key.id && (
-                                                <div className="flex gap-1">
-                                                    <button onClick={(e) => { e.stopPropagation(); printAnswerSheet(key); }} className="p-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors" title="Imprimir Cartão"><Printer size={14}/></button>
-                                                    <button onClick={(e) => { e.stopPropagation(); deleteAnswerKey(key.id); loadInitialData(); }} className="p-1.5 bg-gray-800 text-gray-400 rounded-lg hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                                                <div className="grid grid-cols-2 gap-2 mt-1">
+                                                    <select 
+                                                        className="text-[10px] bg-black/40 border border-gray-700 text-gray-300 p-1 rounded outline-none"
+                                                        onChange={(e) => { if(e.target.value) printAnswerSheetsForClass(key, e.target.value); }}
+                                                    >
+                                                        <option value="">Imprimir p/ Turma...</option>
+                                                        {CLASSES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                                    </select>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); printAnswerSheetsForClass(key, "AVULSO"); }}
+                                                        className="text-[10px] bg-red-600 text-white p-1 rounded font-bold uppercase hover:bg-red-700 flex items-center justify-center gap-1"
+                                                    >
+                                                        <Printer size={10}/> Avulso
+                                                    </button>
                                                 </div>
                                             )}
                                         </div>
@@ -916,59 +936,86 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* AREA DE CORREÇÃO */}
+                            {/* AREA DE CORREÇÃO EM LOTE */}
                             <div className="lg:col-span-2 space-y-6">
                                 {selectedKey ? (
-                                    <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
-                                        <h3 className="font-bold text-gray-800 mb-6 uppercase text-xs tracking-widest text-red-600 flex items-center gap-2"><ScanLine size={16}/> Corrigir Cartão: {selectedKey.title}</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Selecionar Aluno</label>
-                                                    <select className="w-full border p-2.5 rounded-lg text-sm bg-gray-50 text-gray-900 font-medium" value={selectedStudentId} onChange={e => setSelectedStudentId(e.target.value)}>
-                                                        <option value="">-- Buscar Aluno --</option>
-                                                        {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.className})</option>)}
-                                                    </select>
-                                                </div>
-                                                <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center relative hover:bg-gray-50 transition-colors cursor-pointer">
-                                                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setCorrectingImage(e.target.files?.[0] || null)}/>
-                                                    {correctingImage ? (
-                                                        <div className="text-green-600 font-bold">
-                                                            <CheckCircle size={48} className="mx-auto mb-2"/>
-                                                            <p className="text-sm">{correctingImage.name}</p>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-gray-400">
-                                                            <UploadCloud size={48} className="mx-auto mb-2 opacity-30"/>
-                                                            <p className="font-bold">Foto do Cartão</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <Button onClick={handleAutoCorrect} isLoading={isAnalyzing} className="w-full h-14 text-lg font-black tracking-widest uppercase">Processar Correção IA</Button>
-                                            </div>
+                                    <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 flex flex-col h-[calc(100vh-280px)] overflow-hidden">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h3 className="font-bold text-gray-800 uppercase text-xs tracking-widest text-red-600 flex items-center gap-2"><Files size={16}/> Lote: {selectedKey.title}</h3>
+                                            {batchFiles.length > 0 && (
+                                                <span className="text-[10px] font-black text-gray-400 uppercase bg-gray-100 px-2 py-1 rounded">{batchFiles.length} Arquivos selecionados</span>
+                                            )}
+                                        </div>
 
-                                            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 flex flex-col items-center justify-center text-center">
-                                                {correctionResult ? (
-                                                    <div className="animate-in zoom-in-95 duration-500">
-                                                        <div className={`w-32 h-32 rounded-full flex items-center justify-center text-5xl font-black mb-6 border-8 ${correctionResult.score >= 6 ? 'bg-green-100 text-green-600 border-green-200' : 'bg-red-100 text-red-600 border-red-200'}`}>
-                                                            {correctionResult.score.toFixed(1)}
-                                                        </div>
-                                                        <h4 className="font-black text-gray-800 uppercase">{correctionResult.studentName}</h4>
-                                                        <p className="text-xs text-gray-500 mt-1">Acertou {correctionResult.hits.length} de {selectedKey.numQuestions}</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1 overflow-hidden">
+                                            <div className="space-y-4 flex flex-col">
+                                                <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center relative hover:bg-gray-50 transition-colors cursor-pointer shrink-0">
+                                                    <input 
+                                                        type="file" 
+                                                        accept="image/*" 
+                                                        multiple
+                                                        className="absolute inset-0 opacity-0 cursor-pointer" 
+                                                        onChange={handleFilesSelection}
+                                                    />
+                                                    <div className="text-gray-400">
+                                                        <UploadCloud size={40} className="mx-auto mb-2 opacity-30"/>
+                                                        <p className="font-bold text-sm">Selecionar Imagens em Lote</p>
+                                                        <p className="text-[10px]">Tire fotos de vários cartões e envie todos juntos</p>
                                                     </div>
-                                                ) : (
-                                                    <div className="opacity-20 flex flex-col items-center">
-                                                        <History size={80} className="mb-4 text-gray-400"/>
-                                                        <p className="font-bold uppercase text-xs">Aguardando Análise</p>
+                                                </div>
+
+                                                <Button 
+                                                    onClick={startBatchCorrection} 
+                                                    isLoading={isProcessingBatch} 
+                                                    disabled={batchFiles.length === 0}
+                                                    className="w-full h-12 text-sm font-black tracking-widest uppercase shrink-0"
+                                                >
+                                                    <CheckCircle size={18} className="mr-2"/> Corrigir {batchFiles.length} Cartões
+                                                </Button>
+
+                                                {isProcessingBatch && (
+                                                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 animate-pulse">
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className="text-[10px] font-black text-gray-500 uppercase">Processando...</span>
+                                                            <span className="text-[10px] font-black text-red-600">{batchProgress} / {batchFiles.length}</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                                                            <div className="bg-red-600 h-full transition-all" style={{ width: `${(batchProgress / batchFiles.length) * 100}%` }}></div>
+                                                        </div>
                                                     </div>
                                                 )}
+                                            </div>
+
+                                            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex flex-col overflow-hidden">
+                                                <h4 className="text-[10px] font-black text-gray-400 uppercase mb-3 border-b pb-2 flex items-center gap-2">
+                                                    <LayoutList size={14}/> Resumo do Lote
+                                                </h4>
+                                                <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
+                                                    {batchResults.length === 0 && (
+                                                        <div className="h-full flex flex-col items-center justify-center opacity-20">
+                                                            <History size={40} className="mb-2"/>
+                                                            <p className="text-[10px] font-bold uppercase">Aguardando Início</p>
+                                                        </div>
+                                                    )}
+                                                    {batchResults.map((res, idx) => (
+                                                        <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm animate-in slide-in-from-bottom-2">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`h-8 w-8 rounded-full flex items-center justify-center text-[10px] font-black ${res.score >= 6 ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                                    {res.score.toFixed(1)}
+                                                                </div>
+                                                                <span className="text-xs font-bold text-gray-700 truncate max-w-[120px]">{res.studentName}</span>
+                                                            </div>
+                                                            <Check size={14} className="text-green-500" />
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="flex flex-col items-center justify-center h-full text-gray-600 border-2 border-dashed border-white/5 rounded-3xl opacity-40 py-20">
                                         <ScanLine size={80} className="mb-4"/>
-                                        <p className="font-black uppercase tracking-widest">Selecione um gabarito para começar</p>
+                                        <p className="font-black uppercase tracking-widest text-center">Selecione um gabarito para gerenciar cartões ou correções</p>
                                     </div>
                                 )}
                             </div>
@@ -1035,22 +1082,12 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data Início</label>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data</label>
                                         <input 
                                             type="date" 
                                             className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
                                             value={newEventDate} 
                                             onChange={e => setNewEventDate(e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1">Data Fim (Período)</label>
-                                        <input 
-                                            type="date" 
-                                            className="w-full bg-black/30 border border-gray-700 rounded-xl p-3 text-white focus:border-red-600 outline-none" 
-                                            value={newEventEndDate} 
-                                            onChange={e => setNewEventEndDate(e.target.value)}
-                                            min={newEventDate}
                                         />
                                     </div>
                                     <div>
