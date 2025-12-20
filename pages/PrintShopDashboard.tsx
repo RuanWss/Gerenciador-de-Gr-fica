@@ -18,8 +18,10 @@ import {
     deleteAnswerKey,
     getCorrections,
     saveCorrection,
-    getStaffMembers
+    getStaffMembers,
+    saveStudent // Importado para persistir alunos sincronizados
 } from '../services/firebaseService';
+import { fetchGenneraClasses, fetchGenneraStudentsByClass } from '../services/genneraService';
 import { analyzeAnswerSheet } from '../services/geminiService';
 import { 
     ExamRequest, 
@@ -70,7 +72,9 @@ import {
     Files,
     Loader2,
     Check,
-    LayoutList
+    LayoutList,
+    RefreshCw,
+    DatabaseZap
 } from 'lucide-react';
 
 const CLASSES = [
@@ -87,6 +91,7 @@ export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'calendar' | 'exams' | 'students' | 'classes' | 'attendance' | 'planning' | 'config' | 'corrections'>('calendar');
     const [isLoading, setIsLoading] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     // --- DATA STATES ---
     const [students, setStudents] = useState<Student[]>([]);
@@ -179,6 +184,37 @@ export const PrintShopDashboard: React.FC = () => {
             console.error("Erro ao carregar dados:", e);
         }
         setIsLoading(false);
+    };
+
+    // --- GENNERA SYNC HANDLER ---
+    const handleGenneraSync = async () => {
+        const token = prompt("Digite o Token de API Gennera (X-Api-Key):");
+        if (!token) return;
+
+        setIsSyncing(true);
+        try {
+            // 1. Busca as turmas
+            const genneraClasses = await fetchGenneraClasses(token);
+            if (genneraClasses.length === 0) throw new Error("Nenhuma turma encontrada ou Token inválido.");
+
+            let totalStudents = 0;
+
+            // 2. Para cada turma, busca os alunos e salva no Firebase
+            for (const cls of genneraClasses) {
+                const genneraStudents = await fetchGenneraStudentsByClass(token, cls.id, cls.name);
+                for (const student of genneraStudents) {
+                    await saveStudent(student);
+                    totalStudents++;
+                }
+            }
+
+            alert(`Sincronização concluída! ${genneraClasses.length} turmas e ${totalStudents} alunos importados da Gennera.`);
+            loadInitialData(); // Recarrega a lista local
+        } catch (error: any) {
+            alert("Erro na sincronização: " + error.message);
+        } finally {
+            setIsSyncing(false);
+        }
     };
 
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
@@ -326,8 +362,6 @@ export const PrintShopDashboard: React.FC = () => {
                 const file = batchFiles[i];
                 const studentAnswers = await analyzeAnswerSheet(file, selectedKey.numQuestions);
                 
-                // Em um cenário real, a IA também extrairia o nome do aluno ou ID do QR Code
-                // Para este MVP, usaremos o nome do arquivo como referência de nome do aluno se não houver mapeamento
                 let scoreCount = 0;
                 const hits: number[] = [];
                 for (let k = 1; k <= selectedKey.numQuestions; k++) {
@@ -379,7 +413,6 @@ export const PrintShopDashboard: React.FC = () => {
                         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #fff; }
                         .page { position: relative; width: 210mm; height: 297mm; padding: 15mm; box-sizing: border-box; page-break-after: always; }
                         
-                        /* Marcadores de Scanner */
                         .marker { position: absolute; width: 22px; height: 22px; border: 5px solid black; }
                         .marker-tl { top: 10mm; left: 10mm; border-right: 0; border-bottom: 0; }
                         .marker-tr { top: 10mm; right: 10mm; border-left: 0; border-bottom: 0; }
@@ -702,14 +735,23 @@ export const PrintShopDashboard: React.FC = () => {
                                 <h1 className="text-3xl font-bold text-white">Gestão de Turmas</h1>
                                 <p className="text-gray-400">Filtragem por turma e status de biometria facial.</p>
                             </div>
-                            {selectedClassName && (
-                                <button 
-                                    onClick={() => setSelectedClassName(null)}
-                                    className="flex items-center gap-2 text-red-500 hover:text-red-400 font-bold uppercase text-xs"
+                            <div className="flex gap-4">
+                                <Button 
+                                    onClick={handleGenneraSync} 
+                                    isLoading={isSyncing}
+                                    className="bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-900/40"
                                 >
-                                    <ArrowLeft size={16}/> Ver Todas as Turmas
-                                </button>
-                            )}
+                                    <DatabaseZap size={18} className="mr-2"/> Sincronizar via Gennera
+                                </Button>
+                                {selectedClassName && (
+                                    <button 
+                                        onClick={() => setSelectedClassName(null)}
+                                        className="flex items-center gap-2 text-red-500 hover:text-red-400 font-bold uppercase text-xs"
+                                    >
+                                        <ArrowLeft size={16}/> Ver Todas as Turmas
+                                    </button>
+                                )}
+                            </div>
                         </header>
 
                         {!selectedClassName ? (
