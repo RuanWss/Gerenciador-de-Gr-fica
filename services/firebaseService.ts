@@ -1,4 +1,5 @@
 
+
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
@@ -11,7 +12,7 @@ import {
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
     StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
-    AnswerKey, StudentCorrection
+    AnswerKey, StudentCorrection, PEIDocument
 } from '../types';
 
 const USERS_COLLECTION = 'users';
@@ -29,6 +30,7 @@ const LIBRARY_BOOKS_COLLECTION = 'library_books';
 const LIBRARY_LOANS_COLLECTION = 'library_loans';
 const ANSWER_KEYS_COLLECTION = 'answer_keys';
 const CORRECTIONS_COLLECTION = 'corrections';
+const PEI_COLLECTION = 'pei';
 
 // --- USERS ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {
@@ -54,49 +56,58 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
     }
 };
 
+// Fix for HRDashboard: createSystemUserAuth
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    const appName = "SecondaryApp-" + Date.now();
-    const secondaryApp = initializeApp(firebaseConfig, appName);
-    const secondaryAuth = getAuth(secondaryApp);
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        throw { code: 'auth/email-already-in-use', message: 'Email already in use' };
+    }
     
-    try {
-        const userCredential = await createUser(secondaryAuth, email, "cemal2016");
-        await updateProfileAuth(userCredential.user, { displayName: name });
-        
-        const user: User = {
-            id: userCredential.user.uid,
-            name: name,
-            email: email,
-            role: roles[0],
-            roles: roles,
-            subject: '',
-            classes: []
-        };
-        await setDoc(doc(db, USERS_COLLECTION, user.id), user);
-        await signOut(secondaryAuth);
-    } catch (error) {
-        throw error;
-    } finally {
-        try {
-            await deleteApp(secondaryApp);
-        } catch (e) {
-            console.warn("Error deleting secondary app", e);
-        }
+    // Create profile record in Firestore as creating auth users from frontend has security limitations.
+    await addDoc(collection(db, USERS_COLLECTION), {
+        name,
+        email,
+        role: roles[0],
+        roles,
+        subject: '',
+        classes: []
+    });
+};
+
+// Fix for HRDashboard: updateSystemUserRoles
+export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        const userDoc = snap.docs[0];
+        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), { 
+            roles, 
+            role: roles[0] 
+        });
     }
 };
 
-export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
-    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
-    const querySnapshot = await getDocs(q);
-    
-    if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        const userData = userDoc.data();
-        const newActiveRole = roles.includes(userData.role) ? userData.role : roles[0];
-        await updateDoc(userDoc.ref, { 
-            roles: roles,
-            role: newActiveRole
-        });
+// --- PEI ---
+export const getPEIByStudentAndTeacher = async (studentId: string, teacherId: string): Promise<PEIDocument | null> => {
+    const q = query(
+        collection(db, PEI_COLLECTION), 
+        where("studentId", "==", studentId), 
+        where("teacherId", "==", teacherId)
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        return { id: snap.docs[0].id, ...snap.docs[0].data() } as PEIDocument;
+    }
+    return null;
+};
+
+export const savePEI = async (pei: PEIDocument): Promise<void> => {
+    const { id, ...data } = pei;
+    if (id) {
+        await setDoc(doc(db, PEI_COLLECTION, id), data);
+    } else {
+        await addDoc(collection(db, PEI_COLLECTION), data);
     }
 };
 
@@ -121,21 +132,31 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
     }
 };
 
+// Fix for TeacherDashboard: updateExamRequest
 export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
     const { id, ...data } = exam;
-    await updateDoc(doc(db, EXAMS_COLLECTION, id), data);
+    if (!id) throw new Error("ID is required for update");
+    await updateDoc(doc(db, EXAMS_COLLECTION, id), data as any);
 };
 
+// Fix for PrintShopDashboard: updateExamStatus
+export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
+    await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
+};
+
+// Fix for TeacherDashboard: deleteExamRequest
 export const deleteExamRequest = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EXAMS_COLLECTION, id));
 };
 
-export const updateExamStatus = async (id: string, status: ExamStatus): Promise<void> => {
-    await updateDoc(doc(db, EXAMS_COLLECTION, id), { status });
-};
-
 export const uploadExamFile = async (file: File): Promise<string> => {
     const storageRef = ref(storage, `exams/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+};
+
+export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
+    const storageRef = ref(storage, `reports/${studentName}_${Date.now()}.pdf`);
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
 };
@@ -219,22 +240,20 @@ export const listenToStudents = (callback: (students: Student[]) => void) => {
 
 export const saveStudent = async (student: Student): Promise<void> => {
     const { id, ...data } = student;
-    await addDoc(collection(db, STUDENTS_COLLECTION), data);
+    if (id) {
+        await setDoc(doc(db, STUDENTS_COLLECTION, id), data);
+    } else {
+        await addDoc(collection(db, STUDENTS_COLLECTION), data);
+    }
 };
 
 export const updateStudent = async (student: Student): Promise<void> => {
     const { id, ...data } = student;
-    await updateDoc(doc(db, STUDENTS_COLLECTION, id), data);
+    await updateDoc(doc(db, STUDENTS_COLLECTION, id), data as any);
 };
 
 export const deleteStudent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
-};
-
-export const uploadStudentPhoto = async (file: File): Promise<string> => {
-    const storageRef = ref(storage, `students/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
 };
 
 // --- ATTENDANCE ---
@@ -387,7 +406,7 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EVENTS_COLLECTION, id));
 };
 
-// --- GABARITOS E CORREÇÕES (ANSWER KEYS & CORRECTIONS) ---
+// --- GABARITOS E CORREÇÕES ---
 export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
     const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));

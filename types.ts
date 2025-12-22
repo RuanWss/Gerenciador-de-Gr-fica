@@ -1,20 +1,22 @@
 
+
 export enum UserRole {
   TEACHER = 'TEACHER',
   PRINTSHOP = 'PRINTSHOP',
   ATTENDANCE_TERMINAL = 'ATTENDANCE_TERMINAL',
-  STAFF_TERMINAL = 'STAFF_TERMINAL', // Novo: Quiosque de Ponto da Equipe
-  HR = 'HR', // Novo: Recursos Humanos
-  CLASSROOM = 'CLASSROOM', // Novo: Acesso específico para Arquivos da Turma
-  LIBRARY = 'LIBRARY' // Novo: Acesso Bibliotecária
+  STAFF_TERMINAL = 'STAFF_TERMINAL',
+  HR = 'HR',
+  CLASSROOM = 'CLASSROOM',
+  LIBRARY = 'LIBRARY',
+  AEE = 'AEE' // Novo: Atendimento Educacional Especializado
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: UserRole; // Role ativa na sessão atual
-  roles?: UserRole[]; // Lista de roles permitidas para o usuário
+  role: UserRole;
+  roles?: UserRole[];
   password?: string;
   subject?: string;
   classes?: string[];
@@ -26,7 +28,7 @@ export enum ExamStatus {
   COMPLETED = 'COMPLETED'
 }
 
-export type MaterialType = 'exam' | 'handout'; // Prova ou Apostila
+export type MaterialType = 'exam' | 'handout';
 
 export interface ExamRequest {
   id: string;
@@ -36,14 +38,12 @@ export interface ExamRequest {
   title: string;
   quantity: number;
   gradeLevel: string;
-  instructions: string; // Pode ser usado para subtítulo
+  instructions: string;
   fileName: string;
   fileUrl?: string;
   status: ExamStatus;
   createdAt: number;
   dueDate: string;
-  
-  // Novos campos de diagramação
   materialType?: MaterialType;
   columns?: 1 | 2;
   headerData?: {
@@ -59,7 +59,7 @@ export interface ClassMaterial {
   teacherId: string;
   teacherName: string;
   className: string;
-  subject?: string; // Disciplina da pasta
+  subject?: string;
   title: string;
   description?: string;
   fileUrl: string;
@@ -68,39 +68,42 @@ export interface ClassMaterial {
   createdAt: number;
 }
 
-export interface AIGeneratedQuestion {
-  question: string;
-  options: string[];
-  correctAnswer: string;
-}
-
-export interface SchoolClass {
-  id: string;
-  name: string;
-  shift: 'morning' | 'afternoon';
-}
-
 export interface Student {
   id: string;
   name: string;
   classId: string;
   className: string;
-  photoUrl?: string; // Foto para reconhecimento facial
+  photoUrl?: string;
+  // Campos AEE
+  isAEE?: boolean;
+  disorder?: string; // Transtorno/Deficiência
+  reportUrl?: string; // URL do Laudo Médico
 }
 
-// Interface para Funcionários (Equipe)
+export interface PEIDocument {
+  id: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  subject: string;
+  essentialCompetencies: string;
+  selectedContents: string;
+  didacticResources: string;
+  evaluation: string;
+  updatedAt: number;
+}
+
 export interface StaffMember {
   id: string;
   name: string;
-  role: string; // Cargo (Prof, Limpeza, Secretaria, etc)
+  role: string;
   photoUrl?: string;
   active: boolean;
   createdAt: number;
-  
-  // Novos campos de Jornada
   workPeriod?: 'morning' | 'afternoon' | 'full';
   isTeacher?: boolean;
-  isAdmin?: boolean; // Novo: Acesso ao Painel Administrativo
+  isAdmin?: boolean;
   weeklyClasses?: {
       monday: number;
       tuesday: number;
@@ -108,7 +111,7 @@ export interface StaffMember {
       thursday: number;
       friday: number;
   };
-  email?: string; // E-mail para login no sistema
+  email?: string;
 }
 
 export interface AnswerKey {
@@ -138,15 +141,6 @@ export interface SystemConfig {
   tvEnd?: string;
 }
 
-export interface TimeSlot {
-  id: string;
-  start: string;
-  end: string;
-  type: 'class' | 'break';
-  label: string;
-  shift: 'morning' | 'afternoon';
-}
-
 export interface ScheduleEntry {
   id: string;
   classId: string;
@@ -168,7 +162,6 @@ export interface AttendanceLog {
   dateString: string;
 }
 
-// Log de Ponto da Equipe
 export interface StaffAttendanceLog {
   id: string;
   staffId: string;
@@ -176,7 +169,7 @@ export interface StaffAttendanceLog {
   staffRole: string;
   staffPhotoUrl?: string;
   timestamp: number;
-  dateString: string; // YYYY-MM-DD para agrupar
+  dateString: string;
 }
 
 export type LessonPlanType = 'daily' | 'semester';
@@ -189,71 +182,76 @@ export interface LessonPlan {
   className: string;
   subject: string;
   createdAt: number;
-  
-  // Campos do Planejamento Diário
-  date?: string; // Data da aula
-  topic?: string; // Tema
-  content?: string; // Conteúdo Programático
-  methodology?: string; // Metodologia / Estratégias
-  resources?: string; // Recursos Didáticos
-  evaluation?: string; // Avaliação
-  homework?: string; // Tarefa de Casa
-
-  // Campos do Planejamento Semestral (Atualizado conforme imagem)
-  period?: string; // Bimestre
-  justification?: string; // Breve Justificativa
-  semesterContents?: string; // Conteúdos (Semestral)
-  cognitiveSkills?: string; // Habilidades Cognitivas
-  socialEmotionalSkills?: string; // Habilidades Socioemocionais
-  didacticStrategies?: string; // Situações Didáticas
-  
-  // Atividades
-  activitiesPre?: string; // Prévias
-  activitiesAuto?: string; // Autodidáticas
-  activitiesCoop?: string; // Didático-Cooperativas
-  activitiesCompl?: string; // Complementares
-  
-  educationalPractices?: string; // Práticas Educativas
-  educationalSpaces?: string; // Espaços Educativos
-  didacticResources?: string; // Recursos Didáticos (Semestral)
-  evaluationStrategies?: string; // Estratégias de Avaliação
-  references?: string; // Fontes de Referência
+  date?: string;
+  topic?: string;
+  content?: string;
+  methodology?: string;
+  resources?: string;
+  evaluation?: string;
+  homework?: string;
+  period?: string;
+  justification?: string;
+  semesterContents?: string;
+  cognitiveSkills?: string;
+  socialEmotionalSkills?: string;
+  didacticStrategies?: string;
+  activitiesPre?: string;
+  activitiesAuto?: string;
+  activitiesCoop?: string;
+  activitiesCompl?: string;
+  educationalPractices?: string;
+  educationalSpaces?: string;
+  didacticResources?: string;
+  evaluationStrategies?: string;
+  references?: string;
 }
 
-// --- NOVOS TIPOS PARA AGENDA E KANBAN ---
-
-export type TaskStatus = 'todo' | 'doing' | 'done';
-
+// Added EventTask for Agenda/Events
 export interface EventTask {
   id: string;
-  description: string; // O processo a ser feito
-  materials: string; // Materiais necessários
-  assigneeId: string; // ID do membro da equipe
-  assigneeName: string; // Nome do membro
-  status: TaskStatus;
+  description: string;
+  materials: string;
+  assigneeId: string;
+  assigneeName: string;
+  status: 'todo' | 'doing' | 'done';
 }
 
 export interface SchoolEvent {
   id: string;
   title: string;
-  date: string; // YYYY-MM-DD
-  endDate?: string; // NOVO: Data final para períodos
+  date: string;
+  endDate?: string;
   type: 'event' | 'holiday' | 'exam' | 'meeting';
   description?: string;
-  tasks: EventTask[]; // Array de tarefas Kanban
+  tasks: EventTask[]; // Updated from any[]
 }
 
-// --- BIBLIOTECA ---
+// Added TimeSlot for PublicSchedule
+export interface TimeSlot {
+  id: string;
+  start: string;
+  end: string;
+  type: 'class' | 'break';
+  label: string;
+  shift: 'morning' | 'afternoon';
+}
+
+// Added SchoolClass for genneraService
+export interface SchoolClass {
+  id: string;
+  name: string;
+  shift: 'morning' | 'afternoon';
+}
 
 export interface LibraryBook {
   id: string;
   title: string;
   author: string;
   isbn?: string;
-  category: string; // Ex: Literatura, Didático, Enciclopédia
+  category: string;
   totalQuantity: number;
   availableQuantity: number;
-  location?: string; // Ex: Estante A2
+  location?: string;
   createdAt: number;
 }
 
@@ -264,8 +262,8 @@ export interface LibraryLoan {
   studentId: string;
   studentName: string;
   studentClass: string;
-  loanDate: string; // YYYY-MM-DD
-  dueDate: string; // YYYY-MM-DD
-  returnDate?: string; // YYYY-MM-DD (se devolvido)
+  loanDate: string;
+  dueDate: string;
+  returnDate?: string;
   status: 'active' | 'returned' | 'late';
 }

@@ -21,10 +21,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Ouvir Firebase Auth
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Lógica de mapeamento de usuários especiais do Firebase
         if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
              setUser({
                 id: firebaseUser.uid,
@@ -65,13 +63,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 classes: []
               });
         }
+        else if (firebaseUser.email === 'cemalaee@hotmail.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Professor AEE',
+                email: firebaseUser.email,
+                role: UserRole.AEE,
+                subject: 'AEE',
+                classes: []
+              });
+        }
         else if (firebaseUser.email === 'loyseferr.biblio@gmail.com') {
              setUser({
                 id: firebaseUser.uid,
                 name: 'Bibliotecária',
                 email: firebaseUser.email,
-                role: UserRole.LIBRARY, // Role padrão
-                roles: [UserRole.LIBRARY, UserRole.TEACHER], // Permite acesso a ambos
+                role: UserRole.LIBRARY,
+                roles: [UserRole.LIBRARY, UserRole.TEACHER],
                 subject: '',
                 classes: []
               });
@@ -90,7 +98,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               });
         }
         else {
-            // Professores / Outros
             const userProfile = await getUserProfile(firebaseUser.uid);
             if (userProfile) {
               setUser(userProfile);
@@ -120,23 +127,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithEmailAndPassword(auth, email, password);
       return true;
     } catch (error: any) {
-      console.warn("Falha no login padrão:", error.code);
-
-      // AUTO-PROVISIONAMENTO PARA CONTAS DE SISTEMA
-      // Se a conta de sistema não existe no Firebase, cria automaticamente para garantir acesso ao banco de dados
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-          if (
-              (email === 'pontoequipecemal@ceprofmal.com' && password === 'cemal#2016') ||
-              (email === 'rh@ceprofmal.com' && password === 'cemal#2016') ||
-              (email === 'frequencia.cemal@ceprofmal.com' && password === 'cemal#2016') ||
-              (email === 'cemal.salas@ceprofmal.com' && password === 'cemal#2016')
-          ) {
+          const systemPasswords: Record<string, string> = {
+              'pontoequipecemal@ceprofmal.com': 'cemal#2016',
+              'rh@ceprofmal.com': 'cemal#2016',
+              'frequencia.cemal@ceprofmal.com': 'cemal#2016',
+              'cemal.salas@ceprofmal.com': 'cemal#2016',
+              'cemalaee@hotmail.com': 'cemal2016'
+          };
+
+          if (systemPasswords[email] === password) {
               try {
-                  console.log("Criando conta de sistema automaticamente...");
                   await createUserWithEmailAndPassword(auth, email, password);
                   return true;
               } catch (createError) {
-                  console.error("Erro ao criar conta de sistema:", createError);
                   return false;
               }
           }
