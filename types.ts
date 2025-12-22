@@ -1,5 +1,4 @@
 
-
 export enum UserRole {
   TEACHER = 'TEACHER',
   PRINTSHOP = 'PRINTSHOP',
@@ -8,7 +7,7 @@ export enum UserRole {
   HR = 'HR',
   CLASSROOM = 'CLASSROOM',
   LIBRARY = 'LIBRARY',
-  AEE = 'AEE' // Novo: Atendimento Educacional Especializado
+  AEE = 'AEE'
 }
 
 export interface User {
@@ -76,8 +75,13 @@ export interface Student {
   photoUrl?: string;
   // Campos AEE
   isAEE?: boolean;
-  disorder?: string; // Transtorno/Deficiência
-  reportUrl?: string; // URL do Laudo Médico
+  disorder?: string; 
+  reportUrl?: string;
+  pedagogicalResponsible?: string; // NOVO
+  fatherName?: string;             // NOVO
+  motherName?: string;             // NOVO
+  contacts?: string;               // NOVO
+  coordinationOpinion?: string;    // PARECER DA COORDENAÇÃO
 }
 
 export interface PEIDocument {
@@ -87,6 +91,7 @@ export interface PEIDocument {
   teacherId: string;
   teacherName: string;
   subject: string;
+  period: string; // NOVO: BIMESTRE
   essentialCompetencies: string;
   selectedContents: string;
   didacticResources: string;
@@ -206,7 +211,6 @@ export interface LessonPlan {
   references?: string;
 }
 
-// Added EventTask for Agenda/Events
 export interface EventTask {
   id: string;
   description: string;
@@ -223,10 +227,9 @@ export interface SchoolEvent {
   endDate?: string;
   type: 'event' | 'holiday' | 'exam' | 'meeting';
   description?: string;
-  tasks: EventTask[]; // Updated from any[]
+  tasks: EventTask[]; 
 }
 
-// Added TimeSlot for PublicSchedule
 export interface TimeSlot {
   id: string;
   start: string;
@@ -236,7 +239,6 @@ export interface TimeSlot {
   shift: 'morning' | 'afternoon';
 }
 
-// Added SchoolClass for genneraService
 export interface SchoolClass {
   id: string;
   name: string;

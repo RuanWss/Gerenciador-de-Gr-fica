@@ -87,7 +87,7 @@ const AppContent: React.FC = () => {
                               <div className="h-24 w-24 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                                 <School size={48} />
                               </div>
-                              <span className="font-black text-gray-800 uppercase tracking-tight text-lg">Painel da Gráfica</span>
+                              <span className="font-black text-gray-800 uppercase tracking-tight text-lg">Painel da Escola</span>
                           </button>
                       )}
                       {user.roles.includes(UserRole.AEE) && (

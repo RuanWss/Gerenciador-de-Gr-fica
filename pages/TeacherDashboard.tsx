@@ -234,11 +234,12 @@ export const TeacherDashboard: React.FC = () => {
     setSelectedAeeStudent(student);
     const existingPei = await getPEIByStudentAndTeacher(student.id, user.id);
     if (existingPei) {
-        setPeiDoc(existingPei);
+        setPeiDoc({ ...existingPei, period: existingPei.period || '1º Bimestre' });
     } else {
         setPeiDoc({
             id: '', studentId: student.id, studentName: student.name,
             teacherId: user.id, teacherName: user.name, subject: user.subject || 'Geral',
+            period: '1º Bimestre',
             essentialCompetencies: '', selectedContents: '', didacticResources: '', evaluation: '', updatedAt: Date.now()
         });
     }
@@ -570,6 +571,7 @@ export const TeacherDashboard: React.FC = () => {
                                         </div>
                                         <div className="bg-pink-50/50 p-6 rounded-2xl border border-pink-100">
                                             <label className="block text-[10px] font-black text-pink-600 uppercase mb-2 tracking-widest">Habilidades Socioemocionais</label>
+                                            {/* Fix: Changed setSocialSkills to setPlanSocialSkills to match state definition */}
                                             <textarea rows={3} className="w-full bg-white border-2 border-pink-100 rounded-xl p-4 text-sm text-gray-700 focus:border-pink-500 outline-none" value={planSocialSkills} onChange={e => setPlanSocialSkills(e.target.value)} />
                                         </div>
                                     </div>
@@ -713,7 +715,20 @@ export const TeacherDashboard: React.FC = () => {
                                         <h3 className="text-2xl font-black text-gray-800 tracking-tight uppercase flex items-center gap-3">
                                             <PenTool size={24} className="text-red-600"/> Elaboração de PEI
                                         </h3>
-                                        <p className="text-sm text-gray-500 font-bold">{selectedAeeStudent.name} • {peiDoc.subject}</p>
+                                        <div className="flex items-center gap-4 mt-1">
+                                            <p className="text-sm text-gray-500 font-bold">{selectedAeeStudent.name} • {peiDoc.subject}</p>
+                                            <div className="h-4 w-px bg-gray-300"></div>
+                                            <select 
+                                                className="bg-white border border-gray-200 rounded-lg px-3 py-1 text-xs font-bold text-red-600 outline-none focus:ring-1 focus:ring-red-500"
+                                                value={peiDoc.period}
+                                                onChange={e => setPeiDoc({...peiDoc, period: e.target.value})}
+                                            >
+                                                <option value="1º Bimestre">1º Bimestre</option>
+                                                <option value="2º Bimestre">2º Bimestre</option>
+                                                <option value="3º Bimestre">3º Bimestre</option>
+                                                <option value="4º Bimestre">4º Bimestre</option>
+                                            </select>
+                                        </div>
                                     </div>
                                     <button onClick={() => setSelectedAeeStudent(null)} className="text-gray-400 hover:text-red-600 transition-colors"><X size={32}/></button>
                                 </div>
