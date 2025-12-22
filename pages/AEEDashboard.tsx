@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { listenToStudents, updateStudent, uploadReportFile } from '../services/firebaseService';
-import { Student } from '../types';
+import { listenToStudents, updateStudent, uploadReportFile, getAllPEIs } from '../services/firebaseService';
+import { Student, PEIDocument } from '../types';
 import { Button } from '../components/Button';
 import { 
     Users, Search, Edit3, X, Save, FileText, UploadCloud, 
-    CheckCircle, ShieldAlert, Heart, FileCheck, ExternalLink, School
+    CheckCircle, ShieldAlert, Heart, FileCheck, ExternalLink, School, Eye, List
 } from 'lucide-react';
 
 const DISORDERS = [
@@ -23,19 +23,31 @@ const DISORDERS = [
 
 export const AEEDashboard: React.FC = () => {
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<'students' | 'pei_reports'>('students');
     const [students, setStudents] = useState<Student[]>([]);
+    const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
     const [search, setSearch] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     
-    // Edit Modal
+    // Edit Modal (Students)
     const [showEdit, setShowEdit] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [reportFile, setReportFile] = useState<File | null>(null);
 
+    // PEI View Modal
+    const [showPeiView, setShowPeiView] = useState(false);
+    const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
+
     useEffect(() => {
         const unsub = listenToStudents(setStudents);
+        fetchPeis();
         return () => unsub();
     }, []);
+
+    const fetchPeis = async () => {
+        const data = await getAllPEIs();
+        setAllPeis(data.sort((a,b) => b.updatedAt - a.updatedAt));
+    };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -65,8 +77,14 @@ export const AEEDashboard: React.FC = () => {
         s.className.toLowerCase().includes(search.toLowerCase())
     );
 
+    const filteredPeis = allPeis.filter(p => 
+        p.studentName.toLowerCase().includes(search.toLowerCase()) ||
+        p.teacherName.toLowerCase().includes(search.toLowerCase()) ||
+        p.subject.toLowerCase().includes(search.toLowerCase())
+    );
+
     return (
-        <div className="flex flex-col h-full animate-in fade-in duration-500 p-8">
+        <div className="flex flex-col h-full animate-in fade-in duration-500">
             <header className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
                 <div>
                     <h1 className="text-4xl font-black text-white flex items-center gap-3">
@@ -74,67 +92,119 @@ export const AEEDashboard: React.FC = () => {
                     </h1>
                     <p className="text-gray-400 font-medium">Gestão de Atendimento Educacional Especializado</p>
                 </div>
-                <div className="relative w-full md:w-96">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                    <input 
-                        className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-red-600 outline-none transition-all"
-                        placeholder="Buscar aluno ou turma..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
+                <div className="flex flex-col md:flex-row items-center gap-4">
+                    <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 mr-4">
+                        <button onClick={() => setActiveTab('students')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'students' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Alunos</button>
+                        <button onClick={() => { setActiveTab('pei_reports'); fetchPeis(); }} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'pei_reports' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Relatórios PEI</button>
+                    </div>
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                        <input 
+                            className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-red-600 outline-none transition-all"
+                            placeholder="Buscar..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
+                    </div>
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredStudents.map(student => (
-                    <div key={student.id} className={`bg-[#18181b] border-2 rounded-3xl p-6 transition-all group relative overflow-hidden ${student.isAEE ? 'border-red-600/50 shadow-lg shadow-red-900/10' : 'border-gray-800'}`}>
-                        {student.isAEE && (
-                            <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">AEE</div>
-                        )}
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="h-14 w-14 rounded-2xl bg-gray-900 border border-gray-800 overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
-                                {student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover"/> : <Users className="p-3 text-gray-700 w-full h-full"/>}
-                            </div>
-                            <div className="overflow-hidden">
-                                <h3 className="font-bold text-white truncate text-lg leading-tight">{student.name}</h3>
-                                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{student.className}</p>
-                            </div>
-                        </div>
-
-                        {student.isAEE ? (
-                            <div className="space-y-3 mb-6">
-                                <div className="bg-red-900/10 p-3 rounded-xl border border-red-900/20">
-                                    <span className="block text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Diagnóstico</span>
-                                    <p className="text-sm font-bold text-red-100">{student.disorder || 'Não informado'}</p>
+            {activeTab === 'students' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in slide-in-from-right-4">
+                    {filteredStudents.map(student => (
+                        <div key={student.id} className={`bg-[#18181b] border-2 rounded-3xl p-6 transition-all group relative overflow-hidden ${student.isAEE ? 'border-red-600/50 shadow-lg shadow-red-900/10' : 'border-gray-800'}`}>
+                            {student.isAEE && (
+                                <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">AEE</div>
+                            )}
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="h-14 w-14 rounded-2xl bg-gray-900 border border-gray-800 overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
+                                    {student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover"/> : <Users className="p-3 text-gray-700 w-full h-full"/>}
                                 </div>
-                                {student.reportUrl ? (
-                                    <a href={student.reportUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs font-black text-blue-400 hover:text-blue-300 transition-colors bg-blue-400/10 p-2 rounded-lg justify-center border border-blue-400/20">
-                                        <FileCheck size={14}/> VER LAUDO MÉDICO
-                                    </a>
-                                ) : (
-                                    <div className="text-[10px] font-bold text-orange-500 bg-orange-500/10 p-2 rounded-lg text-center border border-orange-500/20">
-                                        <ShieldAlert size={12} className="inline mr-1"/> LAUDO PENDENTE
+                                <div className="overflow-hidden">
+                                    <h3 className="font-bold text-white truncate text-lg leading-tight">{student.name}</h3>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{student.className}</p>
+                                </div>
+                            </div>
+
+                            {student.isAEE ? (
+                                <div className="space-y-3 mb-6">
+                                    <div className="bg-red-900/10 p-3 rounded-xl border border-red-900/20">
+                                        <span className="block text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Diagnóstico</span>
+                                        <p className="text-sm font-bold text-red-100">{student.disorder || 'Não informado'}</p>
                                     </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="mb-6 flex flex-col items-center justify-center py-6 border-2 border-dashed border-gray-800 rounded-2xl opacity-40">
-                                <School size={32} className="text-gray-600 mb-2"/>
-                                <p className="text-[10px] font-bold uppercase text-gray-500 tracking-tighter">Estudante Regular</p>
-                            </div>
-                        )}
+                                    {student.reportUrl ? (
+                                        <a href={student.reportUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs font-black text-blue-400 hover:text-blue-300 transition-colors bg-blue-400/10 p-2 rounded-lg justify-center border border-blue-400/20">
+                                            <FileCheck size={14}/> VER LAUDO MÉDICO
+                                        </a>
+                                    ) : (
+                                        <div className="text-[10px] font-bold text-orange-500 bg-orange-500/10 p-2 rounded-lg text-center border border-orange-500/20">
+                                            <ShieldAlert size={12} className="inline mr-1"/> LAUDO PENDENTE
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="mb-6 flex flex-col items-center justify-center py-6 border-2 border-dashed border-gray-800 rounded-2xl opacity-40">
+                                    <School size={32} className="text-gray-600 mb-2"/>
+                                    <p className="text-[10px] font-bold uppercase text-gray-500 tracking-tighter">Estudante Regular</p>
+                                </div>
+                            )}
 
-                        <button 
-                            onClick={() => { setSelectedStudent(student); setShowEdit(true); }}
-                            className="w-full py-3 bg-white/5 hover:bg-red-600 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 border border-white/5 group-hover:border-red-600/30"
-                        >
-                            <Edit3 size={16}/> Configurar AEE
-                        </button>
-                    </div>
-                ))}
-            </div>
+                            <button 
+                                onClick={() => { setSelectedStudent(student); setShowEdit(true); }}
+                                className="w-full py-3 bg-white/5 hover:bg-red-600 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 border border-white/5 group-hover:border-red-600/30"
+                            >
+                                <Edit3 size={16}/> Configurar AEE
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
 
-            {/* EDIT MODAL */}
+            {activeTab === 'pei_reports' && (
+                <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-right-4">
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b">
+                            <tr>
+                                <th className="p-6">Aluno</th>
+                                <th className="p-6">Professor / Disciplina</th>
+                                <th className="p-6">Atualização</th>
+                                <th className="p-6 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {filteredPeis.map(pei => (
+                                <tr key={pei.id} className="hover:bg-gray-50 transition-colors group">
+                                    <td className="p-6">
+                                        <p className="font-bold text-gray-800">{pei.studentName}</p>
+                                    </td>
+                                    <td className="p-6">
+                                        <p className="font-bold text-gray-700 text-sm">{pei.teacherName}</p>
+                                        <p className="text-[10px] font-black text-red-600 uppercase tracking-tighter">{pei.subject}</p>
+                                    </td>
+                                    <td className="p-6 text-xs text-gray-500 font-medium">
+                                        {new Date(pei.updatedAt).toLocaleDateString()} {new Date(pei.updatedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                    </td>
+                                    <td className="p-6 text-center">
+                                        <button 
+                                            onClick={() => { setSelectedPei(pei); setShowPeiView(true); }}
+                                            className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center gap-2 mx-auto"
+                                        >
+                                            <Eye size={14}/> Abrir PEI
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredPeis.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} className="p-20 text-center text-gray-400 font-bold uppercase tracking-widest opacity-40">Nenhum PEI encontrado</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {/* EDIT MODAL (Configuração AEE) */}
             {showEdit && selectedStudent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
                     <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
@@ -145,64 +215,76 @@ export const AEEDashboard: React.FC = () => {
                             </div>
                             <button onClick={() => setShowEdit(false)} className="text-gray-400 hover:text-gray-900 transition-colors"><X size={32}/></button>
                         </div>
-                        
                         <form onSubmit={handleSave} className="p-8 space-y-6">
                             <div className="flex items-center gap-4 bg-red-50 p-6 rounded-3xl border border-red-100">
-                                <input 
-                                    type="checkbox" 
-                                    id="isAee"
-                                    className="w-8 h-8 rounded-xl border-gray-300 text-red-600 focus:ring-red-500"
-                                    checked={selectedStudent.isAEE || false}
-                                    onChange={e => setSelectedStudent({...selectedStudent, isAEE: e.target.checked})}
-                                />
+                                <input type="checkbox" id="isAee" className="w-8 h-8 rounded-xl border-gray-300 text-red-600 focus:ring-red-500" checked={selectedStudent.isAEE || false} onChange={e => setSelectedStudent({...selectedStudent, isAEE: e.target.checked})}/>
                                 <label htmlFor="isAee" className="text-lg font-black text-red-900 uppercase">Aluno Atendido pelo AEE?</label>
                             </div>
-
                             {selectedStudent.isAEE && (
                                 <div className="space-y-6 animate-in slide-in-from-top-4">
                                     <div>
                                         <label className="block text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Transtorno ou Deficiência</label>
-                                        <select 
-                                            className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors bg-gray-50"
-                                            value={selectedStudent.disorder || ''}
-                                            onChange={e => setSelectedStudent({...selectedStudent, disorder: e.target.value})}
-                                        >
+                                        <select className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors bg-gray-50" value={selectedStudent.disorder || ''} onChange={e => setSelectedStudent({...selectedStudent, disorder: e.target.value})}>
                                             <option value="">Selecione...</option>
                                             {DISORDERS.map(d => <option key={d} value={d}>{d}</option>)}
                                         </select>
                                     </div>
-
                                     <div>
                                         <label className="block text-xs font-black text-gray-400 uppercase mb-2 tracking-widest">Laudo Médico (PDF)</label>
                                         <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:bg-gray-50 transition-colors relative">
-                                            <input 
-                                                type="file" 
-                                                accept="application/pdf"
-                                                className="absolute inset-0 opacity-0 cursor-pointer"
-                                                onChange={e => e.target.files && setReportFile(e.target.files[0])}
-                                            />
-                                            {reportFile ? (
-                                                <div className="text-green-600 flex flex-col items-center">
-                                                    <FileCheck size={40} className="mb-2"/>
-                                                    <span className="font-bold">{reportFile.name}</span>
-                                                </div>
-                                            ) : (
-                                                <div className="text-gray-400 flex flex-col items-center">
-                                                    <UploadCloud size={40} className="mb-2"/>
-                                                    <span className="font-bold">Anexar Laudo Digital</span>
-                                                    <span className="text-[10px]">Apenas arquivos PDF</span>
-                                                </div>
-                                            )}
+                                            <input type="file" accept="application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files && setReportFile(e.target.files[0])}/>
+                                            {reportFile ? (<div className="text-green-600 flex flex-col items-center"><FileCheck size={40} className="mb-2"/><span className="font-bold">{reportFile.name}</span></div>) : (<div className="text-gray-400 flex flex-col items-center"><UploadCloud size={40} className="mb-2"/><span className="font-bold">Anexar Laudo Digital</span><span className="text-[10px]">Apenas arquivos PDF</span></div>)}
                                         </div>
                                     </div>
                                 </div>
                             )}
-
                             <div className="flex gap-4 pt-4">
                                 <Button variant="outline" type="button" onClick={() => setShowEdit(false)} className="flex-1 py-4 rounded-2xl font-bold uppercase tracking-widest border-2">Cancelar</Button>
                                 <Button type="submit" isLoading={isLoading} className="flex-1 py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20"><Save size={20} className="mr-2"/> Salvar Cadastro</Button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* PEI VIEW MODAL */}
+            {showPeiView && selectedPei && (
+                <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                        <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h3 className="text-2xl font-black text-gray-800 tracking-tight uppercase flex items-center gap-3"><Heart size={24} className="text-red-600"/> Planejamento PEI</h3>
+                                <p className="text-sm text-gray-500 font-bold">{selectedPei.studentName} • Disciplina: {selectedPei.subject}</p>
+                            </div>
+                            <button onClick={() => setShowPeiView(false)} className="text-gray-400 hover:text-red-600 transition-colors"><X size={32}/></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-10 space-y-10">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                <div>
+                                    <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Competências Essenciais</h4>
+                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.essentialCompetencies || 'Não preenchido'}</p>
+                                </div>
+                                <div>
+                                    <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Conteúdos Selecionados</h4>
+                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.selectedContents || 'Não preenchido'}</p>
+                                </div>
+                                <div>
+                                    <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Recursos Didáticos</h4>
+                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.didacticResources || 'Não preenchido'}</p>
+                                </div>
+                                <div>
+                                    <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Avaliação</h4>
+                                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.evaluation || 'Não preenchido'}</p>
+                                </div>
+                            </div>
+                            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Responsável Pedagógico</p>
+                                <p className="font-bold text-gray-800 uppercase tracking-tighter">Prof. {selectedPei.teacherName}</p>
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end">
+                            <Button onClick={() => setShowPeiView(false)} className="px-10 h-14 bg-gray-800 hover:bg-black font-black uppercase tracking-widest">Fechar Visualização</Button>
+                        </div>
                     </div>
                 </div>
             )}

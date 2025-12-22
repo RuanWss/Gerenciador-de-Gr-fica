@@ -723,7 +723,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <div className="space-y-2">
                                             <label className="text-xs font-black text-red-600 uppercase tracking-widest">Competências Essenciais</label>
                                             <textarea 
-                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm bg-gray-50 min-h-[120px] focus:border-red-500 outline-none"
+                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm text-gray-900 font-medium bg-gray-50 min-h-[120px] focus:border-red-500 outline-none placeholder:text-gray-400"
                                                 placeholder="O que o aluno deve desenvolver prioritariamente..."
                                                 value={peiDoc.essentialCompetencies}
                                                 onChange={e => setPeiDoc({...peiDoc, essentialCompetencies: e.target.value})}
@@ -732,7 +732,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <div className="space-y-2">
                                             <label className="text-xs font-black text-red-600 uppercase tracking-widest">Conteúdos Selecionados</label>
                                             <textarea 
-                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm bg-gray-50 min-h-[120px] focus:border-red-500 outline-none"
+                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm text-gray-900 font-medium bg-gray-50 min-h-[120px] focus:border-red-500 outline-none placeholder:text-gray-400"
                                                 placeholder="Conteúdos adaptados para este bimestre..."
                                                 value={peiDoc.selectedContents}
                                                 onChange={e => setPeiDoc({...peiDoc, selectedContents: e.target.value})}
@@ -741,7 +741,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <div className="space-y-2">
                                             <label className="text-xs font-black text-red-600 uppercase tracking-widest">Recursos Didáticos</label>
                                             <textarea 
-                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm bg-gray-50 min-h-[120px] focus:border-red-500 outline-none"
+                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm text-gray-900 font-medium bg-gray-50 min-h-[120px] focus:border-red-500 outline-none placeholder:text-gray-400"
                                                 placeholder="Materiais e ferramentas adaptadas (lupa, áudio, etc)..."
                                                 value={peiDoc.didacticResources}
                                                 onChange={e => setPeiDoc({...peiDoc, didacticResources: e.target.value})}
@@ -750,7 +750,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <div className="space-y-2">
                                             <label className="text-xs font-black text-red-600 uppercase tracking-widest">Avaliação</label>
                                             <textarea 
-                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm bg-gray-50 min-h-[120px] focus:border-red-500 outline-none"
+                                                className="w-full border-2 border-gray-100 rounded-2xl p-4 text-sm text-gray-900 font-medium bg-gray-50 min-h-[120px] focus:border-red-500 outline-none placeholder:text-gray-400"
                                                 placeholder="Como se dará a avaliação do progresso deste aluno..."
                                                 value={peiDoc.evaluation}
                                                 onChange={e => setPeiDoc({...peiDoc, evaluation: e.target.value})}

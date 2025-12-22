@@ -1,5 +1,4 @@
 
-
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
@@ -56,15 +55,12 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
     }
 };
 
-// Fix for HRDashboard: createSystemUserAuth
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
     const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
     const snap = await getDocs(q);
     if (!snap.empty) {
         throw { code: 'auth/email-already-in-use', message: 'Email already in use' };
     }
-    
-    // Create profile record in Firestore as creating auth users from frontend has security limitations.
     await addDoc(collection(db, USERS_COLLECTION), {
         name,
         email,
@@ -75,7 +71,6 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
     });
 };
 
-// Fix for HRDashboard: updateSystemUserRoles
 export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
     const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
     const snap = await getDocs(q);
@@ -100,6 +95,11 @@ export const getPEIByStudentAndTeacher = async (studentId: string, teacherId: st
         return { id: snap.docs[0].id, ...snap.docs[0].data() } as PEIDocument;
     }
     return null;
+};
+
+export const getAllPEIs = async (): Promise<PEIDocument[]> => {
+    const snapshot = await getDocs(collection(db, PEI_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PEIDocument));
 };
 
 export const savePEI = async (pei: PEIDocument): Promise<void> => {
@@ -132,19 +132,16 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
     }
 };
 
-// Fix for TeacherDashboard: updateExamRequest
 export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
     const { id, ...data } = exam;
     if (!id) throw new Error("ID is required for update");
     await updateDoc(doc(db, EXAMS_COLLECTION, id), data as any);
 };
 
-// Fix for PrintShopDashboard: updateExamStatus
 export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
     await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
 };
 
-// Fix for TeacherDashboard: deleteExamRequest
 export const deleteExamRequest = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EXAMS_COLLECTION, id));
 };
@@ -268,7 +265,6 @@ export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     if (!snapshot.empty) {
         return false;
     }
-    
     const { id, ...data } = log;
     await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), data);
     return true;
