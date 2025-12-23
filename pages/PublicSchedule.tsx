@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Clock, Calendar, X, Maximize2, AlertCircle, Volume2, Megaphone, ArrowRight, School } from 'lucide-react';
+import { Clock, Calendar, X, Maximize2, Maximize, Minimize, AlertCircle, Volume2, Megaphone, ArrowRight, School } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -48,6 +48,7 @@ export const PublicSchedule: React.FC = () => {
     const [showModal, setShowModal] = useState(false);
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [audioEnabled, setAudioEnabled] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const lastSlotId = useRef<string>('');
@@ -55,9 +56,16 @@ export const PublicSchedule: React.FC = () => {
     useEffect(() => {
         const unsubscribeSchedule = listenToSchedule(setSchedule);
         const unsubscribeConfig = listenToSystemConfig(setSysConfig);
+        
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+
         return () => {
             unsubscribeSchedule();
             unsubscribeConfig();
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
         };
     }, []);
 
@@ -69,6 +77,18 @@ export const PublicSchedule: React.FC = () => {
         }, 1000);
         return () => clearInterval(timer);
     }, []);
+
+    const toggleFullScreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`Erro ao tentar entrar no modo tela cheia: ${err.message}`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    };
 
     const checkCurrentStatus = (now: Date) => {
         const hours = now.getHours();
@@ -301,9 +321,23 @@ export const PublicSchedule: React.FC = () => {
                 )}
             </div>
 
-            <button onClick={() => setShowModal(true)} className="absolute bottom-10 right-10 p-5 bg-white/5 hover:bg-red-600 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl z-50 group shadow-2xl">
-                <Maximize2 size={32} className="group-hover:scale-110 transition-transform" />
-            </button>
+            {/* CONTROLS GROUP */}
+            <div className="absolute bottom-10 right-10 flex gap-4 z-50">
+                <button 
+                    onClick={toggleFullScreen} 
+                    className="p-5 bg-white/5 hover:bg-blue-600 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl group"
+                    title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+                >
+                    {isFullscreen ? <Minimize size={32} /> : <Maximize size={32} />}
+                </button>
+                <button 
+                    onClick={() => setShowModal(true)} 
+                    className="p-5 bg-white/5 hover:bg-red-600 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl group"
+                    title="Ver Quadro Geral"
+                >
+                    <Maximize2 size={32} className="group-hover:scale-110 transition-transform" />
+                </button>
+            </div>
 
              {showModal && (
                  <div className="fixed inset-0 z-[100] bg-black/98 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-300">
