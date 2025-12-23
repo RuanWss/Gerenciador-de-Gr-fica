@@ -79,7 +79,9 @@ import {
     RefreshCw,
     DatabaseZap,
     Heart,
-    Edit3
+    Edit3,
+    BookOpenCheck,
+    Layout
 } from 'lucide-react';
 
 const CLASSES_LABELS = ["6º ANO EFAF", "7º ANO EFAF", "8º ANO EFAF", "9º ANO EFAF", "1ª SÉRIE EM", "2ª SÉRIE EM", "3ª SÉRIE EM"];
@@ -103,10 +105,21 @@ export const PrintShopDashboard: React.FC = () => {
     // Filter States
     const [selectedClassName, setSelectedClassName] = useState<string>('ALL');
     const [globalSearch, setGlobalSearch] = useState('');
+    const [planTypeFilter, setPlanTypeFilter] = useState<'ALL' | 'daily' | 'semester'>('ALL');
 
-    // Modal de Planejamento e PEI
+    // Modais
     const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
     const [showPeiModal, setShowPeiModal] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
+    const [showPlanModal, setShowPlanModal] = useState(false);
+
+    // Agenda States
+    const [showEventModal, setShowEventModal] = useState(false);
+    const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
+    const [newEventTitle, setNewEventTitle] = useState('');
+    const [newEventDate, setNewEventDate] = useState('');
+    const [newEventType, setNewEventType] = useState<'event' | 'holiday' | 'exam' | 'meeting'>('event');
+    const [newEventDesc, setNewEventDesc] = useState('');
 
     // Config States
     const [configBannerMsg, setConfigBannerMsg] = useState('');
@@ -120,7 +133,6 @@ export const PrintShopDashboard: React.FC = () => {
         loadInitialData();
         const todayStr = new Date().toISOString().split('T')[0];
         const unsubAttendance = listenToAttendanceLogs(todayStr, (logs) => {
-            console.log("Frequência carregada:", logs.length);
             setAttendanceLogs(logs);
         });
         const unsubConfig = listenToSystemConfig((cfg) => {
@@ -169,11 +181,48 @@ export const PrintShopDashboard: React.FC = () => {
         }
     };
 
-    // ID do Aluno -> Log de Frequência do dia
+    const handleSaveEvent = async () => {
+        if (!newEventTitle || !newEventDate) return alert("Preencha título e data");
+        const event: SchoolEvent = {
+            id: selectedEvent?.id || '',
+            title: newEventTitle,
+            date: newEventDate,
+            type: newEventType,
+            description: newEventDesc,
+            tasks: selectedEvent?.tasks || []
+        };
+        await saveSchoolEvent(event);
+        setShowEventModal(false);
+    };
+
+    const handleDeleteEvent = async () => {
+        if (!selectedEvent) return;
+        if(confirm("Deseja realmente excluir este evento?")) {
+            await deleteSchoolEvent(selectedEvent.id);
+            setShowEventModal(false);
+        }
+    };
+
+    const openEventModal = (event?: SchoolEvent, prefillDate?: string) => {
+        if (event) {
+            setSelectedEvent(event);
+            setNewEventTitle(event.title);
+            setNewEventDate(event.date);
+            setNewEventType(event.type);
+            setNewEventDesc(event.description || '');
+        } else {
+            setSelectedEvent(null);
+            setNewEventTitle('');
+            setNewEventDate(prefillDate || '');
+            setNewEventType('event');
+            setNewEventDesc('');
+        }
+        setShowEventModal(true);
+    };
+
     const presentMap = React.useMemo(() => {
         const map = new Map<string, AttendanceLog>();
         attendanceLogs.forEach(log => {
-            // Se houver múltiplos registros, mantém o mais antigo (entrada)
             if (!map.has(log.studentId)) {
                 map.set(log.studentId, log);
             }
@@ -196,9 +245,81 @@ export const PrintShopDashboard: React.FC = () => {
         p.teacherName.toLowerCase().includes(globalSearch.toLowerCase())
     );
 
+    const filteredPlans = lessonPlans.filter(p => {
+        const matchesClass = selectedClassName === 'ALL' || p.className === selectedClassName;
+        const matchesSearch = p.teacherName.toLowerCase().includes(globalSearch.toLowerCase()) || 
+                             (p.topic?.toLowerCase().includes(globalSearch.toLowerCase()));
+        const matchesType = planTypeFilter === 'ALL' || p.type === planTypeFilter;
+        return matchesClass && matchesSearch && matchesType;
+    });
+
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
         setExams(exams.map(e => e.id === id ? { ...e, status } : e));
+    };
+
+    const renderCalendar = () => {
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const startingDay = firstDay.getDay();
+        const totalDays = lastDay.getDate();
+
+        const days = [];
+        for (let i = 0; i < startingDay; i++) {
+            days.push(<div key={`empty-${i}`} className="bg-black/5 min-h-[120px] border border-white/5 opacity-20"></div>);
+        }
+
+        for (let d = 1; d <= totalDays; d++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dayEvents = events.filter(e => e.date === dateStr);
+            const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+            days.push(
+                <div 
+                    key={d} 
+                    className={`bg-white/5 min-h-[140px] border border-white/5 p-3 relative group transition-all hover:bg-white/10`}
+                >
+                    <span className={`text-sm font-black ${isToday ? 'bg-red-600 text-white w-7 h-7 flex items-center justify-center rounded-full shadow-lg shadow-red-900/40' : 'text-gray-500'}`}>
+                        {d}
+                    </span>
+                    <button 
+                        onClick={() => openEventModal(undefined, dateStr)}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 bg-red-600 text-white rounded-lg transition-all"
+                    >
+                        <Plus size={14}/>
+                    </button>
+                    <div className="mt-3 space-y-1.5">
+                        {dayEvents.map(ev => (
+                            <div 
+                                key={ev.id}
+                                onClick={() => openEventModal(ev)}
+                                className={`text-[10px] font-black uppercase p-2 rounded-lg cursor-pointer truncate shadow-sm border-l-4 ${
+                                    ev.type === 'holiday' ? 'bg-red-900/40 text-red-100 border-red-500' :
+                                    ev.type === 'exam' ? 'bg-purple-900/40 text-purple-100 border-purple-500' :
+                                    ev.type === 'meeting' ? 'bg-blue-900/40 text-blue-100 border-blue-500' :
+                                    'bg-green-900/40 text-green-100 border-green-500'
+                                }`}
+                            >
+                                {ev.title}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="bg-[#18181b] rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl animate-in zoom-in-95">
+                <div className="grid grid-cols-7 bg-black/40 border-b border-white/5 py-4 text-center text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                    <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sab</div>
+                </div>
+                <div className="grid grid-cols-7">
+                    {days}
+                </div>
+            </div>
+        );
     };
 
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
@@ -234,16 +355,65 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'calendar' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8 flex justify-between items-center">
-                            <h1 className="text-3xl font-bold text-white uppercase tracking-tight">Agenda Institucional</h1>
-                            <div className="flex items-center gap-4 bg-black/20 p-2 rounded-xl border border-white/10">
-                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronLeft/></button>
-                                <span className="font-bold text-white uppercase text-sm min-w-[140px] text-center">{currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-1 hover:bg-white/10 rounded text-gray-400"><ChevronRight/></button>
+                            <div>
+                                <h1 className="text-3xl font-bold text-white uppercase tracking-tight flex items-center gap-3">
+                                    <CalendarDays className="text-red-500" /> Agenda Institucional
+                                </h1>
+                                <p className="text-gray-400">Controle de eventos, feriados e reuniões escolares.</p>
+                            </div>
+                            <div className="flex items-center gap-4 bg-black/20 p-2 rounded-2xl border border-white/10">
+                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="p-2 hover:bg-white/10 rounded-xl text-gray-400 transition-colors"><ChevronLeft size={24}/></button>
+                                <span className="font-black text-white uppercase text-sm min-w-[180px] text-center tracking-widest">{currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="p-2 hover:bg-white/10 rounded-xl text-gray-400 transition-colors"><ChevronRight size={24}/></button>
                             </div>
                         </header>
-                        <div className="bg-white/5 p-4 rounded-3xl border border-white/5">
-                            <p className="text-gray-400 text-center py-20 font-bold uppercase tracking-widest opacity-40">Calendário Administrativo Ativo</p>
-                        </div>
+                        
+                        {renderCalendar()}
+
+                        {/* MODAL DE EVENTO */}
+                        {showEventModal && (
+                            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                                <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                                    <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                                        <h3 className="text-xl font-black text-gray-800 uppercase tracking-tight">
+                                            {selectedEvent ? 'Editar Evento' : 'Novo Registro'}
+                                        </h3>
+                                        <button onClick={() => setShowEventModal(false)} className="text-gray-400 hover:text-red-600 transition-colors"><X size={32}/></button>
+                                    </div>
+                                    <div className="p-8 space-y-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-widest">Título do Evento</label>
+                                            <input className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors" value={newEventTitle} onChange={e => setNewEventTitle(e.target.value)} placeholder="Ex: Reunião de Pais" />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-widest">Data</label>
+                                                <input type="date" className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors" value={newEventDate} onChange={e => setNewEventDate(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-widest">Categoria</label>
+                                                <select className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors" value={newEventType} onChange={e => setNewEventType(e.target.value as any)}>
+                                                    <option value="event">Evento</option>
+                                                    <option value="holiday">Feriado</option>
+                                                    <option value="exam">Avaliação</option>
+                                                    <option value="meeting">Reunião</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 tracking-widest">Descrição</label>
+                                            <textarea rows={3} className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-medium outline-none focus:border-red-600 transition-colors" value={newEventDesc} onChange={e => setNewEventDesc(e.target.value)} />
+                                        </div>
+                                        <div className="flex gap-4 pt-4">
+                                            {selectedEvent && (
+                                                <button onClick={handleDeleteEvent} className="flex-1 py-4 text-red-600 font-black uppercase text-xs tracking-widest hover:bg-red-50 rounded-2xl transition-colors">Excluir</button>
+                                            )}
+                                            <Button onClick={handleSaveEvent} className="flex-[2] py-4 bg-red-600 text-white font-black rounded-2xl">Salvar na Agenda</Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -260,12 +430,8 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </header>
 
-                        {/* Grade de Turmas */}
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
-                            <button 
-                                onClick={() => setSelectedClassName('ALL')}
-                                className={`p-4 rounded-2xl border transition-all text-center ${selectedClassName === 'ALL' ? 'bg-red-600 border-white text-white shadow-lg' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
-                            >
+                            <button onClick={() => setSelectedClassName('ALL')} className={`p-4 rounded-2xl border transition-all text-center ${selectedClassName === 'ALL' ? 'bg-red-600 border-white text-white shadow-lg' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}>
                                 <p className="text-[10px] font-black uppercase mb-1">Todas</p>
                                 <h3 className="font-bold text-lg">{students.length}</h3>
                                 <p className="text-[10px] opacity-60">Alunos</p>
@@ -273,11 +439,7 @@ export const PrintShopDashboard: React.FC = () => {
                             {CLASSES_LABELS.map(cls => {
                                 const count = getStudentCountByClass(cls);
                                 return (
-                                    <button 
-                                        key={cls}
-                                        onClick={() => setSelectedClassName(cls)}
-                                        className={`p-4 rounded-2xl border transition-all text-center ${selectedClassName === cls ? 'bg-red-600 border-white text-white shadow-lg' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}
-                                    >
+                                    <button key={cls} onClick={() => setSelectedClassName(cls)} className={`p-4 rounded-2xl border transition-all text-center ${selectedClassName === cls ? 'bg-red-600 border-white text-white shadow-lg' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'}`}>
                                         <p className="text-[10px] font-black uppercase mb-1">{cls.split(' ')[0]}</p>
                                         <h3 className="font-bold text-lg">{count}</h3>
                                         <p className="text-[10px] opacity-60">Alunos</p>
@@ -326,10 +488,7 @@ export const PrintShopDashboard: React.FC = () => {
                                                     )}
                                                 </td>
                                                 <td className="p-6 text-center">
-                                                    <button 
-                                                        onClick={() => handleAeeToggle(student)}
-                                                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 mx-auto ${student.isAEE ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gray-100 text-gray-400 hover:bg-red-600 hover:text-white'}`}
-                                                    >
+                                                    <button onClick={() => handleAeeToggle(student)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 mx-auto ${student.isAEE ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-gray-100 text-gray-400 hover:bg-red-600 hover:text-white'}`}>
                                                         <Heart size={14} fill={student.isAEE ? "currentColor" : "none"}/>
                                                         {student.isAEE ? 'Atendido' : 'Marcar AEE'}
                                                     </button>
@@ -337,9 +496,6 @@ export const PrintShopDashboard: React.FC = () => {
                                             </tr>
                                         );
                                     })}
-                                    {filteredStudents.length === 0 && (
-                                        <tr><td colSpan={4} className="p-20 text-center text-gray-400 font-bold uppercase opacity-40">Nenhum aluno encontrado nesta seleção</td></tr>
-                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -366,7 +522,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     {attendanceLogs.map(log => (
                                         <tr key={log.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="p-6 font-mono font-bold text-red-600">
-                                                {new Date(log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                                {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                             </td>
                                             <td className="p-6 flex items-center gap-3">
                                                 <div className="h-8 w-8 rounded-full bg-gray-200 overflow-hidden">
@@ -380,11 +536,69 @@ export const PrintShopDashboard: React.FC = () => {
                                             </td>
                                         </tr>
                                     ))}
-                                    {attendanceLogs.length === 0 && (
-                                        <tr><td colSpan={4} className="p-20 text-center text-gray-400 font-bold uppercase tracking-widest opacity-40">Aguardando primeiros acessos do dia...</td></tr>
-                                    )}
                                 </tbody>
                              </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'planning' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white uppercase tracking-tight flex items-center gap-3"><BookOpen className="text-red-500"/> Planejamentos Pedagógicos</h1>
+                                <p className="text-gray-400">Monitoramento e revisão dos planos diários e bimestrais.</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                                    <button onClick={() => setPlanTypeFilter('ALL')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${planTypeFilter === 'ALL' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Todos</button>
+                                    <button onClick={() => setPlanTypeFilter('daily')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${planTypeFilter === 'daily' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Diários</button>
+                                    <button onClick={() => setPlanTypeFilter('semester')} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${planTypeFilter === 'semester' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Bimestrais</button>
+                                </div>
+                                <select value={selectedClassName} onChange={e => setSelectedClassName(e.target.value)} className="bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white outline-none">
+                                    <option value="ALL">Todas as Turmas</option>
+                                    {CLASSES_LABELS.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                        </header>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {filteredPlans.map(plan => (
+                                <div key={plan.id} className="bg-[#18181b] border-2 border-white/5 rounded-[2.5rem] p-6 group hover:border-red-600/50 transition-all shadow-xl">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className={`h-12 w-12 rounded-2xl flex items-center justify-center ${plan.type === 'daily' ? 'bg-blue-900/20 text-blue-400' : 'bg-purple-900/20 text-purple-400'}`}>
+                                            {plan.type === 'daily' ? <Clock size={24}/> : <Calendar size={24}/>}
+                                        </div>
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${plan.type === 'daily' ? 'bg-blue-900/40 text-blue-300' : 'bg-purple-900/40 text-purple-300'}`}>
+                                            {plan.type === 'daily' ? 'Plano Diário' : 'Bimestral'}
+                                        </span>
+                                    </div>
+                                    <h3 className="font-bold text-white text-lg mb-1 leading-tight">{plan.type === 'daily' ? plan.topic : plan.period}</h3>
+                                    <p className="text-xs font-bold text-red-500 uppercase mb-4">{plan.teacherName}</p>
+                                    
+                                    <div className="space-y-3 mb-6">
+                                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase">
+                                            <School size={12}/> {plan.className}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase">
+                                            <CalendarDays size={12}/> {plan.date || new Date(plan.createdAt).toLocaleDateString()}
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => { setSelectedPlan(plan); setShowPlanModal(true); }}
+                                        className="w-full py-3 bg-white/5 hover:bg-red-600 text-gray-300 hover:text-white font-black rounded-2xl transition-all flex items-center justify-center gap-2 uppercase text-[10px] tracking-widest border border-white/5"
+                                    >
+                                        <Eye size={14}/> Revisar Plano
+                                    </button>
+                                </div>
+                            ))}
+                            {filteredPlans.length === 0 && (
+                                <div className="col-span-full py-20 text-center bg-white/5 rounded-3xl border-2 border-dashed border-white/5">
+                                    <BookOpen size={48} className="mx-auto text-gray-600 mb-4 opacity-20"/>
+                                    <p className="font-bold text-gray-500 uppercase tracking-widest text-sm">Nenhum planejamento enviado recentemente</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -450,6 +664,37 @@ export const PrintShopDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'config' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8">
+                            <h1 className="text-3xl font-bold text-white uppercase tracking-tight">Configurações do Sistema</h1>
+                            <p className="text-gray-400">Banner de avisos e exibição em TV.</p>
+                        </header>
+                        <Card className="max-w-2xl">
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Mensagem do Banner</label>
+                                    <textarea 
+                                        className="w-full border-2 border-gray-100 rounded-2xl p-4 font-bold text-gray-700"
+                                        value={configBannerMsg}
+                                        onChange={e => setConfigBannerMsg(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)} className="w-5 h-5" />
+                                        <span className="font-bold">Banner Ativo</span>
+                                    </label>
+                                </div>
+                                <Button onClick={async () => {
+                                    await updateSystemConfig({ bannerMessage: configBannerMsg, bannerType: configBannerType, isBannerActive: configIsBannerActive });
+                                    alert("Salvo!");
+                                }} className="w-full">Salvar Configurações</Button>
+                            </div>
+                        </Card>
+                    </div>
+                )}
             </div>
 
             {/* PEI DETAIL MODAL */}
@@ -489,6 +734,127 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* LESSON PLAN DETAIL MODAL */}
+            {showPlanModal && selectedPlan && (
+                <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                        <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <div className="flex items-center gap-6">
+                                <div className={`h-16 w-16 rounded-3xl flex items-center justify-center ${selectedPlan.type === 'daily' ? 'bg-blue-600 text-white' : 'bg-purple-600 text-white'}`}>
+                                    {selectedPlan.type === 'daily' ? <Clock size={32}/> : <Calendar size={32}/>}
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-gray-800 uppercase tracking-tight">Revisão de Planejamento</h3>
+                                    <p className="text-sm text-gray-500 font-bold uppercase tracking-widest">{selectedPlan.teacherName} • {selectedPlan.className} • {selectedPlan.subject}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowPlanModal(false)} className="text-gray-400 hover:text-red-600 transition-colors"><X size={40}/></button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+                            {selectedPlan.type === 'daily' ? (
+                                <div className="space-y-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 border-b border-blue-100 pb-1">Tema da Aula</h4>
+                                            <p className="text-gray-800 font-bold text-lg">{selectedPlan.topic}</p>
+                                        </div>
+                                        <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 border-b border-blue-100 pb-1">Data Prevista</h4>
+                                            <p className="text-gray-800 font-bold text-lg">{selectedPlan.date}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">Conteúdo Teorico</h4>
+                                            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">{selectedPlan.content}</p>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">Metodologia</h4>
+                                            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">{selectedPlan.methodology}</p>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">Recursos</h4>
+                                            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">{selectedPlan.resources}</p>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">Avaliação</h4>
+                                            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">{selectedPlan.evaluation}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
+                                        <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-2">Tarefa de Casa</h4>
+                                        <p className="text-red-900 font-medium text-sm italic">{selectedPlan.homework || "Não informada"}</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-10">
+                                    <div className="bg-purple-50 p-6 rounded-3xl border border-purple-100">
+                                        <h4 className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-2">Bimestre de Referência</h4>
+                                        <p className="text-purple-900 font-black text-2xl">{selectedPlan.period}</p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                        <section>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 border-b pb-1">Justificativa</h4>
+                                            <p className="text-gray-700 text-sm leading-relaxed">{selectedPlan.justification}</p>
+                                        </section>
+                                        <section>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 border-b pb-1">Conteúdo Programático</h4>
+                                            <p className="text-gray-700 text-sm leading-relaxed">{selectedPlan.semesterContents}</p>
+                                        </section>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                        <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-100">
+                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Habilidades Cognitivas</h4>
+                                            <p className="text-gray-700 text-sm">{selectedPlan.cognitiveSkills}</p>
+                                        </div>
+                                        <div className="bg-pink-50/50 p-6 rounded-3xl border border-pink-100">
+                                            <h4 className="text-[10px] font-black text-pink-600 uppercase tracking-widest mb-2">Socioemocionais</h4>
+                                            <p className="text-gray-700 text-sm">{selectedPlan.socialEmotionalSkills}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gray-50 p-8 rounded-[2.5rem] border border-gray-200">
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center gap-2"><LayoutList size={18}/> Quadro de Atividades Sugeridas</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div><span className="text-[9px] font-black text-red-600 uppercase block mb-1">Prévias</span><p className="text-sm text-gray-700 bg-white p-3 rounded-xl border border-gray-100">{selectedPlan.activitiesPre}</p></div>
+                                            <div><span className="text-[9px] font-black text-red-600 uppercase block mb-1">Autodidáticas</span><p className="text-sm text-gray-700 bg-white p-3 rounded-xl border border-gray-100">{selectedPlan.activitiesAuto}</p></div>
+                                            <div><span className="text-[9px] font-black text-red-600 uppercase block mb-1">Cooperativas</span><p className="text-sm text-gray-700 bg-white p-3 rounded-xl border border-gray-100">{selectedPlan.activitiesCoop}</p></div>
+                                            <div><span className="text-[9px] font-black text-red-600 uppercase block mb-1">Complementares</span><p className="text-sm text-gray-700 bg-white p-3 rounded-xl border border-gray-100">{selectedPlan.activitiesCompl}</p></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                        <section>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">Recursos Didáticos</h4>
+                                            <p className="text-gray-700 text-sm">{selectedPlan.didacticResources}</p>
+                                        </section>
+                                        <section>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b pb-1">Estratégias Avaliação</h4>
+                                            <p className="text-gray-700 text-sm">{selectedPlan.evaluationStrategies}</p>
+                                        </section>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-8 border-t border-gray-100 bg-gray-50 flex justify-end">
+                            <Button onClick={() => setShowPlanModal(false)} className="px-12 h-14 bg-gray-800 hover:bg-black font-black uppercase tracking-widest">Fechar Visualização</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
+
+const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <div className={`bg-white rounded-[2rem] shadow-xl p-8 ${className}`}>
+    {children}
+  </div>
+);
