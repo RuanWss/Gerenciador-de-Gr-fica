@@ -13,17 +13,22 @@ import {
     getStudents,
     getPEIByStudentAndTeacher,
     savePEI,
-    uploadClassMaterialFile
+    uploadClassMaterialFile,
+    getAnswerKeys,
+    saveAnswerKey,
+    deleteAnswerKey,
+    saveCorrection,
+    getCorrections
 } from '../services/firebaseService';
-import { generateStructuredQuestions, suggestExamInstructions } from '../services/geminiService';
-import { ExamRequest, ExamStatus, MaterialType, ClassMaterial, LessonPlan, LessonPlanType, Student, PEIDocument } from '../types';
+import { analyzeAnswerSheet, generateStructuredQuestions, suggestExamInstructions } from '../services/geminiService';
+import { ExamRequest, ExamStatus, MaterialType, ClassMaterial, LessonPlan, LessonPlanType, Student, PEIDocument, AnswerKey, StudentCorrection } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, Trash2, Printer, Columns, Save, Edit3, FileText, 
   BookOpen, CheckCircle, Wand2, Loader2, Sparkles, List, PlusCircle, Layout, FolderUp, 
   Calendar, Layers, X, Search, ClipboardList, Users, Heart, PenTool, ArrowLeft, Info,
   Eye, Type, GripVertical, ChevronRight, Settings2, BookOpenCheck, BookOpenCheck as BookOpenCheckIcon,
-  Image as ImageIcon, XCircle, ExternalLink
+  Image as ImageIcon, XCircle, ExternalLink, ScanLine, Target, GraduationCap
 } from 'lucide-react';
 // Import shared constants
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -45,7 +50,7 @@ const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ chi
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'provas' | 'create' | 'materials' | 'plans' | 'pei'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'provas' | 'create' | 'materials' | 'plans' | 'pei' | 'omr'>('requests');
   const [creationMode, setCreationMode] = useState<'none' | 'upload' | 'create'>('none');
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -103,6 +108,18 @@ export const TeacherDashboard: React.FC = () => {
   const [selectedAeeStudent, setSelectedAeeStudent] = useState<Student | null>(null);
   const [peiDoc, setPeiDoc] = useState<PEIDocument | null>(null);
 
+  // --- CORREÇÃO OMR ---
+  const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
+  const [selectedKey, setSelectedKey] = useState<AnswerKey | null>(null);
+  const [showKeyForm, setShowKeyForm] = useState(false);
+  const [newKeyData, setNewKeyData] = useState<Partial<AnswerKey>>({ subject: user?.subject || '', answers: {} });
+  const [numQuestions, setNumQuestions] = useState(10);
+  const [correctionFile, setCorrectionFile] = useState<File | null>(null);
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [selectedStudentForCorrection, setSelectedStudentForCorrection] = useState('');
+  const [currentCorrections, setCurrentCorrections] = useState<StudentCorrection[]>([]);
+  const [isCorrecting, setIsCorrecting] = useState(false);
+
   useEffect(() => {
     fetchData();
   }, [user, activeTab]);
@@ -111,18 +128,72 @@ export const TeacherDashboard: React.FC = () => {
     if (!user) return;
     setIsLoading(true);
     try {
-        const [allExams, userMaterials, userPlans, allStudents] = await Promise.all([
+        const [allExams, userMaterials, userPlans, studentsData, keysData] = await Promise.all([
             getExams(user.id),
             getClassMaterials(user.id),
             getLessonPlans(user.id),
-            getStudents()
+            getStudents(),
+            getAnswerKeys()
         ]);
         setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
         setMaterials(userMaterials.sort((a,b) => b.createdAt - a.createdAt));
         setLessonPlans(userPlans.sort((a,b) => b.createdAt - a.createdAt));
-        setAeeStudents(allStudents.filter(s => s.isAEE));
+        setAllStudents(studentsData);
+        setAeeStudents(studentsData.filter(s => s.isAEE));
+        setAnswerKeys(keysData.filter(k => k.subject === user.subject));
+        
+        if (selectedKey) {
+            const corrs = await getCorrections(selectedKey.id);
+            setCurrentCorrections(corrs);
+        }
     } catch (e) { console.error(e); }
     setIsLoading(false);
+  };
+
+  // --- HANDLERS OMR ---
+  const handleSaveNewKey = async () => {
+      if (!newKeyData.subject || !newKeyData.answers) return;
+      setIsSaving(true);
+      try {
+          await saveAnswerKey({
+              id: '',
+              examId: 'manual_' + Date.now(),
+              subject: newKeyData.subject,
+              answers: newKeyData.answers as Record<number, string>
+          });
+          setShowKeyForm(false);
+          fetchData();
+      } catch (e) { alert("Erro ao salvar gabarito"); }
+      finally { setIsSaving(false); }
+  };
+
+  const handleCorrectSheet = async () => {
+      if (!selectedKey || !correctionFile || !selectedStudentForCorrection) return;
+      setIsCorrecting(true);
+      try {
+          const student = allStudents.find(s => s.id === selectedStudentForCorrection);
+          const detectedAnswers = await analyzeAnswerSheet(correctionFile, Object.keys(selectedKey.answers).length);
+          
+          let score = 0;
+          Object.entries(selectedKey.answers).forEach(([q, ans]) => {
+              if (detectedAnswers[Number(q)] === ans) score++;
+          });
+
+          await saveCorrection({
+              id: '',
+              studentId: student!.id,
+              studentName: student!.name,
+              answerKeyId: selectedKey.id,
+              score: (score / Object.keys(selectedKey.answers).length) * 10,
+              answers: detectedAnswers
+          });
+          
+          setCorrectionFile(null);
+          setSelectedStudentForCorrection('');
+          alert("Correção finalizada com sucesso!");
+          fetchData();
+      } catch (e) { alert("Erro na correção via I.A."); }
+      finally { setIsCorrecting(false); }
   };
 
   // --- HANDLERS EDITOR ---
@@ -209,7 +280,6 @@ export const TeacherDashboard: React.FC = () => {
     setIsSaving(true);
     try {
         const fileUrl = await uploadClassMaterialFile(materialFile, materialClass);
-        // Fix: Added missing saveClassMaterial call with correct arguments
         await saveClassMaterial({
             id: '',
             teacherId: user.id,
@@ -372,6 +442,7 @@ export const TeacherDashboard: React.FC = () => {
                 <button onClick={() => { setCreationMode('none'); setActiveTab('create'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'create' ? 'bg-brand-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}><PlusCircle size={18} /> Novo Pedido</button>
                 <button onClick={() => setActiveTab('materials')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'materials' ? 'bg-brand-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}><FolderUp size={18} /> Materiais p/ Alunos</button>
                 <button onClick={() => setActiveTab('plans')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'plans' ? 'bg-brand-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}><BookOpenCheckIcon size={18} /> Planejamentos</button>
+                <button onClick={() => setActiveTab('omr')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'omr' ? 'bg-brand-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}><ScanLine size={18} /> Corretor I.A.</button>
                 <button onClick={() => setActiveTab('pei')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'pei' ? 'bg-brand-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}><Heart size={18} /> Aba PEI</button>
             </div>
         </div>
@@ -444,6 +515,172 @@ export const TeacherDashboard: React.FC = () => {
                             </Card>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {/* ABA: CORRETOR OMR */}
+            {activeTab === 'omr' && (
+                <div className="animate-in fade-in slide-in-from-right-4">
+                    <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h1 className="text-3xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                <ScanLine className="text-brand-500" /> Corretor Automático I.A.
+                            </h1>
+                            <p className="text-gray-400">Criação de gabaritos e correção via visão computacional.</p>
+                        </div>
+                        <Button onClick={() => { 
+                            setNewKeyData({ subject: user?.subject || '', answers: {} });
+                            setNumQuestions(10);
+                            setShowKeyForm(true); 
+                        }}>
+                            <Plus size={18} className="mr-2"/> Novo Gabarito
+                        </Button>
+                    </header>
+
+                    {showKeyForm ? (
+                        <Card className="animate-in zoom-in-95">
+                            <div className="flex justify-between items-center mb-8 pb-4 border-b border-gray-100">
+                                <h3 className="text-xl font-black text-gray-800 uppercase">Configurar Gabarito Oficial</h3>
+                                <button onClick={() => setShowKeyForm(false)} className="text-gray-400 hover:text-red-500"><X size={24}/></button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Disciplina</label>
+                                    <select className="w-full border-2 border-gray-100 rounded-xl p-4 font-bold outline-none" value={newKeyData.subject} onChange={e => setNewKeyData({...newKeyData, subject: e.target.value})}>
+                                        {[...EFAF_SUBJECTS, ...EM_SUBJECTS].sort().map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Nº de Questões</label>
+                                    <input type="number" className="w-full border-2 border-gray-100 rounded-xl p-4 font-bold outline-none" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} min="1" max="100" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+                                {Array.from({ length: numQuestions }).map((_, i) => (
+                                    <div key={i} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                                        <span className="block text-[10px] font-black text-gray-400 mb-2 uppercase">Q. {i+1}</span>
+                                        <div className="flex gap-1 justify-between">
+                                            {['A', 'B', 'C', 'D', 'E'].map(opt => (
+                                                <button 
+                                                    key={opt}
+                                                    onClick={() => {
+                                                        const current = {...newKeyData.answers};
+                                                        current[i+1] = opt;
+                                                        setNewKeyData({...newKeyData, answers: current});
+                                                    }}
+                                                    className={`w-7 h-7 rounded-full text-[10px] font-black transition-all ${newKeyData.answers?.[i+1] === opt ? 'bg-brand-600 text-white shadow-lg' : 'bg-white text-gray-400 hover:bg-gray-100'}`}
+                                                >
+                                                    {opt}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex justify-end gap-3">
+                                <Button variant="outline" onClick={() => setShowKeyForm(false)}>Cancelar</Button>
+                                <Button onClick={handleSaveNewKey} isLoading={isSaving}><Save size={18} className="mr-2"/> Salvar Gabarito</Button>
+                            </div>
+                        </Card>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div className="lg:col-span-1 space-y-6">
+                                <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-2"><Target size={20} className="text-brand-500"/> Gabaritos Ativos</h3>
+                                <div className="space-y-3">
+                                    {answerKeys.map(key => (
+                                        <button 
+                                            key={key.id}
+                                            onClick={() => setSelectedKey(key)}
+                                            className={`w-full p-6 rounded-3xl border-2 text-left transition-all ${selectedKey?.id === key.id ? 'bg-white border-brand-500 text-gray-800' : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/10'}`}
+                                        >
+                                            <h4 className="font-black text-sm uppercase leading-tight">{key.subject}</h4>
+                                            <p className="text-[10px] font-bold opacity-60 mt-1">{Object.keys(key.answers).length} Questões Objetivas</p>
+                                        </button>
+                                    ))}
+                                    {answerKeys.length === 0 && <p className="text-gray-600 italic text-sm">Nenhum gabarito cadastrado.</p>}
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-2">
+                                {selectedKey ? (
+                                    <div className="space-y-6 animate-in slide-in-from-right-4">
+                                        <Card>
+                                            <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
+                                                <h3 className="text-xl font-black text-gray-800 uppercase flex items-center gap-2">
+                                                    <ScanLine size={24} className="text-brand-600"/> Corrigir Prova
+                                                </h3>
+                                                <button onClick={async () => { if(confirm("Remover gabarito?")) { await deleteAnswerKey(selectedKey.id); setSelectedKey(null); fetchData(); } }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Aluno Destino</label>
+                                                    <select className="w-full border-2 border-gray-100 rounded-xl p-3 font-bold" value={selectedStudentForCorrection} onChange={e => setSelectedStudentForCorrection(e.target.value)}>
+                                                        <option value="">Selecione o Aluno...</option>
+                                                        {allStudents.sort((a,b) => a.name.localeCompare(b.name)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.className})</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Foto do Cartão-Resposta</label>
+                                                    <div className="relative">
+                                                        <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={e => e.target.files && setCorrectionFile(e.target.files[0])} />
+                                                        <div className="border-2 border-dashed border-gray-200 rounded-xl p-3 text-center text-xs font-bold text-gray-400 bg-gray-50">
+                                                            {correctionFile ? correctionFile.name : 'Clique para selecionar foto'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <Button className="w-full h-14 rounded-2xl text-lg font-black uppercase" isLoading={isCorrecting} onClick={handleCorrectSheet} disabled={!correctionFile || !selectedStudentForCorrection}>
+                                                Iniciar Leitura I.A.
+                                            </Button>
+                                        </Card>
+
+                                        <div className="bg-white rounded-[2.5rem] shadow-xl overflow-hidden">
+                                            <div className="p-6 bg-gray-50 border-b border-gray-100">
+                                                <h3 className="font-black text-gray-800 uppercase tracking-tighter flex items-center gap-2"><GraduationCap size={20} className="text-brand-600"/> Resultados da Turma</h3>
+                                            </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left">
+                                                    <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b">
+                                                        <tr>
+                                                            <th className="p-6">Nome do Aluno</th>
+                                                            <th className="p-6 text-center">Nota (0-10)</th>
+                                                            <th className="p-6 text-right">Ações</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {currentCorrections.map(c => (
+                                                            <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                                                                <td className="p-6 font-bold text-gray-800">{c.studentName}</td>
+                                                                <td className="p-6 text-center">
+                                                                    <span className={`text-lg font-black ${c.score >= 6 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                        {c.score.toFixed(1)}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-6 text-right">
+                                                                    <button className="text-gray-400 hover:text-brand-600"><Eye size={18}/></button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                        {currentCorrections.length === 0 && (
+                                                            <tr><td colSpan={3} className="p-12 text-center text-gray-400 italic">Nenhuma correção realizada para este gabarito.</td></tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center bg-white/5 border-4 border-dashed border-white/5 rounded-[3rem] p-20 text-center opacity-40">
+                                        <ScanLine size={100} className="text-gray-500 mb-6" />
+                                        <h3 className="text-2xl font-black text-gray-500 uppercase">Selecione ou Crie um Gabarito</h3>
+                                        <p className="text-gray-600 mt-2 max-w-xs">Você precisa de um gabarito de referência para iniciar a correção automática das provas.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

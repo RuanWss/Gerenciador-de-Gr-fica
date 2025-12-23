@@ -61,14 +61,39 @@ export const analyzeAnswerSheet = async (file: File, numQuestions: number): Prom
   try {
     const ai = getClient();
     const base64Data = await fileToBase64(file);
-    const prompt = `Analise este cartão-resposta e retorne as letras marcadas (A-E) para ${numQuestions} questões em JSON { "1": "A", "2": "B" }.`;
+    
+    // Prompt ultra-específico para simular comportamento de OMR profissional
+    const prompt = `
+      Você é um sistema de OMR (Optical Mark Recognition) de alta precisão.
+      Analise a imagem deste cartão-resposta escolar.
+      
+      INSTRUÇÕES:
+      1. Identifique as marcas (bolinhas ou quadrados preenchidos) para cada uma das ${numQuestions} questões.
+      2. Se uma questão não tiver marcação clara, retorne "" (vazio).
+      3. Retorne APENAS um objeto JSON onde a chave é o número da questão (1 a ${numQuestions}) e o valor é a letra (A, B, C, D ou E).
+      
+      EXEMPLO DE SAÍDA:
+      { "1": "A", "2": "C", "3": "B" }
+    `;
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [{ inlineData: { mimeType: file.type, data: base64Data } }, { text: prompt }] },
-      config: { responseMimeType: "application/json" }
+      contents: { 
+        parts: [
+          { inlineData: { mimeType: file.type, data: base64Data } }, 
+          { text: prompt }
+        ] 
+      },
+      config: { 
+        responseMimeType: "application/json",
+        temperature: 0.1 // Baixa temperatura para maior precisão factual
+      }
     });
-    return JSON.parse(response.text || "{}");
+
+    const result = JSON.parse(response.text || "{}");
+    return result;
   } catch (error) {
+    console.error("Erro no processamento OMR:", error);
     return {};
   }
 };
