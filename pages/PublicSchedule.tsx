@@ -110,6 +110,19 @@ export const PublicSchedule: React.FC = () => {
         }
     };
 
+    const isBannerVisible = () => {
+        if (!sysConfig?.isBannerActive || !sysConfig.bannerMessage) return false;
+        
+        // Scheduled visibility check
+        if (sysConfig.tvStart || sysConfig.tvEnd) {
+            const now = currentTime.getTime();
+            if (sysConfig.tvStart && now < new Date(sysConfig.tvStart).getTime()) return false;
+            if (sysConfig.tvEnd && now > new Date(sysConfig.tvEnd).getTime()) return false;
+        }
+        
+        return true;
+    };
+
     const enableAudio = () => {
         if (audioRef.current) {
             audioRef.current.play().then(() => {
@@ -165,7 +178,7 @@ export const PublicSchedule: React.FC = () => {
     const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
     const gridCols = currentShift === 'morning' ? 4 : 3;
 
-    const showWarning = sysConfig?.isBannerActive && sysConfig.bannerMessage;
+    const showWarning = isBannerVisible();
 
     return (
         <div className="h-screen w-screen bg-[#0f0f10] bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-red-950/20 via-[#0f0f10] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
@@ -181,7 +194,7 @@ export const PublicSchedule: React.FC = () => {
 
             {/* HEADER */}
             <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/40 backdrop-blur-md z-10">
-                <div className={`${showWarning ? 'w-[65%] border-r border-white/10' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-700`}>
+                <div className={`${showWarning ? 'w-[62%] border-r border-white/10' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-700 ease-in-out`}>
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-[8vh] w-auto object-contain mb-4 drop-shadow-2xl" />
                     <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] font-clock font-extrabold tabular-nums text-center">{timeString}</h1>
                     <div className="mt-4 bg-white/5 px-10 py-3 rounded-full border border-white/10 shadow-2xl backdrop-blur-md">
@@ -190,12 +203,23 @@ export const PublicSchedule: React.FC = () => {
                 </div>
 
                 {showWarning && (
-                    <div className="w-[35%] h-full flex items-center justify-center p-8 bg-black/40 animate-in slide-in-from-right duration-700">
-                        <div className={`w-full h-auto min-h-[180px] backdrop-blur-xl border-[8px] rounded-[3rem] p-10 shadow-2xl flex flex-col items-center justify-center gap-6 ${
-                            sysConfig?.bannerType === 'error' ? 'border-red-600 bg-red-900/10' : 'border-blue-600 bg-blue-900/10'
+                    <div className="w-[38%] h-full flex items-center justify-center p-10 bg-black/50 animate-in slide-in-from-right duration-700">
+                        <div className={`w-full h-auto min-h-[220px] backdrop-blur-2xl border-[10px] rounded-[3.5rem] p-12 shadow-[0_0_60px_rgba(0,0,0,0.5)] flex flex-col items-center justify-center gap-8 relative overflow-hidden transition-all duration-500 ${
+                            sysConfig?.bannerType === 'error' ? 'border-red-600 bg-red-900/30' : 
+                            sysConfig?.bannerType === 'warning' ? 'border-yellow-500 bg-yellow-900/30' : 
+                            sysConfig?.bannerType === 'success' ? 'border-green-500 bg-green-900/30' : 
+                            'border-blue-600 bg-blue-900/30'
                         }`}>
-                            <Megaphone size={60} className={sysConfig?.bannerType === 'error' ? 'text-red-500' : 'text-blue-500'} />
-                            <p className="text-[4vh] font-black uppercase text-center leading-tight tracking-tight text-white">{sysConfig?.bannerMessage}</p>
+                            <div className="absolute top-0 left-0 w-full h-3 bg-white/10 animate-[pulse_2s_infinite]"></div>
+                            <Megaphone size={100} className={`${
+                                sysConfig?.bannerType === 'error' ? 'text-red-500' : 
+                                sysConfig?.bannerType === 'warning' ? 'text-yellow-500' :
+                                sysConfig?.bannerType === 'success' ? 'text-green-500' :
+                                'text-blue-500'
+                            } animate-bounce`} />
+                            <p className="text-[4.8vh] font-black uppercase text-center leading-[1.1] tracking-tighter text-white drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">
+                                {sysConfig?.bannerMessage}
+                            </p>
                         </div>
                     </div>
                 )}
@@ -277,7 +301,7 @@ export const PublicSchedule: React.FC = () => {
                 )}
             </div>
 
-            <button onClick={() => setShowModal(true)} className="absolute bottom-10 right-10 p-5 bg-white/5 hover:bg-red-600 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl z-50 group">
+            <button onClick={() => setShowModal(true)} className="absolute bottom-10 right-10 p-5 bg-white/5 hover:bg-red-600 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl z-50 group shadow-2xl">
                 <Maximize2 size={32} className="group-hover:scale-110 transition-transform" />
             </button>
 

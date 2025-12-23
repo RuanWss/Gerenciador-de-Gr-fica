@@ -11,8 +11,9 @@ import { HRDashboard } from './pages/HRDashboard';
 import { ClassroomFiles } from './pages/ClassroomFiles';
 import { LibraryDashboard } from './pages/LibraryDashboard';
 import { AEEDashboard } from './pages/AEEDashboard';
-import { UserRole } from './types';
-import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2 } from 'lucide-react';
+import { UserRole, SystemConfig } from './types';
+import { listenToSystemConfig } from './services/firebaseService';
+import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone } from 'lucide-react';
 import { Button } from './components/Button';
 
 const AppContent: React.FC = () => {
@@ -25,6 +26,7 @@ const AppContent: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -33,9 +35,14 @@ const AppContent: React.FC = () => {
     };
     window.addEventListener('popstate', handleLocationChange);
     window.addEventListener('hashchange', handleLocationChange);
+    
+    // Global System Notice Listener for real-time updates across the app
+    const unsubConfig = listenToSystemConfig(setSysConfig);
+    
     return () => {
         window.removeEventListener('popstate', handleLocationChange);
         window.removeEventListener('hashchange', handleLocationChange);
+        unsubConfig();
     };
   }, []);
 
@@ -54,6 +61,15 @@ const AppContent: React.FC = () => {
       } catch (error: any) { setPasswordError("Erro: " + error.message); } finally { setIsChangingPassword(false); }
   };
   
+  const getBannerStyles = (type: string) => {
+    switch(type) {
+        case 'warning': return 'bg-yellow-500 text-yellow-950';
+        case 'error': return 'bg-red-600 text-white';
+        case 'success': return 'bg-green-600 text-white';
+        default: return 'bg-blue-600 text-white';
+    }
+  };
+
   if (currentPath === '/horarios' || currentHash === '#horarios') return <PublicSchedule />;
   if (currentPath === '/materiais' || currentHash === '#materiais') return <ClassroomFiles />;
   if (!isAuthenticated) return <Login />;
@@ -133,7 +149,18 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-transparent text-gray-100 font-sans">
-      <nav className="bg-black/30 backdrop-blur-md shadow-lg border-b border-white/10 sticky top-0 z-50">
+      {/* Real-time Global System Notice Banner */}
+      {sysConfig?.isBannerActive && sysConfig.bannerMessage && (
+        <div className={`w-full py-3 px-4 flex items-center justify-center gap-3 shadow-md sticky top-0 z-[100] overflow-hidden ${getBannerStyles(sysConfig.bannerType)}`}>
+            <div className="absolute inset-0 bg-white/10 animate-[pulse_2s_infinite]"></div>
+            <Megaphone size={18} className="shrink-0 relative z-10" />
+            <p className="font-black text-sm md:text-base text-center relative z-10 uppercase tracking-tight shadow-sm">
+                AVISO: {sysConfig.bannerMessage}
+            </p>
+        </div>
+      )}
+
+      <nav className={`bg-black/30 backdrop-blur-md shadow-lg border-b border-white/10 sticky z-50 transition-all duration-300 ${sysConfig?.isBannerActive && sysConfig.bannerMessage ? 'top-[48px]' : 'top-0'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-20">
             <div className="flex items-center gap-4">
               <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-14 w-auto"/>
@@ -142,7 +169,6 @@ const AppContent: React.FC = () => {
               </span>
             </div>
             <div className="flex items-center gap-4">
-               {/* BOTÃO DE TROCA DE PAINEL - VISÍVEL APENAS PARA MULTI-PERFIL */}
                {user?.roles && user.roles.length > 1 && (
                    <button 
                      onClick={() => setSessionRole(null)} 
@@ -166,13 +192,13 @@ const AppContent: React.FC = () => {
       </main>
 
       {showPasswordModal && (
-          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-[#18181b] border border-gray-800 w-full max-w-md rounded-2xl p-6">
+          <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-[#18181b] border border-gray-800 w-full max-w-md rounded-2xl p-6 shadow-2xl">
                   <h3 className="text-xl font-bold text-white mb-6">Alterar Senha</h3>
                   <form onSubmit={handleChangePassword} className="space-y-4">
-                      <input type="password" placeholder="Nova Senha" className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-                      <input type="password" placeholder="Confirmar" className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
-                      <div className="flex justify-end gap-3"><Button type="submit">Salvar</Button></div>
+                      <input type="password" placeholder="Nova Senha" className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white outline-none focus:border-red-500" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                      <input type="password" placeholder="Confirmar" className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white outline-none focus:border-red-500" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+                      <div className="flex justify-end gap-3 pt-2"><Button type="submit">Salvar Nova Senha</Button></div>
                   </form>
               </div>
           </div>
