@@ -21,7 +21,9 @@ import {
     getStaffMembers,
     saveStudent,
     updateStudent,
-    getAllPEIs
+    getAllPEIs,
+    saveScheduleEntry,
+    listenToSchedule
 } from '../services/firebaseService';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from '../services/genneraService';
 import { analyzeAnswerSheet } from '../services/geminiService';
@@ -37,7 +39,9 @@ import {
     StudentCorrection,
     StaffMember,
     EventTask,
-    PEIDocument
+    PEIDocument,
+    ScheduleEntry,
+    TimeSlot
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -81,14 +85,55 @@ import {
     Heart,
     Edit3,
     BookOpenCheck,
-    Layout
+    Layout,
+    TableProperties
 } from 'lucide-react';
 
 const CLASSES_LABELS = ["6º ANO EFAF", "7º ANO EFAF", "8º ANO EFAF", "9º ANO EFAF", "1ª SÉRIE EM", "2ª SÉRIE EM", "3ª SÉRIE EM"];
 
+const MORNING_CLASSES = [
+    { id: '6efaf', name: '6º ANO EFAF' },
+    { id: '7efaf', name: '7º ANO EFAF' },
+    { id: '8efaf', name: '8º ANO EFAF' },
+    { id: '9efaf', name: '9º ANO EFAF' },
+];
+
+const AFTERNOON_CLASSES = [
+    { id: '1em', name: '1ª SÉRIE EM' },
+    { id: '2em', name: '2ª SÉRIE EM' },
+    { id: '3em', name: '3ª SÉRIE EM' },
+];
+
+const MORNING_SLOTS: TimeSlot[] = [
+    { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
+    { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
+    { id: 'm3', start: '09:20', end: '10:10', type: 'class', label: '3º Horário', shift: 'morning' },
+    { id: 'm4', start: '10:10', end: '11:00', type: 'class', label: '4º Horário', shift: 'morning' },
+    { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
+];
+
+const AFTERNOON_SLOTS: TimeSlot[] = [
+    { id: 'a1', start: '13:00', end: '13:50', type: 'class', label: '1º Horário', shift: 'afternoon' },
+    { id: 'a2', start: '13:50', end: '14:40', type: 'class', label: '2º Horário', shift: 'afternoon' },
+    { id: 'a3', start: '14:40', end: '15:30', type: 'class', label: '3º Horário', shift: 'afternoon' },
+    { id: 'a4', start: '16:00', end: '16:50', type: 'class', label: '4º Horário', shift: 'afternoon' },
+    { id: 'a5', start: '16:50', end: '17:40', type: 'class', label: '5º Horário', shift: 'afternoon' },
+    { id: 'a6', start: '17:40', end: '18:30', type: 'class', label: '6º Horário', shift: 'afternoon' },
+    { id: 'a7', start: '18:30', end: '19:20', type: 'class', label: '7º Horário', shift: 'afternoon' },
+    { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
+];
+
+const DAYS = [
+    { id: 1, label: 'Segunda' },
+    { id: 2, label: 'Terça' },
+    { id: 3, label: 'Quarta' },
+    { id: 4, label: 'Quinta' },
+    { id: 5, label: 'Sexta' },
+];
+
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'calendar' | 'exams' | 'students' | 'classes' | 'attendance' | 'planning' | 'config' | 'corrections' | 'pei'>('calendar');
+    const [activeTab, setActiveTab] = useState<'calendar' | 'exams' | 'students' | 'classes' | 'attendance' | 'planning' | 'config' | 'timetable' | 'pei'>('calendar');
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -101,11 +146,15 @@ export const PrintShopDashboard: React.FC = () => {
     const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [staff, setStaff] = useState<StaffMember[]>([]);
+    const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
 
     // Filter States
     const [selectedClassName, setSelectedClassName] = useState<string>('ALL');
     const [globalSearch, setGlobalSearch] = useState('');
     const [planTypeFilter, setPlanTypeFilter] = useState<'ALL' | 'daily' | 'semester'>('ALL');
+
+    // Horários (Timetable) management state
+    const [ttSelectedClass, setTtSelectedClass] = useState(MORNING_CLASSES[0]);
 
     // Modais
     const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
@@ -142,11 +191,13 @@ export const PrintShopDashboard: React.FC = () => {
             setConfigIsBannerActive(cfg.isBannerActive);
         });
         const unsubEvents = listenToEvents(setEvents);
+        const unsubSchedule = listenToSchedule(setSchedule);
 
         return () => {
             unsubAttendance();
             unsubConfig();
             unsubEvents();
+            unsubSchedule();
         };
     }, [activeTab]);
 
@@ -220,42 +271,27 @@ export const PrintShopDashboard: React.FC = () => {
         setShowEventModal(true);
     };
 
-    const presentMap = React.useMemo(() => {
-        const map = new Map<string, AttendanceLog>();
-        attendanceLogs.forEach(log => {
-            if (!map.has(log.studentId)) {
-                map.set(log.studentId, log);
-            }
-        });
-        return map;
-    }, [attendanceLogs]);
-
-    const getStudentCountByClass = (className: string) => {
-        return students.filter(s => s.className === className).length;
-    };
-
-    const filteredStudents = students.filter(s => {
-        const matchesClass = selectedClassName === 'ALL' || s.className === selectedClassName;
-        const matchesSearch = s.name.toLowerCase().includes(globalSearch.toLowerCase());
-        return matchesClass && matchesSearch;
-    });
-
-    const filteredPeis = allPeis.filter(p => 
-        p.studentName.toLowerCase().includes(globalSearch.toLowerCase()) ||
-        p.teacherName.toLowerCase().includes(globalSearch.toLowerCase())
-    );
-
-    const filteredPlans = lessonPlans.filter(p => {
-        const matchesClass = selectedClassName === 'ALL' || p.className === selectedClassName;
-        const matchesSearch = p.teacherName.toLowerCase().includes(globalSearch.toLowerCase()) || 
-                             (p.topic?.toLowerCase().includes(globalSearch.toLowerCase()));
-        const matchesType = planTypeFilter === 'ALL' || p.type === planTypeFilter;
-        return matchesClass && matchesSearch && matchesType;
-    });
-
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
         setExams(exams.map(e => e.id === id ? { ...e, status } : e));
+    };
+
+    const handleSaveScheduleCell = async (dayOfWeek: number, slotId: string, subject: string, professor: string) => {
+        const entryId = `${ttSelectedClass.id}-${dayOfWeek}-${slotId}`;
+        const entry: ScheduleEntry = {
+            id: entryId,
+            classId: ttSelectedClass.id,
+            className: ttSelectedClass.name,
+            dayOfWeek,
+            slotId,
+            subject,
+            professor
+        };
+        await saveScheduleEntry(entry);
+    };
+
+    const getScheduleValue = (dayOfWeek: number, slotId: string) => {
+        return schedule.find(s => s.classId === ttSelectedClass.id && s.dayOfWeek === dayOfWeek && s.slotId === slotId);
     };
 
     const renderCalendar = () => {
@@ -332,6 +368,39 @@ export const PrintShopDashboard: React.FC = () => {
         </button>
     );
 
+    const presentMap = React.useMemo(() => {
+        const map = new Map<string, AttendanceLog>();
+        attendanceLogs.forEach(log => {
+            if (!map.has(log.studentId)) {
+                map.set(log.studentId, log);
+            }
+        });
+        return map;
+    }, [attendanceLogs]);
+
+    const getStudentCountByClass = (className: string) => {
+        return students.filter(s => s.className === className).length;
+    };
+
+    const filteredStudents = students.filter(s => {
+        const matchesClass = selectedClassName === 'ALL' || s.className === selectedClassName;
+        const matchesSearch = s.name.toLowerCase().includes(globalSearch.toLowerCase());
+        return matchesClass && matchesSearch;
+    });
+
+    const filteredPeis = allPeis.filter(p => 
+        p.studentName.toLowerCase().includes(globalSearch.toLowerCase()) ||
+        p.teacherName.toLowerCase().includes(globalSearch.toLowerCase())
+    );
+
+    const filteredPlans = lessonPlans.filter(p => {
+        const matchesClass = selectedClassName === 'ALL' || p.className === selectedClassName;
+        const matchesSearch = p.teacherName.toLowerCase().includes(globalSearch.toLowerCase()) || 
+                             (p.topic?.toLowerCase().includes(globalSearch.toLowerCase()));
+        const matchesType = planTypeFilter === 'ALL' || p.type === planTypeFilter;
+        return matchesClass && matchesSearch && matchesType;
+    });
+
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
             {/* SIDEBAR */}
@@ -339,6 +408,7 @@ export const PrintShopDashboard: React.FC = () => {
                 <div className="mb-6">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Painel Escolar</p>
                     <SidebarItem id="calendar" label="Agenda / Eventos" icon={CalendarDays} />
+                    <SidebarItem id="timetable" label="Grade de Horários" icon={TableProperties} />
                     <SidebarItem id="exams" label="Gráfica / Impressão" icon={Printer} />
                     <SidebarItem id="students" label="Gestão de Turmas" icon={Users} />
                     <SidebarItem id="attendance" label="Frequência Hoje" icon={ClipboardCheck} />
@@ -414,6 +484,76 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {activeTab === 'timetable' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white uppercase tracking-tight flex items-center gap-3">
+                                    <TableProperties className="text-red-500" /> Grade de Horários (TV)
+                                </h1>
+                                <p className="text-gray-400">Configure os professores e disciplinas para cada turno.</p>
+                            </div>
+                            <div className="flex bg-black/40 border border-white/10 rounded-2xl p-1 shrink-0 overflow-x-auto max-w-full">
+                                {[...MORNING_CLASSES, ...AFTERNOON_CLASSES].map(cls => (
+                                    <button 
+                                        key={cls.id} 
+                                        onClick={() => setTtSelectedClass(cls)}
+                                        className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all ${ttSelectedClass.id === cls.id ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                                    >
+                                        {cls.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </header>
+
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
+                             <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                    <thead>
+                                        <tr className="bg-black/40 border-b border-white/10">
+                                            <th className="p-6 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-white/5">Horário</th>
+                                            {DAYS.map(day => (
+                                                <th key={day.id} className="p-6 text-center text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-white/5">{day.label}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {(ttSelectedClass.id.includes('efaf') ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => (
+                                            <tr key={slot.id} className="hover:bg-white/[0.02] group">
+                                                <td className="p-4 border-r border-white/5 bg-black/20">
+                                                    <p className="text-xs font-black text-red-500">{slot.label}</p>
+                                                    <p className="text-[10px] font-bold text-gray-500">{slot.start} - {slot.end}</p>
+                                                </td>
+                                                {DAYS.map(day => {
+                                                    const val = getScheduleValue(day.id, slot.id);
+                                                    return (
+                                                        <td key={day.id} className="p-2 border-r border-white/5">
+                                                            <div className="space-y-1.5">
+                                                                <input 
+                                                                    placeholder="Disciplina" 
+                                                                    className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-black uppercase text-white focus:border-red-600 outline-none transition-colors"
+                                                                    defaultValue={val?.subject || ''}
+                                                                    onBlur={(e) => handleSaveScheduleCell(day.id, slot.id, e.target.value.toUpperCase(), val?.professor || '')}
+                                                                />
+                                                                <input 
+                                                                    placeholder="Professor" 
+                                                                    className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-[10px] font-bold text-gray-400 focus:border-red-600 outline-none transition-colors"
+                                                                    defaultValue={val?.professor || ''}
+                                                                    onBlur={(e) => handleSaveScheduleCell(day.id, slot.id, val?.subject || '', e.target.value)}
+                                                                />
+                                                            </div>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                             </div>
+                        </div>
                     </div>
                 )}
 
