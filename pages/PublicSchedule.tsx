@@ -201,7 +201,7 @@ export const PublicSchedule: React.FC = () => {
     const showWarning = isBannerVisible();
 
     return (
-        <div className="h-screen w-screen bg-[#0f0f10] bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-red-950/20 via-[#0f0f10] to-[#0f0f10] text-white overflow-hidden flex flex-col relative font-sans">
+        <div className="h-screen w-screen bg-[#050000] bg-gradient-to-br from-black via-[#1a0000] to-[#4c0000] text-white overflow-hidden flex flex-col relative font-sans">
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
 
             {!audioEnabled && (
@@ -213,7 +213,7 @@ export const PublicSchedule: React.FC = () => {
             )}
 
             {/* HEADER */}
-            <div className="h-[40%] w-full flex flex-row border-b border-white/5 bg-black/40 backdrop-blur-md z-10">
+            <div className="h-[40%] w-full flex flex-row border-b border-white/10 bg-black/50 backdrop-blur-md z-10">
                 <div className={`${showWarning ? 'w-[62%] border-r border-white/10' : 'w-full'} h-full flex flex-col items-center justify-center relative p-4 transition-all duration-700 ease-in-out`}>
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-[8vh] w-auto object-contain mb-4 drop-shadow-2xl" />
                     <h1 className="text-[22vh] leading-none tracking-tighter text-white drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] font-clock font-extrabold tabular-nums text-center">{timeString}</h1>
@@ -247,7 +247,7 @@ export const PublicSchedule: React.FC = () => {
 
             {/* INDICATOR */}
             <div className="h-[5%] flex items-center justify-center shrink-0 z-10 mt-6">
-                 <div className="flex items-center gap-4 px-8 py-2 bg-white/5 rounded-full border border-white/10 shadow-2xl backdrop-blur-md">
+                 <div className="flex items-center gap-4 px-8 py-2 bg-white/10 rounded-full border border-white/10 shadow-2xl backdrop-blur-md">
                     <span className={`h-3 w-3 rounded-full shadow-[0_0_15px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
                     <span className="text-[1.8vh] font-black tracking-[0.2em] text-gray-200 uppercase">
                         {currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Aguardando Início das Aulas'}
@@ -259,10 +259,10 @@ export const PublicSchedule: React.FC = () => {
             <div className="flex-1 w-full p-6 flex items-center justify-center">
                 {currentShift === 'off' ? (
                      <div className="flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-1000">
-                        <div className="bg-white/5 p-12 rounded-[4rem] border border-white/10 shadow-2xl mb-8">
-                            <School size={120} className="text-gray-700 mb-6 mx-auto"/>
-                            <h2 className="text-5xl font-black text-gray-500 uppercase tracking-tighter mb-4">C.E. Prof. Manoel Leite</h2>
-                            <p className="text-2xl text-gray-600 font-bold uppercase tracking-[0.4em]">Ensino de Qualidade • 10 Anos</p>
+                        <div className="bg-white/5 p-12 rounded-[4rem] border border-white/10 shadow-2xl mb-8 backdrop-blur-sm">
+                            <School size={120} className="text-gray-400 mb-6 mx-auto"/>
+                            <h2 className="text-5xl font-black text-white uppercase tracking-tighter mb-4 drop-shadow-lg">C.E. Prof. Manoel Leite</h2>
+                            <p className="text-2xl text-red-500 font-bold uppercase tracking-[0.4em] drop-shadow-md">Ensino de Qualidade • 10 Anos</p>
                         </div>
                      </div>
                 ) : (
@@ -272,23 +272,23 @@ export const PublicSchedule: React.FC = () => {
                             const nextEntry = getNextEntry(cls.id);
 
                             return (
-                                <div key={cls.id} className="flex flex-col bg-[#121214] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl h-full transition-transform hover:scale-[1.01] hover:border-red-600/30">
-                                    <div className="h-[15%] bg-gradient-to-b from-[#1a1a1c] to-[#121214] flex items-center justify-center border-b border-white/5">
+                                <div key={cls.id} className="flex flex-col bg-black/40 backdrop-blur-md border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl h-full transition-transform hover:scale-[1.01] hover:border-red-600/40">
+                                    <div className="h-[15%] bg-gradient-to-b from-red-900/20 to-black/20 flex items-center justify-center border-b border-white/10">
                                         <h2 className="text-[3.5vh] font-black text-white uppercase tracking-tighter">{cls.name}</h2>
                                     </div>
                                     
                                     <div className="h-[85%] relative w-full flex flex-col">
                                         {currentSlot?.type === 'break' ? (
-                                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/5 z-20 animate-pulse">
+                                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/10 z-20 animate-pulse">
                                                 <Clock size={80} className="text-yellow-500 mb-6 drop-shadow-2xl"/>
                                                 <span className="text-[5vh] font-black text-yellow-500 uppercase tracking-[0.3em]">INTERVALO</span>
                                              </div>
                                         ) : entry ? (
                                             <>
-                                                <div className="h-[65%] flex flex-col items-center justify-center border-b border-white/5 px-4 bg-gradient-to-b from-[#151517] to-[#121214] w-full text-center">
+                                                <div className="h-[65%] flex flex-col items-center justify-center border-b border-white/5 px-4 bg-gradient-to-b from-white/5 to-transparent w-full text-center">
                                                     <p className="text-[1.4vh] font-black text-red-500 uppercase tracking-[0.3em] mb-3">Aula Agora</p>
                                                     <h3 className="text-[5.5vh] leading-[0.85] font-black text-white uppercase drop-shadow-2xl mb-4 line-clamp-2">{entry.subject}</h3>
-                                                    <p className="text-[2.5vh] font-bold text-gray-400 uppercase tracking-wide truncate">{entry.professor}</p>
+                                                    <p className="text-[2.5vh] font-bold text-gray-300 uppercase tracking-wide truncate">{entry.professor}</p>
                                                 </div>
 
                                                 <div className="h-[35%] flex flex-col items-center justify-center px-4 bg-black/40 w-full text-center relative overflow-hidden">
@@ -301,7 +301,7 @@ export const PublicSchedule: React.FC = () => {
                                                     {nextEntry ? (
                                                         <div className="flex flex-col items-center w-full">
                                                             <p className="text-[2.2vh] font-black text-gray-200 uppercase truncate w-full">{nextEntry.subject}</p>
-                                                            <p className="text-[1.6vh] font-bold text-gray-500 uppercase truncate w-full">{nextEntry.professor}</p>
+                                                            <p className="text-[1.6vh] font-bold text-gray-400 uppercase truncate w-full">{nextEntry.professor}</p>
                                                         </div>
                                                     ) : (
                                                         <p className="text-[1.8vh] font-black text-gray-700 uppercase tracking-widest">Fim das Aulas</p>
@@ -325,14 +325,14 @@ export const PublicSchedule: React.FC = () => {
             <div className="absolute bottom-10 right-10 flex gap-4 z-50">
                 <button 
                     onClick={toggleFullScreen} 
-                    className="p-5 bg-white/5 hover:bg-blue-600 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl group"
+                    className="p-5 bg-black/40 hover:bg-red-600 border border-white/20 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl group"
                     title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
                 >
                     {isFullscreen ? <Minimize size={32} /> : <Maximize size={32} />}
                 </button>
                 <button 
                     onClick={() => setShowModal(true)} 
-                    className="p-5 bg-white/5 hover:bg-red-600 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl group"
+                    className="p-5 bg-black/40 hover:bg-red-600 border border-white/20 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl group"
                     title="Ver Quadro Geral"
                 >
                     <Maximize2 size={32} className="group-hover:scale-110 transition-transform" />
