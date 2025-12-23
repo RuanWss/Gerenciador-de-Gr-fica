@@ -57,23 +57,25 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const analyzeAnswerSheet = async (file: File, numQuestions: number): Promise<Record<number, string>> => {
+export const analyzeAnswerSheet = async (file: File, numQuestions: number): Promise<{ studentId?: string; answers: Record<number, string> }> => {
   try {
     const ai = getClient();
     const base64Data = await fileToBase64(file);
     
-    // Prompt ultra-específico para simular comportamento de OMR profissional
     const prompt = `
       Você é um sistema de OMR (Optical Mark Recognition) de alta precisão.
       Analise a imagem deste cartão-resposta escolar.
       
       INSTRUÇÕES:
-      1. Identifique as marcas (bolinhas ou quadrados preenchidos) para cada uma das ${numQuestions} questões.
-      2. Se uma questão não tiver marcação clara, retorne "" (vazio).
-      3. Retorne APENAS um objeto JSON onde a chave é o número da questão (1 a ${numQuestions}) e o valor é a letra (A, B, C, D ou E).
+      1. Localize o QR Code no topo para identificar o Aluno/ID se possível (leia o texto próximo ou o conteúdo do código).
+      2. Identifique as marcas preenchidas para cada uma das ${numQuestions} questões.
+      3. Se uma questão não tiver marcação clara, retorne "" (vazio).
+      4. Retorne APENAS um objeto JSON com:
+         - "studentId": string com o ID do aluno se identificado no QR Code ou cabeçalho.
+         - "answers": objeto onde a chave é o número da questão (1 a ${numQuestions}) e o valor é a letra (A, B, C, D ou E).
       
       EXEMPLO DE SAÍDA:
-      { "1": "A", "2": "C", "3": "B" }
+      { "studentId": "id-aluno-123", "answers": { "1": "A", "2": "C", "3": "B" } }
     `;
 
     const response = await ai.models.generateContent({
@@ -86,14 +88,17 @@ export const analyzeAnswerSheet = async (file: File, numQuestions: number): Prom
       },
       config: { 
         responseMimeType: "application/json",
-        temperature: 0.1 // Baixa temperatura para maior precisão factual
+        temperature: 0.1
       }
     });
 
     const result = JSON.parse(response.text || "{}");
-    return result;
+    return {
+        studentId: result.studentId,
+        answers: result.answers || {}
+    };
   } catch (error) {
     console.error("Erro no processamento OMR:", error);
-    return {};
+    return { answers: {} };
   }
 };

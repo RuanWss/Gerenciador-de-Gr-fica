@@ -231,6 +231,8 @@ export interface AnswerKey {
   id: string;
   examId: string;
   subject: string;
+  className: string;
+  title: string;
   answers: Record<number, string>;
 }
 

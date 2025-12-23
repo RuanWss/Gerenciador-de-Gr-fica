@@ -112,7 +112,13 @@ export const TeacherDashboard: React.FC = () => {
   const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
   const [selectedKey, setSelectedKey] = useState<AnswerKey | null>(null);
   const [showKeyForm, setShowKeyForm] = useState(false);
-  const [newKeyData, setNewKeyData] = useState<Partial<AnswerKey>>({ subject: user?.subject || '', answers: {} });
+  // FIX: Include missing className and title in newKeyData state initialization
+  const [newKeyData, setNewKeyData] = useState<Partial<AnswerKey>>({ 
+    subject: user?.subject || '', 
+    className: '', 
+    title: '', 
+    answers: {} 
+  });
   const [numQuestions, setNumQuestions] = useState(10);
   const [correctionFile, setCorrectionFile] = useState<File | null>(null);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -152,13 +158,16 @@ export const TeacherDashboard: React.FC = () => {
 
   // --- HANDLERS OMR ---
   const handleSaveNewKey = async () => {
-      if (!newKeyData.subject || !newKeyData.answers) return;
+      // FIX: Check for title and className before saving
+      if (!newKeyData.subject || !newKeyData.answers || !newKeyData.className || !newKeyData.title) return;
       setIsSaving(true);
       try {
           await saveAnswerKey({
               id: '',
               examId: 'manual_' + Date.now(),
               subject: newKeyData.subject,
+              className: newKeyData.className,
+              title: newKeyData.title,
               answers: newKeyData.answers as Record<number, string>
           });
           setShowKeyForm(false);
@@ -176,7 +185,7 @@ export const TeacherDashboard: React.FC = () => {
           
           let score = 0;
           Object.entries(selectedKey.answers).forEach(([q, ans]) => {
-              if (detectedAnswers[Number(q)] === ans) score++;
+              if (detectedAnswers.answers[Number(q)] === ans) score++;
           });
 
           await saveCorrection({
@@ -185,7 +194,7 @@ export const TeacherDashboard: React.FC = () => {
               studentName: student!.name,
               answerKeyId: selectedKey.id,
               score: (score / Object.keys(selectedKey.answers).length) * 10,
-              answers: detectedAnswers
+              answers: detectedAnswers.answers
           });
           
           setCorrectionFile(null);
@@ -529,7 +538,8 @@ export const TeacherDashboard: React.FC = () => {
                             <p className="text-gray-400">Criação de gabaritos e correção via visão computacional.</p>
                         </div>
                         <Button onClick={() => { 
-                            setNewKeyData({ subject: user?.subject || '', answers: {} });
+                            // FIX: Reset className and title in newKeyData
+                            setNewKeyData({ subject: user?.subject || '', className: '', title: '', answers: {} });
                             setNumQuestions(10);
                             setShowKeyForm(true); 
                         }}>
@@ -544,6 +554,18 @@ export const TeacherDashboard: React.FC = () => {
                                 <button onClick={() => setShowKeyForm(false)} className="text-gray-400 hover:text-red-500"><X size={24}/></button>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                                {/* FIX: Add Title and Class fields to Teacher OMR Key Form */}
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Título do Gabarito</label>
+                                    <input className="w-full border-2 border-gray-100 rounded-xl p-4 font-bold outline-none" value={newKeyData.title} onChange={e => setNewKeyData({...newKeyData, title: e.target.value})} placeholder="Ex: Simulado Mensal" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase mb-2">Turma</label>
+                                    <select className="w-full border-2 border-gray-100 rounded-xl p-4 font-bold outline-none" value={newKeyData.className} onChange={e => setNewKeyData({...newKeyData, className: e.target.value})}>
+                                        <option value="">Selecione...</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
                                 <div>
                                     <label className="block text-xs font-black text-gray-400 uppercase mb-2">Disciplina</label>
                                     <select className="w-full border-2 border-gray-100 rounded-xl p-4 font-bold outline-none" value={newKeyData.subject} onChange={e => setNewKeyData({...newKeyData, subject: e.target.value})}>
@@ -589,11 +611,12 @@ export const TeacherDashboard: React.FC = () => {
                                 <div className="space-y-3">
                                     {answerKeys.map(key => (
                                         <button 
-                                            key={key.id}
+                                            key={key.id} 
                                             onClick={() => setSelectedKey(key)}
                                             className={`w-full p-6 rounded-3xl border-2 text-left transition-all ${selectedKey?.id === key.id ? 'bg-white border-brand-500 text-gray-800' : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/10'}`}
                                         >
-                                            <h4 className="font-black text-sm uppercase leading-tight">{key.subject}</h4>
+                                            {/* FIX: Use title or subject for labeling */}
+                                            <h4 className="font-black text-sm uppercase leading-tight">{key.title || key.subject}</h4>
                                             <p className="text-[10px] font-bold opacity-60 mt-1">{Object.keys(key.answers).length} Questões Objetivas</p>
                                         </button>
                                     ))}
@@ -895,7 +918,7 @@ export const TeacherDashboard: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Turma Destino</label>
-                                    <select className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none" value={materialClass} onChange={e => setMaterialClass(e.target.value)}>
+                                    <select className="w-full border-2 border-gray-100 rounded-xl p-3 text-sm font-bold text-gray-700" value={materialClass} onChange={e => setMaterialClass(e.target.value)}>
                                         <option value="">Selecione a Turma...</option>
                                         {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
