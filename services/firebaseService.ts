@@ -246,7 +246,9 @@ export const saveStudent = async (student: Student): Promise<void> => {
 
 export const updateStudent = async (student: Student): Promise<void> => {
     const { id, ...data } = student;
-    await updateDoc(doc(db, STUDENTS_COLLECTION, id), data as any);
+    // Sanitizar dados para evitar erro 'undefined' no Firestore
+    const sanitizedData = JSON.parse(JSON.stringify(data));
+    await updateDoc(doc(db, STUDENTS_COLLECTION, id), sanitizedData);
 };
 
 export const deleteStudent = async (id: string): Promise<void> => {

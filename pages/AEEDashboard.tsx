@@ -62,15 +62,26 @@ export const AEEDashboard: React.FC = () => {
             if (reportFile) {
                 reportUrl = await uploadReportFile(reportFile, selectedStudent.name);
             }
-            await updateStudent({
+            
+            // Garantir que campos opcionais não sejam undefined para o Firestore
+            const studentToUpdate: Student = {
                 ...selectedStudent,
-                reportUrl
-            });
+                reportUrl: reportUrl || '',
+                pedagogicalResponsible: selectedStudent.pedagogicalResponsible || '',
+                fatherName: selectedStudent.fatherName || '',
+                motherName: selectedStudent.motherName || '',
+                contacts: selectedStudent.contacts || '',
+                coordinationOpinion: selectedStudent.coordinationOpinion || '',
+                disorder: selectedStudent.disorder || ''
+            };
+
+            await updateStudent(studentToUpdate);
             setShowEdit(false);
             setReportFile(null);
             alert("Ficha do Aluno AEE atualizada!");
-        } catch (e) {
-            alert("Erro ao salvar.");
+        } catch (err: any) {
+            console.error("Erro ao salvar prontuário:", err);
+            alert("Erro ao salvar prontuário: " + (err.message || 'Erro desconhecido'));
         } finally {
             setIsLoading(false);
         }
@@ -229,19 +240,19 @@ export const AEEDashboard: React.FC = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="md:col-span-2">
                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Responsável Pedagógica</label>
-                                        <input className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none" value={selectedStudent.pedagogicalResponsible || ''} onChange={e => setSelectedStudent({...selectedStudent, pedagogicalResponsible: e.target.value})} placeholder="Nome da profissional responsável"/>
+                                        <input className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none bg-white text-gray-900 font-medium" value={selectedStudent.pedagogicalResponsible || ''} onChange={e => setSelectedStudent({...selectedStudent, pedagogicalResponsible: e.target.value})} placeholder="Nome da profissional responsável"/>
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nome do Pai</label>
-                                        <input className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none" value={selectedStudent.fatherName || ''} onChange={e => setSelectedStudent({...selectedStudent, fatherName: e.target.value})} />
+                                        <input className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none bg-white text-gray-900 font-medium" value={selectedStudent.fatherName || ''} onChange={e => setSelectedStudent({...selectedStudent, fatherName: e.target.value})} />
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Nome da Mãe</label>
-                                        <input className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none" value={selectedStudent.motherName || ''} onChange={e => setSelectedStudent({...selectedStudent, motherName: e.target.value})} />
+                                        <input className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none bg-white text-gray-900 font-medium" value={selectedStudent.motherName || ''} onChange={e => setSelectedStudent({...selectedStudent, motherName: e.target.value})} />
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Contatos (Telefones/E-mails)</label>
-                                        <textarea rows={2} className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none" value={selectedStudent.contacts || ''} onChange={e => setSelectedStudent({...selectedStudent, contacts: e.target.value})} placeholder="(XX) XXXXX-XXXX / exemplo@email.com"/>
+                                        <textarea rows={2} className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm focus:border-red-500 outline-none bg-white text-gray-900 font-medium" value={selectedStudent.contacts || ''} onChange={e => setSelectedStudent({...selectedStudent, contacts: e.target.value})} placeholder="(XX) XXXXX-XXXX / exemplo@email.com"/>
                                     </div>
                                 </div>
                             </div>
@@ -264,7 +275,7 @@ export const AEEDashboard: React.FC = () => {
                             <div className="space-y-6">
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Transtorno ou Deficiência Principal</label>
-                                    <select className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors bg-gray-50" value={selectedStudent.disorder || ''} onChange={e => setSelectedStudent({...selectedStudent, disorder: e.target.value})}>
+                                    <select className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors bg-white" value={selectedStudent.disorder || ''} onChange={e => setSelectedStudent({...selectedStudent, disorder: e.target.value})}>
                                         <option value="">Selecione...</option>
                                         {DISORDERS.map(d => <option key={d} value={d}>{d}</option>)}
                                     </select>
