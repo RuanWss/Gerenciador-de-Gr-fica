@@ -34,26 +34,43 @@ const PEI_COLLECTION = 'pei';
 
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
-    if (onProgress) onProgress("Buscando turmas na Gennera...");
-    const classes = await fetchGenneraClasses();
-    
-    let totalSynced = 0;
-    const batch = writeBatch(db);
-
-    for (const cls of classes) {
-        if (onProgress) onProgress(`Sincronizando alunos: ${cls.name}...`);
-        const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
+    try {
+        if (onProgress) onProgress("Iniciando comunicação com Gennera...");
+        const classes = await fetchGenneraClasses();
         
-        for (const student of students) {
-            const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-            // Usamos set com merge para não sobrescrever dados extras do AEE se já existirem
-            batch.set(studentRef, student, { merge: true });
-            totalSynced++;
+        if (!classes || classes.length === 0) {
+            throw new Error("Nenhuma turma encontrada na Gennera.");
         }
-    }
 
-    await batch.commit();
-    if (onProgress) onProgress(`Sucesso! ${totalSynced} alunos sincronizados.`);
+        if (onProgress) onProgress(`Encontradas ${classes.length} turmas. Sincronizando...`);
+        
+        let totalSynced = 0;
+        // O Firestore tem limite de 500 operações por batch, vamos usar batches individuais por turma
+        // para garantir que não ultrapassemos limites caso haja muitos alunos.
+
+        for (const cls of classes) {
+            if (onProgress) onProgress(`Sincronizando: ${cls.name}...`);
+            const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
+            
+            if (students.length > 0) {
+                const batch = writeBatch(db);
+                for (const student of students) {
+                    const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
+                    batch.set(studentRef, student, { merge: true });
+                    totalSynced++;
+                }
+                await batch.commit();
+                console.log(`Turma ${cls.name}: ${students.length} alunos salvos.`);
+            } else {
+                console.log(`Turma ${cls.name} vazia ou erro na busca.`);
+            }
+        }
+
+        if (onProgress) onProgress(`Sucesso! ${totalSynced} registros atualizados.`);
+    } catch (error: any) {
+        console.error("Erro na sincronização Gennera/Firebase:", error);
+        throw error;
+    }
 };
 
 // --- USERS ---

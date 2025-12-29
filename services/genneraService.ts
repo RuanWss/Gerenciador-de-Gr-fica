@@ -7,45 +7,65 @@ const API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJuYW1lIjoiVXN1w6FyaW8g
 
 const getHeaders = () => ({
   'X-Api-Key': API_TOKEN,
-  'Content-Type': 'application/json'
+  'Authorization': `Bearer ${API_TOKEN}`,
+  'Content-Type': 'application/json',
+  'Accept': 'application/json'
 });
 
 export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
   try {
+    console.log("Iniciando busca de turmas Gennera...");
     const response = await fetch(`${BASE_URL}/institutions/${INSTITUTION_ID}/unidades-letivas/turmas`, {
       headers: getHeaders()
     });
-    if (!response.ok) throw new Error('Falha ao buscar turmas na Gennera');
-    const data = await response.json();
     
-    return data.map((t: any) => ({
-      id: String(t.id),
-      name: t.sigla || t.nome,
-      shift: t.turno?.toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Erro Gennera (Classes):", response.status, errorText);
+      throw new Error(`Falha Gennera: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("Dados recebidos (Classes):", data);
+
+    // Algumas APIs da Gennera retornam os dados em uma propriedade 'data' ou 'result'
+    const classesList = Array.isArray(data) ? data : (data.data || data.result || []);
+
+    return classesList.map((t: any) => ({
+      id: String(t.id || t.idTurma || t.codigo),
+      name: t.sigla || t.nome || t.descricao || `Turma ${t.id}`,
+      shift: (t.turno || t.idTurno || '').toString().toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
     }));
   } catch (error) {
-    console.error("Erro Gennera API (Classes):", error);
+    console.error("Erro fatal Gennera API (Classes):", error);
     return [];
   }
 };
 
 export const fetchGenneraStudentsByClass = async (classId: string, className: string): Promise<Student[]> => {
   try {
+    console.log(`Buscando alunos para a turma: ${className} (ID: ${classId})...`);
     const response = await fetch(`${BASE_URL}/institutions/${INSTITUTION_ID}/turmas/${classId}/alunos`, {
       headers: getHeaders()
     });
-    if (!response.ok) throw new Error('Falha ao buscar alunos na Gennera');
-    const data = await response.json();
 
-    return data.map((a: any) => ({
-      id: String(a.id_matricula || a.id),
-      name: a.nome_pessoa || a.nome,
+    if (!response.ok) {
+      console.error(`Erro Gennera (Alunos - ${className}):`, response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    const studentsList = Array.isArray(data) ? data : (data.data || data.result || []);
+
+    return studentsList.map((a: any) => ({
+      id: String(a.id_matricula || a.id_aluno || a.id || a.codigoMatricula),
+      name: a.nome_pessoa || a.nome_aluno || a.nome || "Aluno Sem Nome",
       classId: classId,
       className: className,
-      photoUrl: a.url_foto || ''
+      photoUrl: a.url_foto || a.foto || a.linkFoto || ''
     }));
   } catch (error) {
-    console.error(`Erro Gennera API (Alunos Turma ${className}):`, error);
+    console.error(`Erro fatal Gennera API (Alunos Turma ${className}):`, error);
     return [];
   }
 };
