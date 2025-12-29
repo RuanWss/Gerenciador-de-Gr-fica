@@ -4,7 +4,7 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
 import { 
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
-    query, where, orderBy, onSnapshot, setDoc, limit, increment 
+    query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
@@ -13,6 +13,7 @@ import {
     StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
     AnswerKey, StudentCorrection, PEIDocument
 } from '../types';
+import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
 const USERS_COLLECTION = 'users';
 const EXAMS_COLLECTION = 'exams';
@@ -30,6 +31,30 @@ const LIBRARY_LOANS_COLLECTION = 'library_loans';
 const ANSWER_KEYS_COLLECTION = 'answer_keys';
 const CORRECTIONS_COLLECTION = 'corrections';
 const PEI_COLLECTION = 'pei';
+
+// --- GENNERA SYNC ---
+export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
+    if (onProgress) onProgress("Buscando turmas na Gennera...");
+    const classes = await fetchGenneraClasses();
+    
+    let totalSynced = 0;
+    const batch = writeBatch(db);
+
+    for (const cls of classes) {
+        if (onProgress) onProgress(`Sincronizando alunos: ${cls.name}...`);
+        const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
+        
+        for (const student of students) {
+            const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
+            // Usamos set com merge para não sobrescrever dados extras do AEE se já existirem
+            batch.set(studentRef, student, { merge: true });
+            totalSynced++;
+        }
+    }
+
+    await batch.commit();
+    if (onProgress) onProgress(`Sucesso! ${totalSynced} alunos sincronizados.`);
+};
 
 // --- USERS ---
 export const getUserProfile = async (uid: string): Promise<User | null> => {

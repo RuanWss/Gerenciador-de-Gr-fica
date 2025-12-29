@@ -18,7 +18,8 @@ import {
     saveCorrection,
     getCorrections,
     deleteExamRequest,
-    getAllPEIs
+    getAllPEIs,
+    syncAllDataWithGennera
 } from '../services/firebaseService';
 import { analyzeAnswerSheet } from '../services/geminiService';
 import { 
@@ -39,7 +40,7 @@ import {
     BookOpenCheck, Plus, ChevronLeft, ChevronRight, Save, X, 
     CheckCircle, XCircle, ScanLine, Target, GraduationCap, Download,
     FileText, Clock, ClipboardCheck, Eye, Loader2, CalendarDays,
-    Layers, QrCode, FileDown, Image as ImageIcon, ExternalLink, Heart
+    Layers, QrCode, FileDown, Image as ImageIcon, ExternalLink, Heart, RefreshCw, Server
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES } from '../constants';
 
@@ -67,6 +68,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
     const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
     const [showPeiView, setShowPeiView] = useState(false);
+
+    // Sync States
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncMessage, setSyncMessage] = useState('');
 
     // Common States
     const [exams, setExams] = useState<ExamRequest[]>([]);
@@ -127,6 +132,22 @@ export const PrintShopDashboard: React.FC = () => {
         setAnswerKeys(allKeys);
         setAllPeis(peisData.sort((a,b) => b.updatedAt - a.updatedAt));
         setIsLoading(false);
+    };
+
+    // --- GENNERA SYNC HANDLER ---
+    const handleSyncGennera = async () => {
+        if (!confirm("Isso irá atualizar todos os alunos e turmas com base nos dados da Gennera. Deseja continuar?")) return;
+        setIsSyncing(true);
+        try {
+            await syncAllDataWithGennera((msg) => setSyncMessage(msg));
+            await fetchInitialData();
+            setTimeout(() => setSyncMessage(''), 3000);
+        } catch (e) {
+            alert("Erro na sincronização.");
+            setSyncMessage('');
+        } finally {
+            setIsSyncing(false);
+        }
     };
 
     // --- OMR BATCH HANDLERS ---
@@ -638,13 +659,60 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'config' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
                         <header className="mb-8"><h1 className="text-3xl font-bold text-white uppercase flex items-center gap-3"><Settings className="text-red-500" /> Configurações</h1></header>
-                        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 space-y-8 shadow-2xl">
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3"><input type="checkbox" id="bannerActive" className="h-6 w-6 rounded border-white/10 bg-black text-red-600" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)}/><label htmlFor="bannerActive" className="text-lg font-bold text-white uppercase">Ativar Banner na TV</label></div>
-                                <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Mensagem</label><textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" rows={3} value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} placeholder="Ex: Reunião de Pais..."/></div>
-                                <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Tipo de Alerta</label><div className="flex gap-2">{(['info', 'warning', 'error', 'success'] as const).map(type => (<button key={type} onClick={() => setConfigBannerType(type)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${configBannerType === type ? 'bg-red-600 text-white' : 'bg-black/40 text-gray-400 border border-white/10'}`}>{type}</button>))}</div></div>
-                            </div>
-                            <Button onClick={handleSaveConfig} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-xl shadow-red-900/40"><Save size={20} className="mr-2"/> Salvar Configurações</Button>
+                        
+                        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 space-y-12 shadow-2xl mb-12">
+                            {/* SYNC SECTION */}
+                            <section className="space-y-6">
+                                <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+                                    <Server size={24} className="text-red-500" />
+                                    <h2 className="text-xl font-black text-white uppercase tracking-tight">Integração Gennera</h2>
+                                </div>
+                                <div className="bg-black/40 p-6 rounded-2xl border border-white/5">
+                                    <p className="text-sm text-gray-400 mb-6">Sincronize a base de dados do Portal com o sistema Gennera (ID 891). Isso atualizará alunos, matrículas e fotos biométricas.</p>
+                                    <div className="flex flex-col gap-4">
+                                        <Button 
+                                            onClick={handleSyncGennera} 
+                                            isLoading={isSyncing}
+                                            className="h-16 rounded-2xl text-lg font-black uppercase shadow-xl shadow-red-900/20"
+                                        >
+                                            <RefreshCw size={24} className={`mr-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                                            Sincronizar Alunos e Turmas
+                                        </Button>
+                                        {syncMessage && (
+                                            <p className="text-xs font-mono text-brand-500 animate-pulse text-center">{syncMessage}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* BANNER SECTION */}
+                            <section className="space-y-6">
+                                <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+                                    <Megaphone size={24} className="text-red-500" />
+                                    <h2 className="text-xl font-black text-white uppercase tracking-tight">Comunicados na TV</h2>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <input type="checkbox" id="bannerActive" className="h-6 w-6 rounded border-white/10 bg-black text-red-600" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)}/>
+                                        <label htmlFor="bannerActive" className="text-lg font-bold text-white uppercase">Ativar Banner na TV</label>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Mensagem</label>
+                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" rows={3} value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} placeholder="Ex: Reunião de Pais..."/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Tipo de Alerta</label>
+                                        <div className="flex gap-2">
+                                            {(['info', 'warning', 'error', 'success'] as const).map(type => (
+                                                <button key={type} onClick={() => setConfigBannerType(type)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${configBannerType === type ? 'bg-red-600 text-white' : 'bg-black/40 text-gray-400 border border-white/10'}`}>{type}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                                <Button onClick={handleSaveConfig} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-xl shadow-red-900/40">
+                                    <Save size={20} className="mr-2"/> Salvar Comunicado
+                                </Button>
+                            </section>
                         </div>
                     </div>
                 )}
