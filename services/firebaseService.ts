@@ -32,43 +32,46 @@ const ANSWER_KEYS_COLLECTION = 'answer_keys';
 const CORRECTIONS_COLLECTION = 'corrections';
 const PEI_COLLECTION = 'pei';
 
+// --- HELPERS ---
+const sanitizeForFirestore = (obj: any) => {
+    // Remove campos undefined para evitar erro no Firestore
+    return JSON.parse(JSON.stringify(obj, (key, value) => value === undefined ? null : value));
+};
+
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Iniciando comunicação com Gennera...");
+        if (onProgress) onProgress("Conectando com API Gennera...");
         const classes = await fetchGenneraClasses();
         
         if (!classes || classes.length === 0) {
-            throw new Error("Nenhuma turma encontrada na Gennera.");
+            throw new Error("Nenhuma turma ativa encontrada na Gennera.");
         }
 
-        if (onProgress) onProgress(`Encontradas ${classes.length} turmas. Sincronizando...`);
-        
         let totalSynced = 0;
-        // O Firestore tem limite de 500 operações por batch, vamos usar batches individuais por turma
-        // para garantir que não ultrapassemos limites caso haja muitos alunos.
 
         for (const cls of classes) {
             if (onProgress) onProgress(`Sincronizando: ${cls.name}...`);
-            const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
+            const studentsFromGennera = await fetchGenneraStudentsByClass(cls.id, cls.name);
             
-            if (students.length > 0) {
+            if (studentsFromGennera.length > 0) {
                 const batch = writeBatch(db);
-                for (const student of students) {
+                for (const student of studentsFromGennera) {
                     const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                    batch.set(studentRef, student, { merge: true });
+                    // Sanitizamos para garantir que photoUrl ou outros campos não sejam undefined
+                    batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
                     totalSynced++;
                 }
                 await batch.commit();
-                console.log(`Turma ${cls.name}: ${students.length} alunos salvos.`);
-            } else {
-                console.log(`Turma ${cls.name} vazia ou erro na busca.`);
             }
         }
 
-        if (onProgress) onProgress(`Sucesso! ${totalSynced} registros atualizados.`);
+        if (onProgress) onProgress(`Sincronização concluída! ${totalSynced} alunos atualizados.`);
     } catch (error: any) {
-        console.error("Erro na sincronização Gennera/Firebase:", error);
+        console.error("Erro Sync:", error);
+        if (error.message.includes('Failed to fetch')) {
+            throw new Error("Erro de conexão (CORS). A API da Gennera pode estar bloqueando o acesso direto pelo navegador.");
+        }
         throw error;
     }
 };
@@ -288,9 +291,7 @@ export const saveStudent = async (student: Student): Promise<void> => {
 
 export const updateStudent = async (student: Student): Promise<void> => {
     const { id, ...data } = student;
-    // Sanitizar dados para evitar erro 'undefined' no Firestore
-    const sanitizedData = JSON.parse(JSON.stringify(data));
-    await updateDoc(doc(db, STUDENTS_COLLECTION, id), sanitizedData);
+    await updateDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data));
 };
 
 export const deleteStudent = async (id: string): Promise<void> => {
