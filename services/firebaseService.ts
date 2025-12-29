@@ -34,7 +34,6 @@ const PEI_COLLECTION = 'pei';
 
 // --- HELPERS ---
 const sanitizeForFirestore = (obj: any) => {
-    // Garante que nenhum valor seja undefined ou tenha caracteres que o Firestore não gosta
     return JSON.parse(JSON.stringify(obj, (key, value) => {
         if (value === undefined) return null;
         if (typeof value === 'string') return value.trim().normalize("NFC");
@@ -65,7 +64,6 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
                 
                 for (const student of studentsFromGennera) {
                     const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                    // Importante: merge: true preserva campos manuais (AEE, Contatos)
                     batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
                     totalSynced++;
                 }
@@ -105,41 +103,9 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
     }
 };
 
-export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        throw { code: 'auth/email-already-in-use', message: 'Email already in use' };
-    }
-    await addDoc(collection(db, USERS_COLLECTION), {
-        name,
-        email,
-        role: roles[0],
-        roles,
-        subject: '',
-        classes: []
-    });
-};
-
-export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
-    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        const userDoc = snap.docs[0];
-        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), { 
-            roles, 
-            role: roles[0] 
-        });
-    }
-};
-
 // --- PEI ---
 export const getPEIByStudentAndTeacher = async (studentId: string, teacherId: string): Promise<PEIDocument | null> => {
-    const q = query(
-        collection(db, PEI_COLLECTION), 
-        where("studentId", "==", studentId), 
-        where("teacherId", "==", teacherId)
-    );
+    const q = query(collection(db, PEI_COLLECTION), where("studentId", "==", studentId), where("teacherId", "==", teacherId));
     const snap = await getDocs(q);
     if (!snap.empty) {
         return { id: snap.docs[0].id, ...snap.docs[0].data() } as PEIDocument;
@@ -182,30 +148,12 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
     }
 };
 
-export const updateExamRequest = async (exam: ExamRequest): Promise<void> => {
-    const { id, ...data } = exam;
-    if (!id) throw new Error("ID is required for update");
-    await updateDoc(doc(db, EXAMS_COLLECTION, id), data as any);
-};
-
 export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
     await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
 };
 
 export const deleteExamRequest = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EXAMS_COLLECTION, id));
-};
-
-export const uploadExamFile = async (file: File): Promise<string> => {
-    const storageRef = ref(storage, `exams/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-};
-
-export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
-    const storageRef = ref(storage, `reports/${studentName}_${Date.now()}.pdf`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
 };
 
 // --- CLASS MATERIALS ---
@@ -262,12 +210,6 @@ export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
     return docRef.id;
 };
 
-export const updateLessonPlan = async (plan: LessonPlan): Promise<void> => {
-    const { id, ...data } = plan;
-    if (!id) throw new Error("ID is required for update");
-    await updateDoc(doc(db, LESSON_PLANS_COLLECTION, id), data);
-};
-
 export const deleteLessonPlan = async (id: string): Promise<void> => {
     if (!id) return;
     await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
@@ -303,28 +245,31 @@ export const deleteStudent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
 };
 
+export const uploadStudentPhoto = async (file: File, studentId: string): Promise<string> => {
+    const storageRef = ref(storage, `students/${studentId}_${Date.now()}.jpg`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+};
+
+export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
+    const storageRef = ref(storage, `reports/${studentName}_${Date.now()}.pdf`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+};
+
 // --- ATTENDANCE ---
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    const q = query(
-        collection(db, ATTENDANCE_LOGS_COLLECTION), 
-        where("studentId", "==", log.studentId),
-        where("timestamp", ">", fiveMinutesAgo)
-    );
+    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("studentId", "==", log.studentId), where("timestamp", ">", fiveMinutesAgo));
     const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        return false;
-    }
+    if (!snapshot.empty) return false;
     const { id, ...data } = log;
     await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), data);
     return true;
 };
 
 export const listenToAttendanceLogs = (dateString: string, callback: (logs: AttendanceLog[]) => void) => {
-    const q = query(
-        collection(db, ATTENDANCE_LOGS_COLLECTION), 
-        where("dateString", "==", dateString)
-    );
+    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
     return onSnapshot(q, (snapshot) => {
         const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
         logs.sort((a,b) => b.timestamp - a.timestamp);
@@ -367,27 +312,17 @@ export const uploadStaffPhoto = async (file: File): Promise<string> => {
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
     try {
         const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-        const q = query(
-            collection(db, STAFF_LOGS_COLLECTION),
-            where("staffId", "==", log.staffId),
-            where("timestamp", ">", twoMinutesAgo)
-        );
+        const q = query(collection(db, STAFF_LOGS_COLLECTION), where("staffId", "==", log.staffId), where("timestamp", ">", twoMinutesAgo));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) return 'too_soon';
-
         const { id, ...data } = log;
         await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
         return 'success';
-    } catch (e) {
-        return 'error';
-    }
+    } catch (e) { return 'error'; }
 };
 
 export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
-    const q = query(
-        collection(db, STAFF_LOGS_COLLECTION), 
-        where("dateString", "==", dateString)
-    );
+    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
     return onSnapshot(q, (snapshot) => {
         const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
         logs.sort((a,b) => b.timestamp - a.timestamp);
@@ -516,4 +451,32 @@ export const returnLoan = async (loanId: string, bookId: string): Promise<void> 
     await updateDoc(loanRef, { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
     await updateDoc(bookRef, { availableQuantity: increment(1) });
+};
+
+export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        throw { code: 'auth/email-already-in-use', message: 'Email already in use' };
+    }
+    await addDoc(collection(db, USERS_COLLECTION), {
+        name,
+        email,
+        role: roles[0],
+        roles,
+        subject: '',
+        classes: []
+    });
+};
+
+export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        const userDoc = snap.docs[0];
+        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), { 
+            roles, 
+            role: roles[0] 
+        });
+    }
 };
