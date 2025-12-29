@@ -117,13 +117,13 @@ export const PrintShopDashboard: React.FC = () => {
         if (!confirm("Isso atualizará os alunos com base no sistema Gennera. Continuar?")) return;
         setIsSyncing(true);
         setSyncError(null);
-        setSyncMessage("Iniciando...");
+        setSyncMessage("Conectando ao servidor...");
         try {
             await syncAllDataWithGennera((msg) => setSyncMessage(msg));
             await fetchInitialData();
             setTimeout(() => setSyncMessage(''), 5000);
         } catch (e: any) {
-            setSyncError(e.message || "Erro na sincronização.");
+            setSyncError(e.message || "Erro desconhecido na sincronização.");
             setSyncMessage('');
         } finally {
             setIsSyncing(false);
@@ -290,21 +290,36 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'config' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
                         <header className="mb-8"><h1 className="text-3xl font-bold text-white uppercase flex items-center gap-3"><Settings className="text-red-500" /> Configurações</h1></header>
-                        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 space-y-12">
+                        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 space-y-12 shadow-2xl">
                             <section className="space-y-6">
                                 <div className="flex items-center gap-3 border-b border-white/10 pb-4"><Server size={24} className="text-red-500" /><h2 className="text-xl font-black text-white uppercase">Integração Gennera</h2></div>
                                 <div className="bg-black/40 p-6 rounded-2xl border border-white/5">
-                                    <p className="text-sm text-gray-400 mb-6">Sincronize automaticamente alunos e turmas do sistema Gennera.</p>
+                                    <p className="text-sm text-gray-400 mb-6">Sincronize automaticamente alunos e turmas do sistema Gennera (ID 891).</p>
                                     <Button onClick={handleSyncGennera} isLoading={isSyncing} className="w-full h-16 rounded-2xl text-lg font-black uppercase"><RefreshCw size={24} className={`mr-3 ${isSyncing ? 'animate-spin' : ''}`} /> {isSyncing ? 'Sincronizando...' : 'Sincronizar Agora'}</Button>
-                                    {syncMessage && <div className="mt-4 p-3 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-lg animate-pulse">{syncMessage}</div>}
-                                    {syncError && <div className="mt-4 p-3 bg-red-500/10 text-red-400 text-xs font-bold rounded-lg">{syncError}</div>}
+                                    
+                                    {syncMessage && (
+                                        <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center gap-3 animate-pulse">
+                                            <Loader2 size={18} className="text-blue-500 animate-spin" />
+                                            <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">{syncMessage}</p>
+                                        </div>
+                                    )}
+
+                                    {syncError && (
+                                        <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex flex-col gap-2">
+                                            <div className="flex items-center gap-2 text-red-500">
+                                                <AlertTriangle size={18} />
+                                                <p className="text-xs font-black uppercase tracking-widest">Falha na Sincronização</p>
+                                            </div>
+                                            <p className="text-xs text-red-300 font-medium">{syncError}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </section>
                             <section className="space-y-6">
                                 <div className="flex items-center gap-3 border-b border-white/10 pb-4"><Megaphone size={24} className="text-red-500" /><h2 className="text-xl font-black text-white uppercase">Avisos na TV</h2></div>
                                 <div className="space-y-4">
-                                    <div className="flex items-center gap-3"><input type="checkbox" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)} className="h-6 w-6"/><label className="text-lg font-bold text-white uppercase">Ativar Comunicado</label></div>
-                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold" rows={3} value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} />
+                                    <div className="flex items-center gap-3"><input type="checkbox" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)} className="h-6 w-6 rounded border-white/10 bg-black text-red-600"/><label className="text-lg font-bold text-white uppercase">Ativar Comunicado</label></div>
+                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" rows={3} value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} />
                                     <Button onClick={handleSaveConfig} className="w-full py-4 rounded-2xl uppercase font-black">Salvar Alterações</Button>
                                 </div>
                             </section>
