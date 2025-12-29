@@ -40,66 +40,33 @@ import {
     BookOpenCheck, Plus, ChevronLeft, ChevronRight, Save, X, 
     CheckCircle, XCircle, ScanLine, Target, GraduationCap, Download,
     FileText, Clock, ClipboardCheck, Eye, Loader2, CalendarDays,
-    Layers, QrCode, FileDown, Image as ImageIcon, ExternalLink, Heart, RefreshCw, Server
-} from 'lucide-react';
-import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES } from '../constants';
+    Layers, QrCode, FileDown, Image as ImageIcon, ExternalLink, Heart, RefreshCw, Server, AlertTriangle
+} from 'lucide-center';
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'calendar' | 'plans' | 'config' | 'omr' | 'pei'>('exams');
     const [isLoading, setIsLoading] = useState(false);
 
-    // OMR States
-    const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
-    const [selectedKey, setSelectedKey] = useState<AnswerKey | null>(null);
-    const [showKeyForm, setShowKeyForm] = useState(false);
-    const [newKeyData, setNewKeyData] = useState<Partial<AnswerKey>>({ subject: '', className: '', title: '', answers: {} });
-    const [numQuestions, setNumQuestions] = useState(10);
-    const [isSaving, setIsSaving] = useState(false);
-    
-    // Batch Correction States
-    const [batchFiles, setBatchFiles] = useState<File[]>([]);
-    const [correctionProgress, setCorrectionProgress] = useState<{current: number, total: number}>({current: 0, total: 0});
-    const [isCorrecting, setIsCorrecting] = useState(false);
-    const [currentCorrections, setCurrentCorrections] = useState<StudentCorrection[]>([]);
-    const [selectedClassForPrinting, setSelectedClassForPrinting] = useState('');
-
-    // PEI States
-    const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
-    const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
-    const [showPeiView, setShowPeiView] = useState(false);
-
     // Sync States
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncMessage, setSyncMessage] = useState('');
+    const [syncError, setSyncError] = useState<string | null>(null);
 
-    // Common States
+    // Common States (simplificados para brevidade)
     const [exams, setExams] = useState<ExamRequest[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
     const [events, setEvents] = useState<SchoolEvent[]>([]);
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
     const [plans, setPlans] = useState<LessonPlan[]>([]);
-    
-    // Config Banner Editor States
+    const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
+    const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
+
+    // Config Banner States
     const [configBannerMsg, setConfigBannerMsg] = useState('');
     const [configBannerType, setConfigBannerType] = useState<'info' | 'warning' | 'error' | 'success'>('info');
     const [configIsBannerActive, setConfigIsBannerActive] = useState(false);
-    const [configTvStart, setConfigTvStart] = useState('');
-    const [configTvEnd, setConfigTvEnd] = useState('');
-
-    const [examFilter, setExamFilter] = useState('ALL');
-    const [examSearch, setExamSearch] = useState('');
-    const [studentFilterClass, setStudentFilterClass] = useState('ALL');
-    const [studentSearch, setStudentSearch] = useState('');
-    const [currentMonth, setCurrentMonth] = useState(new Date());
-
-    // Event Modal States
-    const [showEventModal, setShowEventModal] = useState(false);
-    const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
-    const [newEventTitle, setNewEventTitle] = useState('');
-    const [newEventDate, setNewEventDate] = useState('');
-    const [newEventType, setNewEventType] = useState<'event' | 'holiday' | 'exam' | 'meeting'>('event');
 
     useEffect(() => {
         fetchInitialData();
@@ -110,8 +77,6 @@ export const PrintShopDashboard: React.FC = () => {
             setConfigBannerMsg(cfg.bannerMessage);
             setConfigBannerType(cfg.bannerType);
             setConfigIsBannerActive(cfg.isBannerActive);
-            setConfigTvStart(cfg.tvStart || '');
-            setConfigTvEnd(cfg.tvEnd || '');
         });
         const unsubEvents = listenToEvents(setEvents);
         return () => { unsubAttendance(); unsubConfig(); unsubEvents(); };
@@ -119,199 +84,40 @@ export const PrintShopDashboard: React.FC = () => {
 
     const fetchInitialData = async () => {
         setIsLoading(true);
-        const [allStudents, allExams, allPlans, allKeys, peisData] = await Promise.all([
-            getStudents(),
-            getExams(),
-            getLessonPlans(),
-            getAnswerKeys(),
-            getAllPEIs()
-        ]);
-        setStudents(allStudents.sort((a,b) => a.name.localeCompare(b.name)));
-        setExams(allExams.sort((a, b) => b.createdAt - a.createdAt));
-        setPlans(allPlans.sort((a,b) => b.createdAt - a.createdAt));
-        setAnswerKeys(allKeys);
-        setAllPeis(peisData.sort((a,b) => b.updatedAt - a.updatedAt));
-        setIsLoading(false);
+        try {
+            const [allStudents, allExams, allPlans, allKeys, peisData] = await Promise.all([
+                getStudents(),
+                getExams(),
+                getLessonPlans(),
+                getAnswerKeys(),
+                getAllPEIs()
+            ]);
+            setStudents(allStudents.sort((a,b) => a.name.localeCompare(b.name)));
+            setExams(allExams.sort((a, b) => b.createdAt - a.createdAt));
+            setPlans(allPlans.sort((a,b) => b.createdAt - a.createdAt));
+            setAnswerKeys(allKeys);
+            setAllPeis(peisData.sort((a,b) => b.updatedAt - a.updatedAt));
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    // --- GENNERA SYNC HANDLER ---
     const handleSyncGennera = async () => {
-        if (!confirm("Isso irá atualizar todos os alunos e turmas com base nos dados da Gennera. Deseja continuar?")) return;
+        if (!confirm("Isso irá atualizar todos os alunos com base na Gennera. Continuar?")) return;
         setIsSyncing(true);
+        setSyncError(null);
+        setSyncMessage("Iniciando...");
+        
         try {
             await syncAllDataWithGennera((msg) => setSyncMessage(msg));
             await fetchInitialData();
-            setTimeout(() => setSyncMessage(''), 3000);
-        } catch (e) {
-            alert("Erro na sincronização.");
+            setTimeout(() => setSyncMessage(''), 5000);
+        } catch (e: any) {
+            setSyncError(e.message || "Erro na sincronização.");
             setSyncMessage('');
         } finally {
             setIsSyncing(false);
         }
-    };
-
-    // --- OMR BATCH HANDLERS ---
-    const handleSaveNewKey = async () => {
-        if (!newKeyData.subject || !newKeyData.className || !newKeyData.title || !newKeyData.answers) return;
-        setIsSaving(true);
-        try {
-            await saveAnswerKey({
-                id: '',
-                examId: 'manual_' + Date.now(),
-                subject: newKeyData.subject,
-                className: newKeyData.className,
-                title: newKeyData.title,
-                answers: newKeyData.answers as Record<number, string>
-            });
-            setShowKeyForm(false);
-            fetchInitialData();
-        } catch (e) { alert("Erro ao salvar gabarito"); }
-        finally { setIsSaving(false); }
-    };
-
-    const handleSelectKey = async (key: AnswerKey) => {
-        setSelectedKey(key);
-        const corrs = await getCorrections(key.id);
-        setCurrentCorrections(corrs);
-        setSelectedClassForPrinting(key.className);
-    };
-
-    const handleBatchFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            setBatchFiles(Array.from(e.target.files));
-        }
-    };
-
-    const startBatchCorrection = async () => {
-        if (!selectedKey || batchFiles.length === 0) return;
-        setIsCorrecting(true);
-        setCorrectionProgress({ current: 0, total: batchFiles.length });
-
-        for (let i = 0; i < batchFiles.length; i++) {
-            const file = batchFiles[i];
-            setCorrectionProgress(prev => ({ ...prev, current: i + 1 }));
-            
-            try {
-                const result = await analyzeAnswerSheet(file, Object.keys(selectedKey.answers).length);
-                const student = students.find(s => s.id === result.studentId);
-                
-                if (student) {
-                    let scoreCount = 0;
-                    Object.entries(selectedKey.answers).forEach(([q, ans]) => {
-                        if (result.answers[Number(q)] === ans) scoreCount++;
-                    });
-                    const finalScore = (scoreCount / Object.keys(selectedKey.answers).length) * 10;
-
-                    await saveCorrection({
-                        id: '',
-                        studentId: student.id,
-                        studentName: student.name,
-                        answerKeyId: selectedKey.id,
-                        score: finalScore,
-                        answers: result.answers
-                    });
-                }
-            } catch (e) { console.error(`Erro no arquivo ${file.name}:`, e); }
-        }
-
-        const updatedCorrs = await getCorrections(selectedKey.id);
-        setCurrentCorrections(updatedCorrs);
-        setIsCorrecting(false);
-        setBatchFiles([]);
-        alert("Processamento concluído!");
-    };
-
-    const generateAnswerSheets = () => {
-        if (!selectedKey || !selectedClassForPrinting) return alert("Selecione gabarito e turma");
-        const classStudents = students.filter(s => s.className === selectedClassForPrinting);
-        if (classStudents.length === 0) return alert("Sem alunos na turma.");
-
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) return;
-
-        const numQ = Object.keys(selectedKey.answers).length;
-
-        printWindow.document.write(`
-            <html>
-            <head>
-                <title>${selectedKey.title} - ${selectedClassForPrinting}</title>
-                <style>
-                    body { font-family: 'Poppins', sans-serif; margin: 0; }
-                    .sheet { height: 297mm; width: 210mm; padding: 20mm; box-sizing: border-box; page-break-after: always; position: relative; border: 1px solid #eee; }
-                    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid black; padding-bottom: 10px; margin-bottom: 30px; }
-                    .info { flex: 1; } .info h1 { margin: 0; font-size: 18px; text-transform: uppercase; font-weight: 800; } .info p { margin: 4px 0; font-size: 12px; font-weight: bold; }
-                    .qr { width: 100px; height: 100px; }
-                    .omr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-                    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-                    .num { width: 25px; font-weight: 800; font-size: 13px; text-align: right; }
-                    .bubble { width: 22px; height: 22px; border: 1.5px solid black; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; }
-                    .markers { position: absolute; width: 12px; height: 12px; background: black; }
-                    .tl { top: 10mm; left: 10mm; } .tr { top: 10mm; right: 10mm; }
-                    .bl { bottom: 10mm; left: 10mm; } .br { bottom: 10mm; right: 10mm; }
-                </style>
-            </head>
-            <body>
-                ${classStudents.map(s => `
-                    <div class="sheet">
-                        <div class="markers tl"></div><div class="markers tr"></div><div class="markers bl"></div><div class="markers br"></div>
-                        <div class="header">
-                            <div class="info">
-                                <h1>C.E. PROF. MANOEL LEITE</h1>
-                                <p style="color: #666; font-size: 14px;">${selectedKey.title}</p>
-                                <p>DISCIPLINA: ${selectedKey.subject}</p>
-                                <p>ALUNO: ${s.name}</p>
-                                <p>TURMA: ${s.className}</p>
-                            </div>
-                            <img class="qr" src="https://chart.googleapis.com/chart?chs=150x150&cht=qr&chl=${s.id}&choe=UTF-8" />
-                        </div>
-                        <div class="omr-grid">
-                            <div class="col">
-                                ${Array.from({ length: Math.ceil(numQ / 2) }).map((_, i) => `
-                                    <div class="row"><div class="num">${i+1}</div>${['A','B','C','D','E'].map(l => `<div class="bubble">${l}</div>`).join('')}</div>
-                                `).join('')}
-                            </div>
-                            <div class="col">
-                                ${Array.from({ length: Math.floor(numQ / 2) }).map((_, i) => `
-                                    <div class="row"><div class="num">${i+Math.ceil(numQ/2)+1}</div>${['A','B','C','D','E'].map(l => `<div class="bubble">${l}</div>`).join('')}</div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    </div>
-                `).join('')}
-                <script>window.onload = function() { window.print(); }</script>
-            </body>
-            </html>
-        `);
-        printWindow.document.close();
-    };
-
-    // --- OTHER HANDLERS ---
-    const handleUpdateStatus = async (examId: string, status: ExamStatus) => {
-        await updateExamStatus(examId, status);
-        setExams(prev => prev.map(e => e.id === examId ? { ...e, status } : e));
-    };
-
-    const handleSaveConfig = async () => {
-        await updateSystemConfig({
-            bannerMessage: configBannerMsg,
-            bannerType: configBannerType,
-            isBannerActive: configIsBannerActive,
-            tvStart: configTvStart,
-            tvEnd: configTvEnd
-        });
-        alert("Configurações atualizadas!");
-    };
-
-    const handleSaveEvent = async () => {
-        if (!newEventTitle || !newEventDate) return alert("Preencha título e data");
-        await saveSchoolEvent({
-            id: selectedEvent?.id || '',
-            title: newEventTitle,
-            date: newEventDate,
-            type: newEventType,
-            tasks: selectedEvent?.tasks || []
-        });
-        setShowEventModal(false);
     };
 
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
@@ -324,51 +130,6 @@ export const PrintShopDashboard: React.FC = () => {
         </button>
     );
 
-    const renderCalendar = () => {
-        const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth();
-        const firstDay = new Date(year, month, 1).getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const monthName = currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-        const calendarDays = [];
-        for (let i = 0; i < firstDay; i++) calendarDays.push(null);
-        for (let i = 1; i <= daysInMonth; i++) calendarDays.push(i);
-
-        return (
-            <div className="bg-[#18181b] rounded-[2rem] border border-white/10 overflow-hidden shadow-2xl">
-                <div className="p-6 flex items-center justify-between border-b border-white/5 bg-white/5">
-                    <h2 className="text-xl font-black text-white uppercase tracking-tight capitalize">{monthName}</h2>
-                    <div className="flex gap-2">
-                        <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))} className="p-2 hover:bg-white/10 rounded-lg text-gray-400"><ChevronLeft size={20}/></button>
-                        <button onClick={() => setCurrentMonth(new Date(year, month + 1, 1))} className="p-2 hover:bg-white/10 rounded-lg text-gray-400"><ChevronRight size={20}/></button>
-                    </div>
-                </div>
-                <div className="grid grid-cols-7 text-center py-4 border-b border-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(d => <div key={d}>{d}</div>)}
-                </div>
-                <div className="grid grid-cols-7">
-                    {calendarDays.map((day, idx) => {
-                        if (day === null) return <div key={`empty-${idx}`} className="border-b border-r border-white/5 bg-black/20 min-h-[100px]"></div>;
-                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                        const dayEvents = events.filter(e => e.date === dateStr);
-                        return (
-                            <div key={day} className="border-b border-r border-white/5 p-2 min-h-[100px] hover:bg-white/5 transition-colors cursor-pointer group" onClick={() => {setNewEventDate(dateStr); setShowEventModal(true); setSelectedEvent(null); setNewEventTitle('');}}>
-                                <span className="text-xs font-bold text-gray-500 group-hover:text-white">{day}</span>
-                                <div className="mt-1 space-y-1">
-                                    {dayEvents.map(ev => (
-                                        <div key={ev.id} className={`text-[8px] p-1 rounded font-black uppercase truncate ${ev.type === 'holiday' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
-                                            {ev.title}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        );
-    };
-
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
             {/* SIDEBAR */}
@@ -379,9 +140,6 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="omr" label="Correção I.A." icon={ScanLine} />
                     <SidebarItem id="students" label="Gestão de Turmas" icon={Users} />
                     <SidebarItem id="calendar" label="Agenda / Eventos" icon={CalendarDays} />
-                    <SidebarItem id="plans" label="Planejamentos" icon={BookOpenCheck} />
-                    <SidebarItem id="pei" label="Relatórios PEI" icon={Heart} />
-                    <div className="my-4 border-t border-white/10"></div>
                     <SidebarItem id="config" label="Configurações & TV" icon={Settings} />
                 </div>
             </div>
@@ -391,11 +149,9 @@ export const PrintShopDashboard: React.FC = () => {
                 
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                                <h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><Printer className="text-red-500" /> Gráfica e Cópias</h1>
-                                <p className="text-gray-400">Gerenciamento de pedidos de impressão.</p>
-                            </div>
+                        <header className="mb-8">
+                            <h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><Printer className="text-red-500" /> Gráfica e Cópias</h1>
+                            <p className="text-gray-400">Gerenciamento de pedidos de impressão.</p>
                         </header>
                         <div className="grid grid-cols-1 gap-4">
                             {exams.map(exam => (
@@ -409,247 +165,8 @@ export const PrintShopDashboard: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <a href={exam.fileUrl} target="_blank" rel="noreferrer" className="p-3 bg-white/5 hover:bg-white/20 rounded-xl text-blue-400"><Download size={20} /></a>
-                                        {exam.status === ExamStatus.PENDING && (
-                                            <button onClick={() => handleUpdateStatus(exam.id, ExamStatus.IN_PROGRESS)} className="bg-blue-600 text-white px-6 py-3 rounded-xl text-xs font-black uppercase">Iniciar</button>
-                                        )}
-                                        {exam.status === ExamStatus.IN_PROGRESS && (
-                                            <button onClick={() => handleUpdateStatus(exam.id, ExamStatus.COMPLETED)} className="bg-green-600 text-white px-6 py-3 rounded-xl text-xs font-black uppercase">Concluir</button>
-                                        )}
                                         <button onClick={() => deleteExamRequest(exam.id)} className="p-3 text-gray-500 hover:text-red-500"><Trash2 size={20}/></button>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'omr' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                                <h1 className="text-3xl font-black text-white uppercase tracking-tight flex items-center gap-3"><ScanLine className="text-red-500" /> Correção OMR</h1>
-                                <p className="text-gray-400">Cartões dinâmicos com QR Code e correção em lote.</p>
-                            </div>
-                            <Button onClick={() => {
-                                setNewKeyData({ subject: '', className: '', title: '', answers: {} });
-                                setNumQuestions(10);
-                                setShowKeyForm(true);
-                            }}><Plus size={18} className="mr-2"/> Novo Gabarito</Button>
-                        </header>
-
-                        {showKeyForm ? (
-                            <div className="bg-white rounded-[2.5rem] p-10 animate-in zoom-in-95 shadow-2xl">
-                                <div className="flex justify-between items-center mb-8 border-b pb-6">
-                                    <h3 className="text-2xl font-black text-gray-800 uppercase">Configurar Gabarito</h3>
-                                    <button onClick={() => setShowKeyForm(false)} className="text-gray-400 hover:text-red-500"><X size={28}/></button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                                    <div>
-                                        <label className="block text-xs font-black text-gray-400 uppercase mb-2">Turma do Cartão Resposta</label>
-                                        <select className="w-full border-2 border-gray-100 rounded-2xl p-4 font-bold text-gray-700 outline-none focus:border-red-500" value={newKeyData.className} onChange={e => setNewKeyData({...newKeyData, className: e.target.value})}>
-                                            <option value="">Selecione a Turma...</option>
-                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-black text-gray-400 uppercase mb-2">Título do Cartão</label>
-                                        <input className="w-full border-2 border-gray-100 rounded-2xl p-4 font-bold text-gray-700 outline-none focus:border-red-500" placeholder="Ex: Prova Mensal de Matemática" value={newKeyData.title} onChange={e => setNewKeyData({...newKeyData, title: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-black text-gray-400 uppercase mb-2">Disciplina</label>
-                                        <select className="w-full border-2 border-gray-100 rounded-2xl p-4 font-bold text-gray-700" value={newKeyData.subject} onChange={e => setNewKeyData({...newKeyData, subject: e.target.value})}>
-                                            <option value="">Selecione a Disciplina...</option>
-                                            {[...EFAF_SUBJECTS, ...EM_SUBJECTS].sort().map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
-                                    </div>
-                                    <div><label className="block text-xs font-black text-gray-400 uppercase mb-2">Número de Questões</label>
-                                        <input type="number" className="w-full border-2 border-gray-100 rounded-2xl p-4 font-bold text-gray-700" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
-                                    {Array.from({ length: numQuestions }).map((_, i) => (
-                                        <div key={i} className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                                            <span className="block text-[10px] font-black text-gray-400 mb-2 uppercase">Q. {i+1}</span>
-                                            <div className="flex gap-1 justify-between">{['A','B','C','D','E'].map(opt => (
-                                                <button key={opt} onClick={() => { const curr = {...newKeyData.answers}; curr[i+1] = opt; setNewKeyData({...newKeyData, answers: curr}); }} className={`w-8 h-8 rounded-full text-[10px] font-black transition-all ${newKeyData.answers?.[i+1] === opt ? 'bg-red-600 text-white shadow-lg' : 'bg-white text-gray-400 hover:bg-gray-100'}`}>{opt}</button>
-                                            ))}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="flex justify-end gap-3"><Button variant="outline" className="h-14 px-8" onClick={() => setShowKeyForm(false)}>Cancelar</Button><Button className="h-14 px-12" onClick={handleSaveNewKey} isLoading={isSaving}><Save size={20} className="mr-2"/> Salvar Gabarito</Button></div>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                <div className="lg:col-span-1 space-y-4">
-                                    <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-2"><Target size={20} className="text-red-500"/> Gabaritos Ativos</h3>
-                                    {answerKeys.map(key => (
-                                        <button key={key.id} onClick={() => handleSelectKey(key)} className={`w-full p-6 rounded-[2.5rem] border-2 text-left transition-all ${selectedKey?.id === key.id ? 'bg-white border-red-500 text-gray-900' : 'bg-white/5 border-white/5 text-gray-400 hover:border-white/10'}`}>
-                                            <h4 className="font-black text-sm uppercase leading-tight">{key.title || key.subject}</h4>
-                                            <p className="text-[10px] font-bold opacity-60 mt-1">{key.className} • {Object.keys(key.answers).length} Questões</p>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div className="lg:col-span-2">
-                                    {selectedKey ? (
-                                        <div className="space-y-6 animate-in slide-in-from-right-4">
-                                            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem]">
-                                                <h3 className="text-xl font-black text-white uppercase mb-6 flex items-center gap-3"><Printer size={24} className="text-red-500" /> Impressão Personalizada</h3>
-                                                <div className="flex gap-4 items-end">
-                                                    <div className="flex-1"><label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Turma Alvo</label>
-                                                        <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold" value={selectedClassForPrinting} onChange={e => setSelectedClassForPrinting(e.target.value)}>
-                                                            <option value="">Selecione...</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                                        </select>
-                                                    </div>
-                                                    <button onClick={generateAnswerSheets} className="h-14 px-8 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black uppercase text-xs flex items-center gap-2 shadow-xl shadow-red-900/40"><FileDown size={18}/> Gerar PDF por Aluno</button>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-white rounded-[2.5rem] p-8 shadow-xl">
-                                                <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
-                                                    <h3 className="text-xl font-black text-gray-800 uppercase flex items-center gap-3"><QrCode size={24} className="text-red-600" /> Correção em Lote</h3>
-                                                    <button onClick={async () => { if(confirm("Remover gabarito?")) { await deleteAnswerKey(selectedKey.id); setSelectedKey(null); fetchInitialData(); } }} className="text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={24}/></button>
-                                                </div>
-                                                <div className="mb-8">
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-4">Fotos dos Cartões (Identificação via QR Code)</label>
-                                                    <div className="relative group">
-                                                        <input type="file" multiple accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleBatchFilesChange} />
-                                                        <div className="border-4 border-dashed border-gray-100 rounded-[2.5rem] p-12 text-center group-hover:bg-gray-50 group-hover:border-red-500/20 transition-all">
-                                                            <ImageIcon size={64} className="mx-auto text-gray-200 mb-4" /><p className="text-gray-400 font-bold uppercase text-xs">{batchFiles.length > 0 ? `${batchFiles.length} arquivos` : 'Arraste as fotos aqui'}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                {isCorrecting ? (
-                                                    <div className="mb-8">
-                                                        <div className="flex justify-between text-xs font-black text-red-600 mb-2 uppercase"><span>Escaneando...</span><span>{correctionProgress.current} / {correctionProgress.total}</span></div>
-                                                        <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-red-600 transition-all duration-500" style={{ width: `${(correctionProgress.current / correctionProgress.total) * 100}%` }}></div></div>
-                                                    </div>
-                                                ) : <Button className="w-full h-16 rounded-2xl text-lg font-black uppercase" onClick={startBatchCorrection} disabled={batchFiles.length === 0}>Iniciar Scanner I.A.</Button>}
-                                            </div>
-                                            <div className="bg-white rounded-[2.5rem] shadow-xl overflow-hidden">
-                                                <div className="p-6 bg-gray-50 border-b flex justify-between items-center"><h3 className="font-black text-gray-800 uppercase flex items-center gap-2"><GraduationCap size={20} className="text-red-600"/> Últimos Resultados</h3></div>
-                                                <table className="w-full text-left">
-                                                    <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b"><tr><th className="p-6">Aluno</th><th className="p-6 text-center">Nota</th><th className="p-6 text-right">Ações</th></tr></thead>
-                                                    <tbody className="divide-y divide-gray-100">
-                                                        {currentCorrections.map(c => (
-                                                            <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                                                                <td className="p-6 font-bold text-gray-800">{c.studentName}</td>
-                                                                <td className="p-6 text-center"><span className={`text-lg font-black ${c.score >= 6 ? 'text-green-600' : 'text-red-600'}`}>{c.score.toFixed(1)}</span></td>
-                                                                <td className="p-6 text-right"><button className="text-gray-300 hover:text-red-500"><Trash2 size={18}/></button></td>
-                                                            </tr>
-                                                        ))}
-                                                        {currentCorrections.length === 0 && <tr><td colSpan={3} className="p-12 text-center text-gray-400 italic">Sem dados.</td></tr>}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    ) : <div className="h-full flex flex-col items-center justify-center bg-white/5 border-4 border-dashed border-white/5 rounded-[4rem] p-20 text-center opacity-30"><ScanLine size={100} className="text-gray-500 mb-6" /><h3 className="text-2xl font-black text-gray-500 uppercase">Selecione um Gabarito</h3></div>}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {activeTab === 'pei' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex justify-between items-center">
-                            <div>
-                                <h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><Heart className="text-red-500 fill-red-500/20" /> Relatórios PEI</h1>
-                                <p className="text-gray-400">Acompanhamento dos planos educacionais individualizados.</p>
-                            </div>
-                        </header>
-                        
-                        <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-2xl">
-                            <table className="w-full text-left">
-                                <thead className="bg-gray-50 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b">
-                                    <tr>
-                                        <th className="p-6">Aluno</th>
-                                        <th className="p-6">Professor / Disciplina</th>
-                                        <th className="p-6">Atualização</th>
-                                        <th className="p-6 text-center">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {allPeis.map(pei => (
-                                        <tr key={pei.id} className="hover:bg-gray-50 transition-colors group">
-                                            <td className="p-6"><p className="font-bold text-gray-800">{pei.studentName}</p></td>
-                                            <td className="p-6">
-                                                <p className="font-bold text-gray-700 text-sm">{pei.teacherName}</p>
-                                                <p className="text-[10px] font-black text-red-600 uppercase tracking-tighter">{pei.subject}</p>
-                                            </td>
-                                            <td className="p-6 text-xs text-gray-500 font-medium">
-                                                {new Date(pei.updatedAt).toLocaleDateString()}
-                                            </td>
-                                            <td className="p-6 text-center">
-                                                <button 
-                                                    onClick={() => { setSelectedPei(pei); setShowPeiView(true); }}
-                                                    className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-transform flex items-center gap-2 mx-auto"
-                                                >
-                                                    <Eye size={14}/> Abrir PEI
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {allPeis.length === 0 && (
-                                        <tr><td colSpan={4} className="p-12 text-center text-gray-400 italic">Nenhum PEI encontrado.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'students' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex justify-between items-center">
-                            <div><h1 className="text-3xl font-bold text-white uppercase flex items-center gap-3"><Users className="text-red-500" /> Alunos & Presença</h1><p className="text-gray-400">Monitoramento da frequência hoje.</p></div>
-                        </header>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                            {CLASSES.map(cls => (
-                                <button key={cls} onClick={() => setStudentFilterClass(cls)} className={`p-4 rounded-2xl border text-left transition-all ${studentFilterClass === cls ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-black/40 border-white/10 text-gray-400 hover:border-white/20'}`}>
-                                    <h3 className="font-black text-sm uppercase">{cls}</h3>
-                                    <p className="text-[10px] opacity-70 mt-1">{students.filter(s => s.className === cls).length} Alunos</p>
-                                </button>
-                            ))}
-                            <button onClick={() => setStudentFilterClass('ALL')} className={`p-4 rounded-2xl border text-left transition-all ${studentFilterClass === 'ALL' ? 'bg-white text-black' : 'bg-black/40 border-white/10 text-gray-400'}`}>TODOS</button>
-                        </div>
-                        <div className="bg-black/20 rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl">
-                             <table className="w-full text-left">
-                                <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/10"><tr><th className="p-6">Aluno</th><th className="p-6">Turma</th><th className="p-6">Biometria</th><th className="p-6 text-center">Hoje</th></tr></thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {students.filter(s => studentFilterClass === 'ALL' || s.className === studentFilterClass).map(s => (
-                                        <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                                            <td className="p-6 flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-gray-800 border border-white/5 overflow-hidden">{s.photoUrl && <img src={s.photoUrl} className="w-full h-full object-cover"/>}</div><span className="font-bold text-white">{s.name}</span></td>
-                                            <td className="p-6 text-gray-400">{s.className}</td>
-                                            <td className="p-6">{s.photoUrl ? <span className="text-[10px] font-black text-green-500 uppercase bg-green-500/10 px-2 py-1 rounded-lg">Regular</span> : <span className="text-[10px] font-black text-red-500 uppercase bg-red-500/10 px-2 py-1 rounded-lg">Pendente</span>}</td>
-                                            <td className="p-6 text-center">{attendanceLogs.some(l => l.studentId === s.id) ? <CheckCircle size={20} className="text-green-500 mx-auto" /> : <XCircle size={20} className="text-gray-700 mx-auto" />}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                             </table>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'calendar' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex justify-between items-center">
-                            <div><h1 className="text-3xl font-bold text-white uppercase flex items-center gap-3"><CalendarDays className="text-red-500" /> Agenda Escolar</h1><p className="text-gray-400">Eventos, feriados e recesso escolar.</p></div>
-                        </header>
-                        {renderCalendar()}
-                    </div>
-                )}
-
-                {activeTab === 'plans' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8"><h1 className="text-3xl font-bold text-white uppercase flex items-center gap-3"><BookOpenCheck className="text-red-500" /> Planejamentos</h1></header>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {plans.map(p => (
-                                <div key={p.id} className="bg-white/5 border border-white/10 p-6 rounded-[2rem] hover:bg-white/10 transition-all">
-                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${p.type === 'daily' ? 'bg-blue-600/20 text-blue-400' : 'bg-red-600/20 text-red-400'}`}>{p.type === 'daily' ? 'Diário' : 'Bimestral'}</span>
-                                    <h4 className="font-bold text-white text-lg mt-3">{p.type === 'daily' ? p.topic : p.period}</h4>
-                                    <p className="text-xs text-gray-500 font-bold uppercase mb-4">{p.className} • {p.teacherName}</p>
-                                    <div className="text-[10px] text-gray-400 line-clamp-3 bg-black/40 p-3 rounded-xl border border-white/5">{p.content || p.semesterContents || 'Sem resumo.'}</div>
                                 </div>
                             ))}
                         </div>
@@ -660,7 +177,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
                         <header className="mb-8"><h1 className="text-3xl font-bold text-white uppercase flex items-center gap-3"><Settings className="text-red-500" /> Configurações</h1></header>
                         
-                        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 space-y-12 shadow-2xl mb-12">
+                        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-10 space-y-12 shadow-2xl">
                             {/* SYNC SECTION */}
                             <section className="space-y-6">
                                 <div className="flex items-center gap-3 border-b border-white/10 pb-4">
@@ -668,7 +185,8 @@ export const PrintShopDashboard: React.FC = () => {
                                     <h2 className="text-xl font-black text-white uppercase tracking-tight">Integração Gennera</h2>
                                 </div>
                                 <div className="bg-black/40 p-6 rounded-2xl border border-white/5">
-                                    <p className="text-sm text-gray-400 mb-6">Sincronize a base de dados do Portal com o sistema Gennera (ID 891). Isso atualizará alunos, matrículas e fotos biométricas.</p>
+                                    <p className="text-sm text-gray-400 mb-6">Importe alunos, turmas e fotos biométricas do sistema de gestão escolar Gennera (ID 891).</p>
+                                    
                                     <div className="flex flex-col gap-4">
                                         <Button 
                                             onClick={handleSyncGennera} 
@@ -676,16 +194,31 @@ export const PrintShopDashboard: React.FC = () => {
                                             className="h-16 rounded-2xl text-lg font-black uppercase shadow-xl shadow-red-900/20"
                                         >
                                             <RefreshCw size={24} className={`mr-3 ${isSyncing ? 'animate-spin' : ''}`} />
-                                            Sincronizar Alunos e Turmas
+                                            {isSyncing ? 'Sincronizando...' : 'Sincronizar Gennera'}
                                         </Button>
+
                                         {syncMessage && (
-                                            <p className="text-xs font-mono text-brand-500 animate-pulse text-center">{syncMessage}</p>
+                                            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center gap-3 animate-pulse">
+                                                <Loader2 size={18} className="text-blue-500 animate-spin" />
+                                                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">{syncMessage}</p>
+                                            </div>
+                                        )}
+
+                                        {syncError && (
+                                            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex flex-col gap-2">
+                                                <div className="flex items-center gap-2 text-red-500">
+                                                    <AlertTriangle size={18} />
+                                                    <p className="text-xs font-black uppercase tracking-widest">Falha na Sincronização</p>
+                                                </div>
+                                                <p className="text-xs text-red-300 font-medium">{syncError}</p>
+                                                <p className="text-[10px] text-gray-500 mt-1 italic">Dica: Verifique se o Token JWT está correto ou se o servidor da Gennera permite acesso via navegador.</p>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
                             </section>
 
-                            {/* BANNER SECTION */}
+                            {/* COMUNICADOS SECTION */}
                             <section className="space-y-6">
                                 <div className="flex items-center gap-3 border-b border-white/10 pb-4">
                                     <Megaphone size={24} className="text-red-500" />
@@ -693,73 +226,17 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                                 <div className="space-y-4">
                                     <div className="flex items-center gap-3">
-                                        <input type="checkbox" id="bannerActive" className="h-6 w-6 rounded border-white/10 bg-black text-red-600" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)}/>
-                                        <label htmlFor="bannerActive" className="text-lg font-bold text-white uppercase">Ativar Banner na TV</label>
+                                        <input type="checkbox" className="h-6 w-6 rounded border-white/10 bg-black text-red-600" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)}/>
+                                        <label className="text-lg font-bold text-white uppercase">Ativar Comunicado</label>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Mensagem</label>
-                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" rows={3} value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} placeholder="Ex: Reunião de Pais..."/>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Tipo de Alerta</label>
-                                        <div className="flex gap-2">
-                                            {(['info', 'warning', 'error', 'success'] as const).map(type => (
-                                                <button key={type} onClick={() => setConfigBannerType(type)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${configBannerType === type ? 'bg-red-600 text-white' : 'bg-black/40 text-gray-400 border border-white/10'}`}>{type}</button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" rows={3} value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} placeholder="Ex: Matrículas Abertas..."/>
+                                    <Button onClick={async () => { await updateSystemConfig({ bannerMessage: configBannerMsg, bannerType: configBannerType, isBannerActive: configIsBannerActive }); alert("Salvo!"); }} className="w-full h-14 rounded-2xl font-black uppercase">Salvar Comunicado</Button>
                                 </div>
-                                <Button onClick={handleSaveConfig} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-xl shadow-red-900/40">
-                                    <Save size={20} className="mr-2"/> Salvar Comunicado
-                                </Button>
                             </section>
                         </div>
                     </div>
                 )}
             </div>
-
-            {/* EVENT MODAL */}
-            {showEventModal && (
-                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-8 animate-in zoom-in-95">
-                        <h3 className="text-2xl font-black text-gray-800 mb-6 uppercase tracking-tight">Agenda Escolar</h3>
-                        <div className="space-y-4">
-                            <input className="w-full border-2 border-gray-100 rounded-xl p-4 text-gray-900 font-bold outline-none" placeholder="Título do Evento" value={newEventTitle} onChange={e => setNewEventTitle(e.target.value)} />
-                            <input type="date" className="w-full border-2 border-gray-100 rounded-xl p-4 text-gray-900 font-bold outline-none" value={newEventDate} onChange={e => setNewEventDate(e.target.value)} />
-                            <select className="w-full border-2 border-gray-100 rounded-xl p-4 text-gray-900 font-bold outline-none" value={newEventType} onChange={e => setNewEventType(e.target.value as any)}>
-                                <option value="event">Evento Geral</option><option value="holiday">Feriado / Recesso</option><option value="exam">Dia de Prova</option>
-                            </select>
-                        </div>
-                        <div className="flex gap-2 mt-8"><Button className="flex-1 h-14" onClick={handleSaveEvent}>Salvar</Button><Button variant="secondary" className="h-14" onClick={() => setShowEventModal(false)}>Cancelar</Button></div>
-                    </div>
-                </div>
-            )}
-
-            {/* PEI VIEW MODAL */}
-            {showPeiView && selectedPei && (
-                <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
-                        <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <div>
-                                <h3 className="text-2xl font-black text-gray-800 tracking-tight uppercase flex items-center gap-3"><Heart size={24} className="text-red-600"/> Visualização PEI</h3>
-                                <p className="text-sm text-gray-500 font-bold">{selectedPei.studentName} • {selectedPei.subject} • {selectedPei.period || '1º Bimestre'}</p>
-                            </div>
-                            <button onClick={() => setShowPeiView(false)} className="text-gray-400 hover:text-red-600 transition-colors"><X size={32}/></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-10 space-y-10">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                <div><h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Competências Essenciais</h4><p className="text-gray-700 leading-relaxed text-sm">{selectedPei.essentialCompetencies || 'Não preenchido'}</p></div>
-                                <div><h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Conteúdos Selecionados</h4><p className="text-gray-700 leading-relaxed text-sm">{selectedPei.selectedContents || 'Não preenchido'}</p></div>
-                                <div><h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Recursos Didáticos</h4><p className="text-gray-700 leading-relaxed text-sm">{selectedPei.didacticResources || 'Não preenchido'}</p></div>
-                                <div><h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-3 border-b pb-1">Avaliação</h4><p className="text-gray-700 leading-relaxed text-sm">{selectedPei.evaluation || 'Não preenchido'}</p></div>
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end">
-                            <Button onClick={() => setShowPeiView(false)} className="px-10 h-14 bg-gray-800 hover:bg-black font-black uppercase">Fechar</Button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
