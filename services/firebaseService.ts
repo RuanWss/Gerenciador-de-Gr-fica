@@ -34,10 +34,10 @@ const PEI_COLLECTION = 'pei';
 
 // --- HELPERS ---
 const sanitizeForFirestore = (obj: any) => {
-    // Remove qualquer campo undefined ou complexo que o Firestore rejeita
+    // Garante que nenhum valor seja undefined ou tenha caracteres que o Firestore não gosta
     return JSON.parse(JSON.stringify(obj, (key, value) => {
         if (value === undefined) return null;
-        if (typeof value === 'string') return value.trim();
+        if (typeof value === 'string') return value.trim().normalize("NFC");
         return value;
     }));
 };
@@ -45,19 +45,19 @@ const sanitizeForFirestore = (obj: any) => {
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Conectando com a Gennera (via Proxy)...");
+        if (onProgress) onProgress("Buscando turmas ativas na Gennera...");
         const classes = await fetchGenneraClasses();
         
         if (!classes || classes.length === 0) {
-            throw new Error("Nenhuma turma foi encontrada na sua conta Gennera.");
+            throw new Error("A API Gennera não retornou nenhuma turma ativa.");
         }
 
-        if (onProgress) onProgress(`Sincronizando ${classes.length} turmas...`);
+        if (onProgress) onProgress(`Sincronizando ${classes.length} turmas encontradas...`);
         
         let totalSynced = 0;
 
         for (const cls of classes) {
-            if (onProgress) onProgress(`Processando: ${cls.name}...`);
+            if (onProgress) onProgress(`Turma: ${cls.name}...`);
             const studentsFromGennera = await fetchGenneraStudentsByClass(cls.id, cls.name);
             
             if (studentsFromGennera && studentsFromGennera.length > 0) {
@@ -65,7 +65,7 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
                 
                 for (const student of studentsFromGennera) {
                     const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                    // Importante: merge: true para não sobrescrever dados manuais do AEE
+                    // Importante: merge: true preserva campos manuais (AEE, Contatos)
                     batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
                     totalSynced++;
                 }
@@ -74,10 +74,10 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
             }
         }
 
-        if (onProgress) onProgress(`Sucesso! ${totalSynced} alunos atualizados.`);
+        if (onProgress) onProgress(`Sincronização concluída! ${totalSynced} alunos atualizados.`);
     } catch (error: any) {
         console.error("[Firebase Sync Error]", error);
-        throw new Error(error.message || "Erro inesperado na sincronização.");
+        throw new Error(error.message || "Erro durante o processo de sincronização.");
     }
 };
 
