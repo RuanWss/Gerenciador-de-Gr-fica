@@ -13,15 +13,11 @@ import {
     saveSchoolEvent, 
     deleteSchoolEvent,
     getAnswerKeys,
-    saveAnswerKey,
     deleteAnswerKey,
-    saveCorrection,
-    getCorrections,
     deleteExamRequest,
     getAllPEIs,
     syncAllDataWithGennera
 } from '../services/firebaseService';
-import { analyzeAnswerSheet } from '../services/geminiService';
 import { 
     ExamRequest, 
     ExamStatus, 
@@ -31,16 +27,14 @@ import {
     SystemConfig, 
     SchoolEvent,
     AnswerKey,
-    StudentCorrection,
     PEIDocument
 } from '../types';
 import { Button } from '../components/Button';
 import { 
-    Printer, Search, Calendar, Users, Settings, Megaphone, Trash2, 
+    Printer, Search, Users, Settings, Megaphone, Trash2, 
     BookOpenCheck, Plus, ChevronLeft, ChevronRight, Save, X, 
-    CheckCircle, XCircle, ScanLine, Target, GraduationCap, Download,
-    FileText, Clock, ClipboardCheck, Eye, Loader2, CalendarDays,
-    Layers, QrCode, FileDown, Image as ImageIcon, ExternalLink, Heart, RefreshCw, Server, AlertTriangle
+    CheckCircle, XCircle, ScanLine, Target, Download,
+    FileText, Loader2, CalendarDays, Heart, RefreshCw, Server, AlertTriangle
 } from 'lucide-react';
 
 export const PrintShopDashboard: React.FC = () => {
@@ -69,11 +63,6 @@ export const PrintShopDashboard: React.FC = () => {
     const [studentFilterClass, setStudentFilterClass] = useState('ALL');
     const [currentMonth, setCurrentMonth] = useState(new Date());
 
-    // Modal States
-    const [showEventModal, setShowEventModal] = useState(false);
-    const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
-    const [newEventData, setNewEventData] = useState({ title: '', date: '', type: 'event' as any, desc: '' });
-
     // Config States
     const [configBannerMsg, setConfigBannerMsg] = useState('');
     const [configBannerType, setConfigBannerType] = useState<'info' | 'warning' | 'error' | 'success'>('info');
@@ -84,10 +73,12 @@ export const PrintShopDashboard: React.FC = () => {
         const todayStr = new Date().toISOString().split('T')[0];
         const unsubAttendance = listenToAttendanceLogs(todayStr, setAttendanceLogs);
         const unsubConfig = listenToSystemConfig((cfg) => {
-            setSysConfig(cfg);
-            setConfigBannerMsg(cfg.bannerMessage);
-            setConfigBannerType(cfg.bannerType);
-            setConfigIsBannerActive(cfg.isBannerActive);
+            if (cfg) {
+                setSysConfig(cfg);
+                setConfigBannerMsg(cfg.bannerMessage || '');
+                setConfigBannerType(cfg.bannerType || 'info');
+                setConfigIsBannerActive(cfg.isBannerActive || false);
+            }
         });
         const unsubEvents = listenToEvents(setEvents);
         return () => { unsubAttendance(); unsubConfig(); unsubEvents(); };
@@ -108,6 +99,8 @@ export const PrintShopDashboard: React.FC = () => {
             setPlans(allPlans.sort((a,b) => b.createdAt - a.createdAt));
             setAnswerKeys(allKeys);
             setAllPeis(peisData.sort((a,b) => b.updatedAt - a.updatedAt));
+        } catch (e) {
+            console.error("Erro ao carregar dados iniciais:", e);
         } finally {
             setIsLoading(false);
         }
@@ -117,13 +110,13 @@ export const PrintShopDashboard: React.FC = () => {
         if (!confirm("Isso atualizará os alunos com base no sistema Gennera. Continuar?")) return;
         setIsSyncing(true);
         setSyncError(null);
-        setSyncMessage("Conectando ao servidor...");
+        setSyncMessage("Conectando ao Gennera...");
         try {
             await syncAllDataWithGennera((msg) => setSyncMessage(msg));
             await fetchInitialData();
             setTimeout(() => setSyncMessage(''), 5000);
         } catch (e: any) {
-            setSyncError(e.message || "Erro desconhecido na sincronização.");
+            setSyncError(e.message || "Erro na sincronização.");
             setSyncMessage('');
         } finally {
             setIsSyncing(false);
@@ -190,7 +183,7 @@ export const PrintShopDashboard: React.FC = () => {
             <div className="w-64 bg-black/40 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
                 <div className="mb-6 space-y-1">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 ml-2">Painel Gestor</p>
-                    <SidebarItem id="exams" label="Gráfica / Pedidos" icon={Printer} />
+                    <SidebarItem id="exams" label="Central de Cópias" icon={Printer} />
                     <SidebarItem id="omr" label="Gabaritos" icon={ScanLine} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
                     <SidebarItem id="calendar" label="Agenda Escolar" icon={CalendarDays} />
@@ -203,7 +196,6 @@ export const PrintShopDashboard: React.FC = () => {
             {/* MAIN CONTENT AREA */}
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                 
-                {/* ABA: GRAFICA */}
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8 flex justify-between items-end">
@@ -221,8 +213,8 @@ export const PrintShopDashboard: React.FC = () => {
                                 <div key={exam.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 flex items-center justify-between group hover:bg-white/10 transition-all">
                                     <div className="flex items-center gap-6">
                                         <div className={`h-16 w-16 rounded-2xl flex items-center justify-center ${exam.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500' : 'bg-green-500/10 text-green-500'}`}><FileText size={32} /></div>
-                                        <div>
-                                            <h3 className="text-xl font-bold text-white">{exam.title}</h3>
+                                        <div className="max-w-md">
+                                            <h3 className="text-xl font-bold text-white truncate">{exam.title}</h3>
                                             <p className="text-gray-400 text-sm">Prof. {exam.teacherName} • {exam.gradeLevel} • <b>{exam.quantity} cópias</b></p>
                                         </div>
                                     </div>
@@ -241,21 +233,20 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {/* ABA: ESTUDANTES */}
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8"><h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><Users className="text-red-500" /> Gestão de Alunos</h1></header>
-                        <div className="bg-white/5 border border-white/10 rounded-[2rem] overflow-hidden">
+                        <div className="bg-white/5 border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl">
                             <div className="p-4 border-b border-white/10 flex gap-4 bg-white/5">
-                                <input className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white flex-1" placeholder="Filtrar por nome..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+                                <input className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white flex-1" placeholder="Filtrar por nome ou turma..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
                             </div>
                             <table className="w-full text-left">
                                 <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase">
-                                    <tr><th className="p-6">Aluno</th><th className="p-6">Turma</th><th className="p-6">Presença Hoje</th></tr>
+                                    <tr><th className="p-6">Aluno</th><th className="p-6">Turma</th><th className="p-6">Status Biometria</th><th className="p-6">Presença Hoje</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
                                     {filteredStudents.map(s => (
-                                        <tr key={s.id} className="hover:bg-white/5">
+                                        <tr key={s.id} className="hover:bg-white/5 transition-colors">
                                             <td className="p-6 flex items-center gap-3">
                                                 <div className="h-10 w-10 rounded-full bg-gray-800 overflow-hidden border border-white/10">
                                                     {s.photoUrl ? <img src={s.photoUrl} className="h-full w-full object-cover"/> : <Users size={18} className="m-auto mt-2 text-gray-600"/>}
@@ -263,6 +254,9 @@ export const PrintShopDashboard: React.FC = () => {
                                                 <span className="font-bold text-gray-200">{s.name}</span>
                                             </td>
                                             <td className="p-6 text-gray-400 font-medium">{s.className}</td>
+                                            <td className="p-6">
+                                                {s.photoUrl ? <span className="text-[10px] font-black text-green-500 uppercase bg-green-500/10 px-2 py-1 rounded">Cadastrado</span> : <span className="text-[10px] font-black text-red-500 uppercase bg-red-500/10 px-2 py-1 rounded">Pendente</span>}
+                                            </td>
                                             <td className="p-6">{presentIds.has(s.id) ? <span className="text-green-500 font-black uppercase text-[10px] bg-green-500/10 px-3 py-1 rounded-full">Presente</span> : <span className="text-gray-600 text-[10px]">Ausente</span>}</td>
                                         </tr>
                                     ))}
@@ -272,21 +266,81 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {/* ABA: CALENDARIO */}
                 {activeTab === 'calendar' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8 flex justify-between items-center">
                             <h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><CalendarDays className="text-red-500" /> Agenda Escolar</h1>
                             <div className="flex gap-2">
-                                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-2 bg-white/5 rounded-lg"><ChevronLeft size={20}/></button>
-                                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-2 bg-white/5 rounded-lg"><ChevronRight size={20}/></button>
+                                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-2 bg-white/5 rounded-lg hover:bg-white/10"><ChevronLeft size={20}/></button>
+                                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-2 bg-white/5 rounded-lg hover:bg-white/10"><ChevronRight size={20}/></button>
                             </div>
                         </header>
                         {renderCalendar()}
                     </div>
                 )}
 
-                {/* ABA: CONFIG */}
+                {activeTab === 'omr' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8"><h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><ScanLine className="text-red-500" /> Gabaritos Ativos</h1></header>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {answerKeys.map(key => (
+                                <div key={key.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 group hover:bg-white/10 transition-all">
+                                    <h3 className="text-lg font-bold text-white">{key.title || key.subject}</h3>
+                                    <p className="text-xs text-gray-500 font-bold uppercase mt-1">{key.className}</p>
+                                    <div className="mt-6 flex justify-between items-center">
+                                        <span className="text-[10px] bg-white/10 px-3 py-1 rounded-full text-gray-400 font-mono">{Object.keys(key.answers).length} Questões</span>
+                                        <button onClick={() => deleteAnswerKey(key.id)} className="text-gray-600 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                            {answerKeys.length === 0 && <p className="text-gray-500 italic col-span-full py-10 text-center">Nenhum gabarito cadastrado pelos professores.</p>}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'pei' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8"><h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><Heart className="text-red-500" /> Documentos PEI</h1></header>
+                        <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+                            <table className="w-full text-left">
+                                <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase">
+                                    <tr><th className="p-6">Aluno</th><th className="p-6">Professor / Disciplina</th><th className="p-6">Período</th><th className="p-6">Atualização</th></tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {allPeis.map(p => (
+                                        <tr key={p.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="p-6 font-bold text-gray-200">{p.studentName}</td>
+                                            <td className="p-6 text-gray-400">Prof. {p.teacherName} ({p.subject})</td>
+                                            <td className="p-6"><span className="text-[10px] bg-red-500/10 text-red-400 px-2 py-1 rounded font-black">{p.period}</span></td>
+                                            <td className="p-6 text-gray-500 text-xs">{new Date(p.updatedAt).toLocaleDateString()}</td>
+                                        </tr>
+                                    ))}
+                                    {allPeis.length === 0 && <tr><td colSpan={4} className="p-12 text-center text-gray-500 italic">Nenhum relatório PEI preenchido ainda.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'plans' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8"><h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><BookOpenCheck className="text-red-500" /> Planejamentos Pedagógicos</h1></header>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {plans.map(p => (
+                                <div key={p.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 group hover:border-red-500/30 transition-all">
+                                    <div className="flex justify-between mb-4">
+                                        <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${p.type === 'daily' ? 'bg-blue-500/10 text-blue-400' : 'bg-red-500/10 text-red-400'}`}>{p.type === 'daily' ? 'Diário' : 'Bimestral'}</span>
+                                        <span className="text-[10px] text-gray-500 font-mono">{new Date(p.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-white leading-tight">{p.className}</h3>
+                                    <p className="text-sm text-gray-400 mt-1">Prof. {p.teacherName}</p>
+                                    <p className="text-xs text-gray-500 mt-4 italic line-clamp-2 bg-black/20 p-2 rounded">{p.topic || p.period}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'config' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
                         <header className="mb-8"><h1 className="text-3xl font-bold text-white uppercase flex items-center gap-3"><Settings className="text-red-500" /> Configurações</h1></header>
@@ -294,7 +348,7 @@ export const PrintShopDashboard: React.FC = () => {
                             <section className="space-y-6">
                                 <div className="flex items-center gap-3 border-b border-white/10 pb-4"><Server size={24} className="text-red-500" /><h2 className="text-xl font-black text-white uppercase">Integração Gennera</h2></div>
                                 <div className="bg-black/40 p-6 rounded-2xl border border-white/5">
-                                    <p className="text-sm text-gray-400 mb-6">Sincronize automaticamente alunos e turmas do sistema Gennera (ID 891).</p>
+                                    <p className="text-sm text-gray-400 mb-6 font-medium">Sincronize automaticamente alunos e turmas da Instituição 891.</p>
                                     <Button onClick={handleSyncGennera} isLoading={isSyncing} className="w-full h-16 rounded-2xl text-lg font-black uppercase"><RefreshCw size={24} className={`mr-3 ${isSyncing ? 'animate-spin' : ''}`} /> {isSyncing ? 'Sincronizando...' : 'Sincronizar Agora'}</Button>
                                     
                                     {syncMessage && (
@@ -323,65 +377,6 @@ export const PrintShopDashboard: React.FC = () => {
                                     <Button onClick={handleSaveConfig} className="w-full py-4 rounded-2xl uppercase font-black">Salvar Alterações</Button>
                                 </div>
                             </section>
-                        </div>
-                    </div>
-                )}
-
-                {/* ABA: OMR */}
-                {activeTab === 'omr' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8"><h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><ScanLine className="text-red-500" /> Gabaritos Cadastrados</h1></header>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {answerKeys.map(key => (
-                                <div key={key.id} className="bg-white/5 border border-white/10 rounded-3xl p-6 group">
-                                    <h3 className="text-lg font-bold text-white">{key.title || key.subject}</h3>
-                                    <p className="text-xs text-gray-500 font-bold uppercase mt-1">{key.className}</p>
-                                    <div className="mt-4 flex justify-between items-center">
-                                        <span className="text-[10px] bg-white/10 px-2 py-1 rounded text-gray-400 font-mono">{Object.keys(key.answers).length} Questões</span>
-                                        <button onClick={() => deleteAnswerKey(key.id)} className="text-gray-600 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* ABA: PEI */}
-                {activeTab === 'pei' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8"><h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><Heart className="text-red-500" /> Documentos PEI</h1></header>
-                        <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden">
-                            <table className="w-full text-left">
-                                <thead className="bg-white/5 text-[10px] font-black text-gray-500 uppercase">
-                                    <tr><th className="p-6">Aluno</th><th className="p-6">Professor</th><th className="p-6">Data</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {allPeis.map(p => (
-                                        <tr key={p.id} className="hover:bg-white/5">
-                                            <td className="p-6 font-bold text-gray-200">{p.studentName}</td>
-                                            <td className="p-6 text-gray-400">{p.teacherName} ({p.subject})</td>
-                                            <td className="p-6 text-gray-500">{new Date(p.updatedAt).toLocaleDateString()}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-                
-                {/* ABA: PLANS */}
-                {activeTab === 'plans' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8"><h1 className="text-3xl font-black text-white uppercase flex items-center gap-3"><BookOpenCheck className="text-red-500" /> Planejamentos Pedagógicos</h1></header>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {plans.map(p => (
-                                <div key={p.id} className="bg-white/5 border border-white/10 rounded-3xl p-6">
-                                    <span className={`text-[9px] font-black uppercase px-2 py-1 rounded ${p.type === 'daily' ? 'bg-blue-500/10 text-blue-400' : 'bg-red-500/10 text-red-400'}`}>{p.type === 'daily' ? 'Diário' : 'Bimestral'}</span>
-                                    <h3 className="text-lg font-bold text-white mt-3">{p.className}</h3>
-                                    <p className="text-sm text-gray-400">Prof. {p.teacherName}</p>
-                                    <p className="text-xs text-gray-500 mt-4 italic line-clamp-2">{p.topic || p.period}</p>
-                                </div>
-                            ))}
                         </div>
                     </div>
                 )}
