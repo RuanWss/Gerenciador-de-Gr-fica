@@ -34,54 +34,50 @@ const PEI_COLLECTION = 'pei';
 
 // --- HELPERS ---
 const sanitizeForFirestore = (obj: any) => {
-    // Transforma o objeto em string e volta para garantir que não existam campos complexos ou undefined
-    const clean = JSON.parse(JSON.stringify(obj, (key, value) => {
+    // Remove qualquer campo undefined ou complexo que o Firestore rejeita
+    return JSON.parse(JSON.stringify(obj, (key, value) => {
         if (value === undefined) return null;
         if (typeof value === 'string') return value.trim();
         return value;
     }));
-    return clean;
 };
 
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Iniciando conexão com Gennera...");
+        if (onProgress) onProgress("Conectando com a Gennera (via Proxy)...");
         const classes = await fetchGenneraClasses();
         
         if (!classes || classes.length === 0) {
-            throw new Error("Nenhuma turma foi retornada pela API Gennera.");
+            throw new Error("Nenhuma turma foi encontrada na sua conta Gennera.");
         }
 
-        if (onProgress) onProgress(`Encontradas ${classes.length} turmas. Importando alunos...`);
+        if (onProgress) onProgress(`Sincronizando ${classes.length} turmas...`);
         
         let totalSynced = 0;
 
         for (const cls of classes) {
-            if (onProgress) onProgress(`Turma: ${cls.name}...`);
+            if (onProgress) onProgress(`Processando: ${cls.name}...`);
             const studentsFromGennera = await fetchGenneraStudentsByClass(cls.id, cls.name);
             
             if (studentsFromGennera && studentsFromGennera.length > 0) {
-                // Firestore limita 500 operações por batch. Alunos por turma dificilmente passam disso.
                 const batch = writeBatch(db);
                 
                 for (const student of studentsFromGennera) {
                     const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                    const cleanStudent = sanitizeForFirestore(student);
-                    // Usamos set com merge: true para não apagar dados do AEE se o aluno já existir
-                    batch.set(studentRef, cleanStudent, { merge: true });
+                    // Importante: merge: true para não sobrescrever dados manuais do AEE
+                    batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
                     totalSynced++;
                 }
                 
                 await batch.commit();
-                console.log(`[Firebase] Batch concluído para ${cls.name}: ${studentsFromGennera.length} alunos.`);
             }
         }
 
-        if (onProgress) onProgress(`Sucesso! ${totalSynced} alunos sincronizados com sucesso.`);
+        if (onProgress) onProgress(`Sucesso! ${totalSynced} alunos atualizados.`);
     } catch (error: any) {
-        console.error("[Sync Error]", error);
-        throw new Error(error.message || "Erro desconhecido na sincronização.");
+        console.error("[Firebase Sync Error]", error);
+        throw new Error(error.message || "Erro inesperado na sincronização.");
     }
 };
 
