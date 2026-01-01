@@ -285,10 +285,9 @@ export const PrintShopDashboard: React.FC = () => {
 
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8">
-            {/* SIDEBAR COMPLETA */}
             <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
                 <div className="mb-6">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-2">Administração</p>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-2">Gestão Escolar</p>
                     <SidebarItem id="exams" label="Gráfica" icon={Printer} />
                     <SidebarItem id="students" label="Alunos" icon={Users} />
                     <SidebarItem id="calendar" label="Agenda" icon={Calendar} />
@@ -341,7 +340,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                                 <input 
                                     className="pl-10 pr-4 py-2 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-red-600 w-64"
-                                    placeholder="Buscar por aluno..."
+                                    placeholder="Buscar por aluno ou disciplina..."
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
                                 />
@@ -385,8 +384,8 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8 flex justify-between items-center">
                             <div>
-                                <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
-                                <p className="text-gray-400">Acompanhamento pedagógico dos professores.</p>
+                                <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Planejamentos Pedagógicos</h1>
+                                <p className="text-gray-400">Acompanhamento dos planos de aula semanais e bimestrais.</p>
                             </div>
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
@@ -513,7 +512,7 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
             </div>
 
-            {/* MODAL PEI */}
+            {/* PEI VIEW MODAL */}
             {showPeiModal && selectedPei && (
                 <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
@@ -525,21 +524,25 @@ export const PrintShopDashboard: React.FC = () => {
                             <button onClick={() => setShowPeiModal(false)} className="text-gray-400 hover:text-red-600 transition-colors"><X size={32}/></button>
                         </div>
                         <div className="p-8 overflow-y-auto space-y-6">
-                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-gray-900">
+                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Competências Essenciais</h4>
-                                <p className="text-sm whitespace-pre-wrap">{selectedPei.essentialCompetencies || "Nenhuma informada"}</p>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedPei.essentialCompetencies || "Nenhuma informada"}</p>
                             </div>
-                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-gray-900">
-                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Conteúdos</h4>
-                                <p className="text-sm whitespace-pre-wrap">{selectedPei.selectedContents || "Nenhum informado"}</p>
+                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Conteúdos Selecionados</h4>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedPei.selectedContents || "Nenhum informado"}</p>
                             </div>
-                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 text-gray-900">
-                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Recursos</h4>
-                                <p className="text-sm whitespace-pre-wrap">{selectedPei.didacticResources || "Nenhum informado"}</p>
+                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Recursos Didáticos</h4>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedPei.didacticResources || "Nenhum informado"}</p>
+                            </div>
+                            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Avaliação</h4>
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedPei.evaluation || "Nenhuma informada"}</p>
                             </div>
                         </div>
                         <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end">
-                            <Button onClick={() => setShowPeiModal(false)} className="bg-gray-800 hover:bg-black uppercase px-8">Fechar</Button>
+                            <Button onClick={() => setShowPeiModal(false)} className="bg-gray-800 hover:bg-black uppercase px-8">Fechar Documento</Button>
                         </div>
                     </div>
                 </div>
@@ -550,9 +553,15 @@ export const PrintShopDashboard: React.FC = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
                     <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-3xl shadow-2xl p-8 animate-in zoom-in-95">
                         <h3 className="text-xl font-black text-white uppercase mb-6">{selectedEvent ? 'Editar Evento' : 'Novo Evento'}</h3>
-                        <div className="space-y-4 text-gray-100">
+                        <div className="space-y-4">
                             <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" placeholder="Título" value={newEventTitle} onChange={e => setNewEventTitle(e.target.value)} />
                             <input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={newEventDate} onChange={e => setNewEventDate(e.target.value)} />
+                            <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={newEventType} onChange={e => setNewEventType(e.target.value as any)}>
+                                <option value="event">Evento</option>
+                                <option value="holiday">Feriado</option>
+                                <option value="exam">Prova</option>
+                                <option value="meeting">Reunião</option>
+                            </select>
                         </div>
                         <div className="flex gap-3 mt-8">
                             <Button variant="outline" className="flex-1" onClick={() => setShowEventModal(false)}>Cancelar</Button>
