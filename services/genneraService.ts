@@ -1,16 +1,18 @@
 
 import { Student, SchoolClass } from '../types';
 
-// Usamos um proxy que lida melhor com cabeçalhos de autorização pesados
-const CORS_PROXY = 'https://corsproxy.io/?';
+// URL da Cloud Function no Google Cloud fornecida pelo usuário
+// Nota: O Cloud Run espera o parâmetro 'url' para redirecionar o tráfego
+const CORS_PROXY = 'https://cors-proxy-376976972882.europe-west1.run.app';
 const BASE_URL = 'https://api2.gennera.com.br/api/v1';
 const INSTITUTION_ID = '891';
 const API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJuYW1lIjoiVXN1w6FyaW8gSW50ZWdyYcOnw6NvIiwidXNlcm5hbWUiOiJFcm1aQUlFMmdzbHdYTVc1M3VwR3lXanpJRnF6ZUJQUURORWtNVnNWIiwiaGFzaCI6InY3eUY2dDB0Ynl0MW9xVXFmZ0hYYWd5SURTMzNENU9ueElNRTJRVUMiLCJpZFVzZXIiOjE0NTU4NzQxLCJpZENvdW50cnkiOjMyLCJpZExhbmd1YWdlIjoyLCJsYW5ndWFnZUNvZGUiOiJwdCIsImlkVGltZXpvbmUiOjg5LCJpZEN1c3RvbWVyIjoxNzgyLCJpZElzc3VlclVzZXIiOjUyMzA2LCJtb2RlIjoicHJvZCIsImlhdCI6MTc2NjUwNTU1NCwiaXNzIjoiaHR0cHM6Ly9hcHBzLmdlbm5lcmEuY29tLmJyIiwic3ViIjoiRXJtWkFJRTJnc2x3WE1XNTN1cEd5V2p6SUZxemVCUFFETkVrTVZzViJ9.ewJW1lBafxoswb8oKcwl66_47QA3ZFASEJJjfOWIPV74bMsjMGW2YSqbzVSDDA8DOKUSETWAx48dk1GPNCAyRb9t0XqkW-nJCY6nz6K2hVKCtYrh-09CoN4Eum_Ew0rqYB3Fn1OuMuTW3LV7_Jg8asOw7r_cGUNnFDNJvH2PDgdk6IujrNk6o19PuDeJu5tScQtC3r6DKqmzNHVZzaBd55b5Ig43mbld2m95J2AtqW-ecqC666xlsYSqfArMICMvhh1hAeLnJfR8os4UQz6sozlei5p46cDXIjoNmRuKKHuS2OZz-YYbk0KlONbRd7QwVHT14Rw7UKmSnvIQR4vmjyU4zgS71LGXpS5tXydLQPNCtFITKdeR4mOFtLa1RSDJby9qEl1vsBWxB5fa_vx-wN3a3eaPV2wxhZPq5kuWELX8yCZjH7D6Se26oGGxrjiIAwixP8Q_jtijdFmZvf57dx_nccoalo9hRDWaHPqkt1kGVNSqf3-X0jjdVtQvWtX0hFWyETZM0JeuRRNoE_K0A4YskDEAb5i9NJMEIbtk5FD57n6YE7TxZJzB2-9MHamslz7Jns-cf6vpgp95W-o219ANOkxv6Q-vekF5ZWkBA5Hj5qsu3_505HrR04-JxZnYQdEm1G8lbZ8yrS7neZ0Wzy2_3fGwM6723Kri3zggTC4';
 
 async function genneraRequest(endpoint: string) {
   const targetUrl = `${BASE_URL}${endpoint}`;
-  // Montagem correta da URL com o proxy
-  const proxiedUrl = `${CORS_PROXY}${encodeURIComponent(targetUrl)}`;
+  // O proxy no GCP espera a URL de destino no parâmetro 'url'
+  // Adicionamos encodeURIComponent para garantir que caracteres especiais na URL de destino não quebrem o proxy
+  const proxiedUrl = `${CORS_PROXY}?url=${encodeURIComponent(targetUrl)}`;
   
   try {
     const response = await fetch(proxiedUrl, {
@@ -26,7 +28,7 @@ async function genneraRequest(endpoint: string) {
     if (!response.ok) {
         const errorText = await response.text();
         console.error(`Erro Gennera (${response.status}):`, errorText.substring(0, 200));
-        throw new Error(`Erro no servidor Gennera: ${response.status}`);
+        throw new Error(`Falha no Proxy de CORS (Status: ${response.status}). Verifique os logs do Cloud Run.`);
     }
 
     return await response.json();
@@ -39,7 +41,6 @@ async function genneraRequest(endpoint: string) {
 export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/unidades-letivas/turmas`);
-    // A API pode retornar o array diretamente ou dentro de uma propriedade 'lista'
     const list = Array.isArray(data) ? data : (data.lista || data.data || []);
     
     return list.map((t: any) => ({

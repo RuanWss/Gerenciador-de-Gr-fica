@@ -19,6 +19,7 @@ export interface User {
   password?: string;
   subject?: string;
   classes?: string[];
+  phone?: string; // Telefone para receber avisos de provas prontas
 }
 
 export enum ExamStatus {
@@ -89,6 +90,11 @@ export interface SystemConfig {
   isBannerActive: boolean;
   tvStart?: string;
   tvEnd?: string;
+  whatsappInstance?: string; 
+  whatsappApiKey?: string;   // Chave da Evolution
+  whatsappBaseUrl?: string;  // URL da sua Evolution
+  printShopNumber?: string;   
+  enableAutomations?: boolean;
 }
 
 export interface ScheduleEntry {

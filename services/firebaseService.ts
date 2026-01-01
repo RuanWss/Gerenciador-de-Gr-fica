@@ -103,28 +103,33 @@ export const ensureUserProfile = async (user: User): Promise<void> => {
     }
 };
 
-// --- PEI ---
-export const getPEIByStudentAndTeacher = async (studentId: string, teacherId: string): Promise<PEIDocument | null> => {
-    const q = query(collection(db, PEI_COLLECTION), where("studentId", "==", studentId), where("teacherId", "==", teacherId));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        return { id: snap.docs[0].id, ...snap.docs[0].data() } as PEIDocument;
-    }
-    return null;
+// --- STUDENTS ---
+export const getStudents = async (): Promise<Student[]> => {
+    const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
 };
 
-export const getAllPEIs = async (): Promise<PEIDocument[]> => {
-    const snapshot = await getDocs(collection(db, PEI_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PEIDocument));
+export const listenToStudents = (callback: (students: Student[]) => void) => {
+    return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+    }, (error) => console.error("Error listening to students:", error));
 };
 
-export const savePEI = async (pei: PEIDocument): Promise<void> => {
-    const { id, ...data } = pei;
-    if (id) {
-        await setDoc(doc(db, PEI_COLLECTION, id), data);
-    } else {
-        await addDoc(collection(db, PEI_COLLECTION), data);
-    }
+export const updateStudent = async (student: Student): Promise<void> => {
+    const { id, ...data } = student;
+    if (!id) return;
+    await setDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data), { merge: true });
+};
+
+export const deleteStudent = async (id: string): Promise<void> => {
+    if (!id) return;
+    await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
+};
+
+export const uploadStudentPhoto = async (file: File, studentId: string): Promise<string> => {
+    const storageRef = ref(storage, `students/${studentId}_${Date.now()}.jpg`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
 };
 
 // --- EXAMS ---
@@ -152,11 +157,7 @@ export const updateExamStatus = async (examId: string, status: ExamStatus): Prom
     await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
 };
 
-export const deleteExamRequest = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, EXAMS_COLLECTION, id));
-};
-
-// --- CLASS MATERIALS ---
+// --- OUTROS --- (Mantendo os demais serviços)
 export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
     let q;
     if (teacherId) {
@@ -192,7 +193,6 @@ export const uploadClassMaterialFile = async (file: File, className: string): Pr
     return await getDownloadURL(storageRef);
 };
 
-// --- LESSON PLANS ---
 export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
     let q;
     if (teacherId) {
@@ -215,49 +215,6 @@ export const deleteLessonPlan = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
 };
 
-// --- STUDENTS ---
-export const getStudents = async (): Promise<Student[]> => {
-    const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-};
-
-export const listenToStudents = (callback: (students: Student[]) => void) => {
-    return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
-    }, (error) => console.error("Error listening to students:", error));
-};
-
-export const saveStudent = async (student: Student): Promise<void> => {
-    const { id, ...data } = student;
-    if (id) {
-        await setDoc(doc(db, STUDENTS_COLLECTION, id), data);
-    } else {
-        await addDoc(collection(db, STUDENTS_COLLECTION), data);
-    }
-};
-
-export const updateStudent = async (student: Student): Promise<void> => {
-    const { id, ...data } = student;
-    await updateDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data));
-};
-
-export const deleteStudent = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
-};
-
-export const uploadStudentPhoto = async (file: File, studentId: string): Promise<string> => {
-    const storageRef = ref(storage, `students/${studentId}_${Date.now()}.jpg`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-};
-
-export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
-    const storageRef = ref(storage, `reports/${studentName}_${Date.now()}.pdf`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-};
-
-// --- ATTENDANCE ---
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("studentId", "==", log.studentId), where("timestamp", ">", fiveMinutesAgo));
@@ -277,78 +234,13 @@ export const listenToAttendanceLogs = (dateString: string, callback: (logs: Atte
     }, (error) => console.error("Error listening to attendance logs:", error));
 };
 
-// --- STAFF ---
-export const getStaffMembers = async (): Promise<StaffMember[]> => {
-    const snapshot = await getDocs(collection(db, STAFF_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember));
-};
-
-export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
-    return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
-    }, (error) => console.error("Error listening to staff members:", error));
-};
-
-export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
-    const { id, ...data } = staff;
-    await addDoc(collection(db, STAFF_COLLECTION), data);
-};
-
-export const updateStaffMember = async (staff: StaffMember): Promise<void> => {
-    const { id, ...data } = staff;
-    await updateDoc(doc(db, STAFF_COLLECTION, id), data);
-};
-
-export const deleteStaffMember = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, STAFF_COLLECTION, id));
-};
-
-export const uploadStaffPhoto = async (file: File): Promise<string> => {
-    const storageRef = ref(storage, `staff/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-};
-
-export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
-    try {
-        const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-        const q = query(collection(db, STAFF_LOGS_COLLECTION), where("staffId", "==", log.staffId), where("timestamp", ">", twoMinutesAgo));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) return 'too_soon';
-        const { id, ...data } = log;
-        await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
-        return 'success';
-    } catch (e) { return 'error'; }
-};
-
-export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
-    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
-    return onSnapshot(q, (snapshot) => {
-        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
-        logs.sort((a,b) => b.timestamp - a.timestamp);
-        callback(logs);
-    }, (error) => console.error("Error listening to staff logs:", error));
-};
-
-// --- SCHEDULE ---
-export const getFullSchedule = async (): Promise<ScheduleEntry[]> => {
-    const snapshot = await getDocs(collection(db, SCHEDULE_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry));
-};
-
-export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
-    const { id, ...data } = entry;
-    const docRef = db && id ? doc(db, SCHEDULE_COLLECTION, id) : null;
-    if (docRef) await setDoc(docRef, data);
-};
-
+// Added missing listenToSchedule export to handle real-time schedule updates for the PublicSchedule page.
 export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
     }, (error) => console.error("Error listening to schedule:", error));
 };
 
-// --- SYSTEM CONFIG ---
 export const listenToSystemConfig = (callback: (config: SystemConfig) => void) => {
     const docRef = doc(db, SYSTEM_CONFIG_COLLECTION, 'main');
     return onSnapshot(docRef, (docSnap) => {
@@ -366,7 +258,6 @@ export const updateSystemConfig = async (config: SystemConfig): Promise<void> =>
     await setDoc(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), config);
 };
 
-// --- EVENTS ---
 export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
     return onSnapshot(collection(db, EVENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
@@ -387,7 +278,6 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EVENTS_COLLECTION, id));
 };
 
-// --- GABARITOS E CORREÇÕES ---
 export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
     const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
@@ -413,7 +303,110 @@ export const saveCorrection = async (correction: StudentCorrection): Promise<voi
     await addDoc(collection(db, CORRECTIONS_COLLECTION), data);
 };
 
-// --- LIBRARY ---
+export const getAllPEIs = async (): Promise<PEIDocument[]> => {
+    const snapshot = await getDocs(collection(db, PEI_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PEIDocument));
+};
+
+export const getPEIByStudentAndTeacher = async (studentId: string, teacherId: string): Promise<PEIDocument | null> => {
+    const q = query(collection(db, PEI_COLLECTION), where("studentId", "==", studentId), where("teacherId", "==", teacherId));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        return { id: snap.docs[0].id, ...snap.docs[0].data() } as PEIDocument;
+    }
+    return null;
+};
+
+export const savePEI = async (pei: PEIDocument): Promise<void> => {
+    const { id, ...data } = pei;
+    if (id) {
+        await setDoc(doc(db, PEI_COLLECTION, id), data);
+    } else {
+        await addDoc(collection(db, PEI_COLLECTION), data);
+    }
+};
+
+export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
+    const storageRef = ref(storage, `reports/${studentName}_${Date.now()}.pdf`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+};
+
+export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
+    return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
+    }, (error) => console.error("Error listening to staff members:", error));
+};
+
+export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
+    try {
+        const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
+        const q = query(collection(db, STAFF_LOGS_COLLECTION), where("staffId", "==", log.staffId), where("timestamp", ">", twoMinutesAgo));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) return 'too_soon';
+        const { id, ...data } = log;
+        await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
+        return 'success';
+    } catch (e) { return 'error'; }
+};
+
+export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
+    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
+    return onSnapshot(q, (snapshot) => {
+        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
+        logs.sort((a,b) => b.timestamp - a.timestamp);
+        callback(logs);
+    }, (error) => console.error("Error listening to staff logs:", error));
+};
+
+export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        throw { code: 'auth/email-already-in-use', message: 'Email already in use' };
+    }
+    await addDoc(collection(db, USERS_COLLECTION), {
+        name,
+        email,
+        role: roles[0],
+        roles,
+        subject: '',
+        classes: []
+    });
+};
+
+export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        const userDoc = snap.docs[0];
+        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), { 
+            roles, 
+            role: roles[0] 
+        });
+    }
+};
+
+export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
+    const { id, ...data } = staff;
+    await addDoc(collection(db, STAFF_COLLECTION), data);
+};
+
+export const updateStaffMember = async (staff: StaffMember): Promise<void> => {
+    const { id, ...data } = staff;
+    await updateDoc(doc(db, STAFF_COLLECTION, id), data);
+};
+
+export const deleteStaffMember = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, STAFF_COLLECTION, id));
+};
+
+export const uploadStaffPhoto = async (file: File): Promise<string> => {
+    const storageRef = ref(storage, `staff/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+};
+
 export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
     return onSnapshot(collection(db, LIBRARY_BOOKS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
@@ -451,32 +444,4 @@ export const returnLoan = async (loanId: string, bookId: string): Promise<void> 
     await updateDoc(loanRef, { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
     await updateDoc(bookRef, { availableQuantity: increment(1) });
-};
-
-export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        throw { code: 'auth/email-already-in-use', message: 'Email already in use' };
-    }
-    await addDoc(collection(db, USERS_COLLECTION), {
-        name,
-        email,
-        role: roles[0],
-        roles,
-        subject: '',
-        classes: []
-    });
-};
-
-export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
-    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        const userDoc = snap.docs[0];
-        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), { 
-            roles, 
-            role: roles[0] 
-        });
-    }
 };

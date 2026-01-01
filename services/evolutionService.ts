@@ -1,57 +1,54 @@
 
-const API_URL = 'https://api.evolution-api.com'; // O usuário deve trocar pela sua URL
-const API_KEY = 'sua_global_api_key'; // O usuário deve trocar pela sua Key
+// Use a URL do seu serviço que aparece no topo do painel do Cloud Run
+const PROXY_URL = 'https://cors-proxy-376976972882.europe-west1.run.app';
+
+async function proxiedRequest(targetUrl: string, method: string, apiKey: string, body?: any) {
+    const fullUrl = `${PROXY_URL}?url=${encodeURIComponent(targetUrl)}`;
+    
+    try {
+        const response = await fetch(fullUrl, {
+            method: method,
+            headers: { 
+                'apikey': apiKey,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: body ? JSON.stringify(body) : undefined
+        });
+
+        // Se o proxy retornar erro de inicialização (504 ou 503), tratamos aqui
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => "Erro desconhecido");
+            console.error(`Erro no Proxy (${response.status}):`, errorText);
+            return { error: true, status: response.status, message: "O Proxy não respondeu corretamente. Verifique o Cloud Run." };
+        }
+
+        return await response.json();
+    } catch (e: any) {
+        console.error("Falha na conexão com o Proxy:", e);
+        return { error: true, message: "Não foi possível conectar ao Proxy. Verifique se o serviço está ativo." };
+    }
+}
 
 export const evolutionService = {
-    async getInstanceStatus(instanceName: string) {
-        try {
-            const response = await fetch(`${API_URL}/instance/connectionState/${instanceName}`, {
-                headers: { 'apikey': API_KEY }
-            });
-            return await response.json();
-        } catch (e) {
-            return { instance: { state: 'disconnected' } };
-        }
+    async getInstanceStatus(baseUrl: string, apiKey: string, instanceName: string) {
+        const url = `${baseUrl}/instance/connectionState/${instanceName}`;
+        return await proxiedRequest(url, 'GET', apiKey);
     },
 
-    async connectInstance(instanceName: string) {
-        try {
-            const response = await fetch(`${API_URL}/instance/connect/${instanceName}`, {
-                headers: { 'apikey': API_KEY }
-            });
-            return await response.json();
-        } catch (e) {
-            return null;
-        }
-    },
-
-    async logoutInstance(instanceName: string) {
-        try {
-            await fetch(`${API_URL}/instance/logout/${instanceName}`, {
-                method: 'DELETE',
-                headers: { 'apikey': API_KEY }
-            });
-        } catch (e) {}
-    },
-
-    async sendMessage(instanceName: string, number: string, text: string) {
+    async sendMessage(baseUrl: string, apiKey: string, instanceName: string, number: string, text: string) {
+        const url = `${baseUrl}/message/sendText/${instanceName}`;
         const cleanNumber = number.replace(/\D/g, '');
-        try {
-            const response = await fetch(`${API_URL}/message/sendText/${instanceName}`, {
-                method: 'POST',
-                headers: { 
-                    'apikey': API_KEY,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    number: cleanNumber,
-                    options: { delay: 1200, presence: 'composing' },
-                    textMessage: { text }
-                })
-            });
-            return await response.json();
-        } catch (e) {
-            return { error: true };
-        }
+        
+        const payload = {
+            number: cleanNumber,
+            options: { 
+                delay: 1200, 
+                presence: 'composing',
+                linkPreview: true
+            },
+            textMessage: { text }
+        };
+        return await proxiedRequest(url, 'POST', apiKey, payload);
     }
 };
