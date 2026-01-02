@@ -36,7 +36,7 @@ const PEI_COLLECTION = 'pei';
 const sanitizeForFirestore = (obj: any) => {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
         if (value === undefined) return null;
-        if (typeof value === 'string') return value.trim().normalize("NFC");
+        if (typeof value === 'string') return value.trim();
         return value;
     }));
 };
@@ -44,228 +44,43 @@ const sanitizeForFirestore = (obj: any) => {
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Buscando turmas ativas na Gennera...");
+        if (onProgress) onProgress("Conectando ao Google Cloud Run...");
         const classes = await fetchGenneraClasses();
         
-        if (!classes || classes.length === 0) {
-            throw new Error("A API Gennera não retornou nenhuma turma ativa no momento.");
-        }
-
-        if (onProgress) onProgress(`Sincronizando ${classes.length} turmas encontradas...`);
+        if (onProgress) onProgress(`Sincronizando ${classes.length} turmas...`);
         
-        let totalSynced = 0;
-
+        const batch = writeBatch(db);
         for (const cls of classes) {
-            if (onProgress) onProgress(`Baixando alunos da turma: ${cls.name}...`);
-            
-            const studentsFromGennera = await fetchGenneraStudentsByClass(cls.id, cls.name);
-            
-            if (studentsFromGennera && studentsFromGennera.length > 0) {
-                // Batch writing to be more efficient
-                const chunks = [];
-                for (let i = 0; i < studentsFromGennera.length; i += 50) {
-                    chunks.push(studentsFromGennera.slice(i, i + 50));
-                }
-
-                for (const chunk of chunks) {
-                    const batch = writeBatch(db);
-                    for (const student of chunk) {
-                        const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                        batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
-                        totalSynced++;
-                    }
-                    await batch.commit();
-                }
-            }
-            // Delay anti-throttling
-            await new Promise(resolve => setTimeout(resolve, 200));
+            const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
+            students.forEach(student => {
+                const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
+                batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
+            });
         }
-
-        if (onProgress) onProgress(`Sincronização concluída! ${totalSynced} alunos atualizados.`);
-    } catch (error: any) {
-        console.error("[Firebase Sync Error]", error);
-        throw new Error(error.message || "Erro inesperado durante o processo de sincronização.");
+        await batch.commit();
+        if (onProgress) onProgress("Sincronização concluída!");
+    } catch (error) {
+        console.error(error);
+        throw new Error("Falha na sincronização Gennera/Cloud Run.");
     }
 };
 
-// --- EXAMS & FILES ---
-export const uploadExamFile = async (file: File, teacherName: string): Promise<string> => {
-    // Sanitize filename
-    const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
-    const storageRef = ref(storage, `exams/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
-};
+// --- LISTENERS ---
 
-export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
-    let q;
-    if (teacherId) {
-        q = query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId));
-    } else {
-        q = collection(db, EXAMS_COLLECTION);
-    }
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExamRequest));
-};
-
-export const saveExam = async (exam: ExamRequest): Promise<void> => {
-    const { id, ...data } = exam;
-    const sanitizedData = sanitizeForFirestore(data);
-    if (id) {
-        await setDoc(doc(db, EXAMS_COLLECTION, id), sanitizedData);
-    } else {
-        await addDoc(collection(db, EXAMS_COLLECTION), sanitizedData);
-    }
-};
-
-export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
-    await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
-};
-
-// --- USERS ---
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-    const docRef = doc(db, USERS_COLLECTION, uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as User;
-    }
-    return null;
-};
-
-export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    const secondaryApp = initializeApp(firebaseConfig, `SecondaryApp_${Date.now()}`);
-    const secondaryAuth = getAuth(secondaryApp);
-    try {
-        const userCredential = await createUser(secondaryAuth, email, 'cemal2016');
-        const newUser = userCredential.user;
-        await updateProfileAuth(newUser, { displayName: name });
-        const userRef = doc(db, USERS_COLLECTION, newUser.uid);
-        await setDoc(userRef, {
-            id: newUser.uid,
-            name: name,
-            email: email,
-            role: roles[0],
-            roles: roles,
-            subject: '',
-            classes: []
-        });
-    } finally {
-        await deleteApp(secondaryApp);
-    }
-};
-
-export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
-    const usersRef = collection(db, USERS_COLLECTION);
-    const q = query(usersRef, where("email", "==", email), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        const userDoc = snap.docs[0];
-        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), {
-            role: roles[0],
-            roles: roles
-        });
-    }
-};
-
-// --- STUDENTS ---
-export const getStudents = async (): Promise<Student[]> => {
-    const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+export const listenToExams = (callback: (exams: ExamRequest[]) => void) => {
+    return onSnapshot(collection(db, EXAMS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExamRequest)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Exams Listener:", error);
+    });
 };
 
 export const listenToStudents = (callback: (students: Student[]) => void) => {
     return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
-    }, (error) => console.error("Error listening to students:", error));
-};
-
-export const updateStudent = async (student: Student): Promise<void> => {
-    const { id, ...data } = student;
-    if (!id) return;
-    await setDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data), { merge: true });
-};
-
-// --- OTHERS ---
-export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
-    let q;
-    if (teacherId) {
-        q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("teacherId", "==", teacherId));
-    } else {
-        q = collection(db, CLASS_MATERIALS_COLLECTION);
-    }
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
-};
-
-export const listenToClassMaterials = (className: string, onSuccess: (data: ClassMaterial[]) => void, onError: (error: any) => void) => {
-    const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
-    return onSnapshot(q, (snapshot) => {
-        const materials = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
-        onSuccess(materials);
-    }, onError);
-};
-
-export const saveClassMaterial = async (material: ClassMaterial): Promise<string> => {
-    const { id, ...data } = material;
-    const docRef = await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), data);
-    return docRef.id;
-};
-
-export const deleteClassMaterial = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, CLASS_MATERIALS_COLLECTION, id));
-};
-
-export const uploadClassMaterialFile = async (file: File, className: string): Promise<string> => {
-    const storageRef = ref(storage, `materials/${className}/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-};
-
-export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
-    let q;
-    if (teacherId) {
-        q = query(collection(db, LESSON_PLANS_COLLECTION), where("teacherId", "==", teacherId));
-    } else {
-        q = collection(db, LESSON_PLANS_COLLECTION);
-    }
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
-};
-
-export const saveLessonPlan = async (plan: LessonPlan): Promise<string> => {
-    const { id, ...data } = plan;
-    const docRef = await addDoc(collection(db, LESSON_PLANS_COLLECTION), data);
-    return docRef.id;
-};
-
-export const deleteLessonPlan = async (id: string): Promise<void> => {
-    if (!id) return;
-    await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
-};
-
-export const listenToAttendanceLogs = (dateString: string, callback: (logs: AttendanceLog[]) => void) => {
-    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
-    return onSnapshot(q, (snapshot) => {
-        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
-        logs.sort((a,b) => b.timestamp - a.timestamp);
-        callback(logs);
-    }, (error) => console.error("Error listening to attendance logs:", error));
-};
-
-export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("studentId", "==", log.studentId), where("timestamp", ">", fiveMinutesAgo));
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) return false;
-    const { id, ...data } = log;
-    await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), data);
-    return true;
-};
-
-export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
-    return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
-    }, (error) => console.error("Error listening to schedule:", error));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Students Listener:", error);
+    });
 };
 
 export const listenToSystemConfig = (callback: (config: SystemConfig) => void) => {
@@ -277,57 +92,85 @@ export const listenToSystemConfig = (callback: (config: SystemConfig) => void) =
             callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
         }
     }, (error) => {
-        console.warn("System config listener warning:", error.message);
+        if (error.code !== 'permission-denied') console.warn("Config Listener:", error);
     });
-};
-
-export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
-    await setDoc(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), config);
 };
 
 export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
     return onSnapshot(collection(db, EVENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
-    }, (error) => console.error("Error listening to events:", error));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Events Listener:", error);
+    });
 };
 
-export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
-    const { id, ...data } = event;
-    const sanitized = JSON.parse(JSON.stringify(data));
-    if (id) {
-        await setDoc(doc(db, EVENTS_COLLECTION, id), sanitized);
-    } else {
-        await addDoc(collection(db, EVENTS_COLLECTION), sanitized);
-    }
+export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
+    return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Schedule Listener:", error);
+    });
 };
 
-export const deleteSchoolEvent = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, EVENTS_COLLECTION, id));
+export const listenToAttendanceLogs = (dateString: string, callback: (logs: AttendanceLog[]) => void) => {
+    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog)));
+    });
 };
 
-export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
-    const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
+export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
+    return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
+    });
 };
 
-export const saveAnswerKey = async (key: AnswerKey): Promise<void> => {
-    const { id, ...data } = key;
-    await addDoc(collection(db, ANSWER_KEYS_COLLECTION), data);
+export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
+    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString), orderBy("timestamp", "desc"));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog)));
+    });
 };
 
-export const deleteAnswerKey = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, ANSWER_KEYS_COLLECTION, id));
+export const listenToClassMaterials = (className: string, onSuccess: (mats: ClassMaterial[]) => void, onError?: (err: any) => void) => {
+    const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
+    return onSnapshot(q, (snapshot) => {
+        onSuccess(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial)));
+    }, onError);
 };
 
-export const getCorrections = async (answerKeyId: string): Promise<StudentCorrection[]> => {
-    const q = query(collection(db, CORRECTIONS_COLLECTION), where("answerKeyId", "==", answerKeyId));
+export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
+    return onSnapshot(collection(db, LIBRARY_BOOKS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
+    });
+};
+
+export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) => {
+    return onSnapshot(collection(db, LIBRARY_LOANS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
+    });
+};
+
+// --- GETTERS ---
+
+export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
+    const q = teacherId 
+        ? query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId))
+        : collection(db, EXAMS_COLLECTION);
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StudentCorrection));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExamRequest));
 };
 
-export const saveCorrection = async (correction: StudentCorrection): Promise<void> => {
-    const { id, ...data } = correction;
-    await addDoc(collection(db, CORRECTIONS_COLLECTION), data);
+export const getStudents = async (): Promise<Student[]> => {
+    const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+};
+
+export const getUserProfile = async (uid: string): Promise<User | null> => {
+    const docRef = doc(db, USERS_COLLECTION, uid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) return { id: docSnap.id, ...docSnap.data() } as User;
+    return null;
 };
 
 export const getAllPEIs = async (): Promise<PEIDocument[]> => {
@@ -335,65 +178,97 @@ export const getAllPEIs = async (): Promise<PEIDocument[]> => {
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PEIDocument));
 };
 
-export const getPEIByStudentAndTeacher = async (studentId: string, teacherId: string): Promise<PEIDocument | null> => {
-    const q = query(collection(db, PEI_COLLECTION), where("studentId", "==", studentId), where("teacherId", "==", teacherId));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        return { id: snap.docs[0].id, ...snap.docs[0].data() } as PEIDocument;
+export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
+    const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
+};
+
+export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
+    const q = teacherId 
+        ? query(collection(db, CLASS_MATERIALS_COLLECTION), where("teacherId", "==", teacherId))
+        : collection(db, CLASS_MATERIALS_COLLECTION);
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial));
+};
+
+export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
+    const q = teacherId 
+        ? query(collection(db, LESSON_PLANS_COLLECTION), where("teacherId", "==", teacherId))
+        : collection(db, LESSON_PLANS_COLLECTION);
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
+};
+
+// --- SETTERS / UPDATERS / UPLOADERS ---
+
+export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
+    await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
+};
+
+export const saveExam = async (exam: ExamRequest): Promise<void> => {
+    const { id, ...data } = exam;
+    if (id) await setDoc(doc(db, EXAMS_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, EXAMS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const uploadExamFile = async (file: File, teacherName: string): Promise<string> => {
+    const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+    const storageRef = ref(storage, `exams/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+};
+
+export const updateSystemConfig = async (config: SystemConfig): Promise<void> => {
+    await setDoc(doc(db, SYSTEM_CONFIG_COLLECTION, 'main'), sanitizeForFirestore(config));
+};
+
+export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
+    try {
+        const q = query(
+            collection(db, ATTENDANCE_LOGS_COLLECTION),
+            where("studentId", "==", log.studentId),
+            where("dateString", "==", log.dateString)
+        );
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) return false;
+        await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), sanitizeForFirestore(log));
+        return true;
+    } catch (error) {
+        console.error(error);
+        return false;
     }
-    return null;
-};
-
-export const savePEI = async (pei: PEIDocument): Promise<void> => {
-    const { id, ...data } = pei;
-    if (id) {
-        await setDoc(doc(db, PEI_COLLECTION, id), data);
-    } else {
-        await addDoc(collection(db, PEI_COLLECTION), data);
-    }
-};
-
-export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
-    const storageRef = ref(storage, `reports/${studentName}_${Date.now()}.pdf`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-};
-
-export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
-    return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
-    }, (error) => console.error("Error listening to staff members:", error));
 };
 
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
     try {
-        const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-        const q = query(collection(db, STAFF_LOGS_COLLECTION), where("staffId", "==", log.staffId), where("timestamp", ">", twoMinutesAgo));
+        const q = query(
+            collection(db, STAFF_LOGS_COLLECTION),
+            where("staffId", "==", log.staffId),
+            orderBy("timestamp", "desc"),
+            limit(1)
+        );
         const snapshot = await getDocs(q);
-        if (!snapshot.empty) return 'too_soon';
-        const { id, ...data } = log;
-        await addDoc(collection(db, STAFF_LOGS_COLLECTION), data);
+        if (!snapshot.empty) {
+            const lastLog = snapshot.docs[0].data();
+            const diff = Date.now() - lastLog.timestamp;
+            if (diff < 120000) return 'too_soon'; // 2 minutes
+        }
+        await addDoc(collection(db, STAFF_LOGS_COLLECTION), sanitizeForFirestore(log));
         return 'success';
-    } catch (e) { return 'error'; }
-};
-
-export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
-    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
-    return onSnapshot(q, (snapshot) => {
-        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
-        logs.sort((a,b) => b.timestamp - a.timestamp);
-        callback(logs);
-    }, (error) => console.error("Error listening to staff logs:", error));
+    } catch (error) {
+        console.error(error);
+        return 'error';
+    }
 };
 
 export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
     const { id, ...data } = staff;
-    await addDoc(collection(db, STAFF_COLLECTION), data);
+    if (id) await setDoc(doc(db, STAFF_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, STAFF_COLLECTION), sanitizeForFirestore(data));
 };
 
 export const updateStaffMember = async (staff: StaffMember): Promise<void> => {
-    const { id, ...data } = staff;
-    await updateDoc(doc(db, STAFF_COLLECTION, id), data);
+    await setDoc(doc(db, STAFF_COLLECTION, staff.id), sanitizeForFirestore(staff));
 };
 
 export const deleteStaffMember = async (id: string): Promise<void> => {
@@ -401,46 +276,105 @@ export const deleteStaffMember = async (id: string): Promise<void> => {
 };
 
 export const uploadStaffPhoto = async (file: File): Promise<string> => {
-    const storageRef = ref(storage, `staff/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
+    const storageRef = ref(storage, `staff/photos/${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
 };
 
-export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
-    return onSnapshot(collection(db, LIBRARY_BOOKS_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
-    }, (error) => console.error("Error listening to books:", error));
+export const saveClassMaterial = async (material: ClassMaterial): Promise<void> => {
+    const { id, ...data } = material;
+    if (id) await setDoc(doc(db, CLASS_MATERIALS_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const uploadClassMaterialFile = async (file: File, teacherName: string): Promise<string> => {
+    const storageRef = ref(storage, `materials/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+};
+
+export const deleteClassMaterial = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, CLASS_MATERIALS_COLLECTION, id));
 };
 
 export const saveLibraryBook = async (book: LibraryBook): Promise<void> => {
     const { id, ...data } = book;
-    if (id) {
-        await setDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id), data);
-    } else {
-        await addDoc(collection(db, LIBRARY_BOOKS_COLLECTION), data);
-    }
+    if (id) await setDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, LIBRARY_BOOKS_COLLECTION), sanitizeForFirestore(data));
 };
 
 export const deleteLibraryBook = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id));
 };
 
-export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) => {
-    return onSnapshot(collection(db, LIBRARY_LOANS_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
-    }, (error) => console.error("Error listening to loans:", error));
-};
-
 export const createLoan = async (loan: LibraryLoan): Promise<void> => {
-    const { id, ...data } = loan;
-    await addDoc(collection(db, LIBRARY_LOANS_COLLECTION), data);
+    const batch = writeBatch(db);
+    const loanRef = doc(collection(db, LIBRARY_LOANS_COLLECTION));
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
-    await updateDoc(bookRef, { availableQuantity: increment(-1) });
+    
+    batch.set(loanRef, sanitizeForFirestore({ ...loan, id: loanRef.id }));
+    batch.update(bookRef, { availableQuantity: increment(-1) });
+    
+    await batch.commit();
 };
 
 export const returnLoan = async (loanId: string, bookId: string): Promise<void> => {
+    const batch = writeBatch(db);
     const loanRef = doc(db, LIBRARY_LOANS_COLLECTION, loanId);
-    await updateDoc(loanRef, { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
-    await updateDoc(bookRef, { availableQuantity: increment(1) });
+    
+    batch.update(loanRef, { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
+    batch.update(bookRef, { availableQuantity: increment(1) });
+    
+    await batch.commit();
+};
+
+export const updateStudent = async (student: Student): Promise<void> => {
+    await setDoc(doc(db, STUDENTS_COLLECTION, student.id), sanitizeForFirestore(student));
+};
+
+export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
+    const storageRef = ref(storage, `reports/${studentName.replace(/\s+/g, '_')}_${Date.now()}_${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+};
+
+export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
+    const { id, ...data } = event;
+    if (id) await setDoc(doc(db, EVENTS_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, EVENTS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const deleteSchoolEvent = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, EVENTS_COLLECTION, id));
+};
+
+// --- AUTH MANAGEMENT ---
+
+export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
+    const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
+    const secondaryAuth = getAuth(secondaryApp);
+    
+    try {
+        const result = await createUser(secondaryAuth, email, 'cemal2016');
+        const userProfile: User = {
+            id: result.user.uid,
+            name: name,
+            email: email,
+            role: roles[0],
+            roles: roles
+        };
+        await setDoc(doc(db, USERS_COLLECTION, result.user.uid), sanitizeForFirestore(userProfile));
+    } finally {
+        await deleteApp(secondaryApp);
+    }
+};
+
+export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
+    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+        const userDoc = snapshot.docs[0];
+        await updateDoc(userDoc.ref, { roles: roles, role: roles[0] });
+    }
 };
