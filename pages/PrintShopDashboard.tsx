@@ -50,7 +50,8 @@ import {
     Activity,
     ClipboardList,
     Layers,
-    Loader2
+    Loader2,
+    FileDown
 } from 'lucide-react';
 import { CLASSES } from '../constants';
 
@@ -163,7 +164,7 @@ export const PrintShopDashboard: React.FC = () => {
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
         <button
             onClick={() => setActiveTab(id as any)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
         >
             <Icon size={18} />
             <span>{label}</span>
@@ -215,7 +216,9 @@ export const PrintShopDashboard: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-3">
                                         {exam.fileUrl ? (
-                                            <a href={exam.fileUrl} target="_blank" rel="noreferrer" className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-blue-400 transition-all text-xs font-bold uppercase tracking-widest">Abrir PDF</a>
+                                            <a href={exam.fileUrl} target="_blank" rel="noreferrer" className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-blue-400 transition-all text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                                <FileDown size={14} /> Abrir Material
+                                            </a>
                                         ) : (
                                             <span className="text-[10px] text-gray-500 uppercase font-bold">Manual</span>
                                         )}
@@ -242,8 +245,8 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                             <div className="flex gap-4 w-full md:w-auto">
                                 <div className="relative flex-1 md:flex-initial">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                                    <input className="pl-10 pr-4 py-2 bg-black/40 border border-white/10 rounded-xl text-white outline-none w-full md:w-64" placeholder="Filtrar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                                    <input className="pl-12 pr-4 py-3 bg-black/40 border border-white/10 rounded-2xl text-white outline-none w-full md:w-64 focus:ring-2 focus:ring-red-600 transition-all" placeholder="Filtrar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                                 </div>
                                 <Button onClick={handleSyncGennera} isLoading={isSyncing} variant="outline" className="border-white/10 text-white font-black uppercase text-xs px-6 rounded-xl hover:bg-white/5">
                                     <RefreshCw size={16} className={`mr-2 ${isSyncing ? 'animate-spin' : ''}`}/> Sincronizar Gennera
@@ -387,8 +390,6 @@ export const PrintShopDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
-                
-                {/* Outras abas (Agenda, PEI, Config) já implementadas no arquivo base */}
             </div>
         </div>
     );
