@@ -1,7 +1,7 @@
 
 import { Student, SchoolClass } from '../types';
 
-// URL do Cloud Run (CORS Proxy)
+// O Proxy deve estar configurado no Cloud Run para escutar em 0.0.0.0:8080
 const CORS_PROXY = 'https://cors-proxy-376976972882.europe-west1.run.app';
 const BASE_URL = 'https://api2.gennera.com.br/api/v1';
 const INSTITUTION_ID = '891';
@@ -12,31 +12,26 @@ async function genneraRequest(endpoint: string) {
   const proxiedUrl = `${CORS_PROXY}?url=${encodeURIComponent(targetUrl)}`;
   
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 segundos
-
     const response = await fetch(proxiedUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${API_TOKEN}`,
-        'Accept': 'application/json'
-      },
-      signal: controller.signal
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
     });
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`Cloud Run falhou na porta 8080: ${response.status} - ${errText}`);
+        throw new Error(`Proxy Erro ${response.status}: ${errText}`);
     }
 
     return await response.json();
   } catch (error: any) {
-    console.error("[Gennera API Fail]", error);
-    if (error.name === 'AbortError') throw new Error("A conexão com o proxy 8080 demorou demais e foi abortada.");
+    console.error("[Gennera Proxy Error]", error);
+    // Erro comum de "Failed to fetch" no Cloud Run indica que o container não subiu na porta 8080
     if (error.message.includes('Failed to fetch')) {
-        throw new Error("Erro de Porta 8080: O Proxy CORS não está ouvindo ou o container parou de responder.");
+        throw new Error("O serviço de Proxy (porta 8080) não respondeu. Certifique-se que o Cloud Run está rodando e escutando em 0.0.0.0.");
     }
     throw error;
   }
@@ -46,13 +41,14 @@ export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/unidades-letivas/turmas`);
     const list = Array.isArray(data) ? data : (data.data || data.lista || []);
+    
     return list.map((t: any) => ({
       id: String(t.id || t.idTurma || t.codigo),
       name: String(t.sigla || t.nome || t.descricao).toUpperCase(),
       shift: (t.turno || '').toString().toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
     })).filter((t: any) => t.id && t.name);
   } catch (error: any) {
-    throw new Error(`Falha Gennera: ${error.message}`);
+    throw new Error(`Falha na API: ${error.message}`);
   }
 };
 
@@ -60,6 +56,7 @@ export const fetchGenneraStudentsByClass = async (classId: string, className: st
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/turmas/${classId}/alunos`);
     const list = Array.isArray(data) ? data : (data.data || data.lista || []);
+
     return list.map((a: any) => ({
       id: String(a.id_matricula || a.id_aluno || a.id),
       name: String(a.nome_pessoa || a.nome_aluno || a.nome).trim().toUpperCase(),
@@ -68,7 +65,7 @@ export const fetchGenneraStudentsByClass = async (classId: string, className: st
       photoUrl: a.url_foto || a.foto || ''
     })).filter((a: any) => a.id && a.name);
   } catch (error) {
-    console.warn(`[Gennera] Turma ${className} sem alunos.`, error);
+    console.warn(`[Gennera] Erro na turma ${className}:`, error);
     return [];
   }
 }
