@@ -13,7 +13,7 @@ async function genneraRequest(endpoint: string) {
   
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s de timeout
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 segundos
 
     const response = await fetch(proxiedUrl, {
       method: 'GET',
@@ -28,17 +28,15 @@ async function genneraRequest(endpoint: string) {
 
     if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`Falha no Proxy (8080): ${response.status} - ${errText}`);
+        throw new Error(`Cloud Run falhou na porta 8080: ${response.status} - ${errText}`);
     }
 
     return await response.json();
   } catch (error: any) {
-    console.error("[Gennera Sync Error]", error);
-    if (error.name === 'AbortError') {
-        throw new Error("O servidor de integração demorou demais para responder (Timeout).");
-    }
+    console.error("[Gennera API Fail]", error);
+    if (error.name === 'AbortError') throw new Error("A conexão com o proxy 8080 demorou demais e foi abortada.");
     if (error.message.includes('Failed to fetch')) {
-        throw new Error("Erro de conexão (Porta 8080): O serviço Proxy no Cloud Run falhou ou foi bloqueado.");
+        throw new Error("Erro de Porta 8080: O Proxy CORS não está ouvindo ou o container parou de responder.");
     }
     throw error;
   }
@@ -47,16 +45,14 @@ async function genneraRequest(endpoint: string) {
 export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/unidades-letivas/turmas`);
-    // Gennera pode retornar a lista em diferentes chaves dependendo do endpoint
     const list = Array.isArray(data) ? data : (data.data || data.lista || []);
-    
     return list.map((t: any) => ({
       id: String(t.id || t.idTurma || t.codigo),
       name: String(t.sigla || t.nome || t.descricao).toUpperCase(),
       shift: (t.turno || '').toString().toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
     })).filter((t: any) => t.id && t.name);
   } catch (error: any) {
-    throw new Error(`Erro ao buscar turmas: ${error.message}`);
+    throw new Error(`Falha Gennera: ${error.message}`);
   }
 };
 
@@ -64,7 +60,6 @@ export const fetchGenneraStudentsByClass = async (classId: string, className: st
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/turmas/${classId}/alunos`);
     const list = Array.isArray(data) ? data : (data.data || data.lista || []);
-
     return list.map((a: any) => ({
       id: String(a.id_matricula || a.id_aluno || a.id),
       name: String(a.nome_pessoa || a.nome_aluno || a.nome).trim().toUpperCase(),
@@ -73,7 +68,7 @@ export const fetchGenneraStudentsByClass = async (classId: string, className: st
       photoUrl: a.url_foto || a.foto || ''
     })).filter((a: any) => a.id && a.name);
   } catch (error) {
-    console.warn(`[Gennera] Falha ao carregar alunos da turma ${className}:`, error);
+    console.warn(`[Gennera] Turma ${className} sem alunos.`, error);
     return [];
   }
 }
