@@ -2,391 +2,231 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
-    getExams, 
+    listenToExams, 
     updateExamStatus, 
-    getStudents, 
-    listenToAttendanceLogs, 
+    listenToStudents, 
     listenToSystemConfig, 
     updateSystemConfig, 
     listenToEvents, 
-    saveSchoolEvent, 
-    deleteSchoolEvent,
-    getAllPEIs,
-    syncAllDataWithGennera,
-    getAnswerKeys,
-    getCorrections,
-    saveCorrection
+    saveSchoolEvent,
+    getAllPEIs
 } from '../services/firebaseService';
-import { analyzeAnswerSheet } from '../services/geminiService';
 import { 
     ExamRequest, 
     ExamStatus, 
     Student, 
-    AttendanceLog, 
     SystemConfig, 
     SchoolEvent,
-    PEIDocument,
-    AnswerKey,
-    StudentCorrection
+    PEIDocument
 } from '../types';
 import { Button } from '../components/Button';
 import { 
-    Printer, 
-    Search, 
-    Calendar, 
-    Users, 
-    Settings, 
-    Plus, 
-    ChevronLeft, 
-    ChevronRight,
-    Save,
-    X,
-    Heart,
-    Eye,
-    RefreshCw,
-    ScanLine,
-    BookOpenCheck,
-    CheckCircle,
-    Activity,
-    ClipboardList,
-    Layers,
-    Loader2,
-    FileDown
+    Printer, Calendar, Users, Settings, X, CheckCircle, 
+    FileDown, Clock, Layers, Loader2, ScanLine, Heart, Save, Eye, Plus
 } from 'lucide-react';
-import { CLASSES } from '../constants';
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'calendar' | 'omr' | 'pei' | 'config'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'calendar' | 'config' | 'pei'>('exams');
     const [isLoading, setIsLoading] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [syncProgress, setSyncProgress] = useState('');
 
-    // --- DATA STATES ---
     const [exams, setExams] = useState<ExamRequest[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
-    const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+    const [peis, setPeis] = useState<PEIDocument[]>([]);
     const [events, setEvents] = useState<SchoolEvent[]>([]);
-    const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
     
-    // --- OCR/OMR STATES ---
-    const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
-    const [selectedKey, setSelectedKey] = useState<AnswerKey | null>(null);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [ocrResult, setOcrResult] = useState<any>(null);
-
-    // --- CONFIG LOCAL STATES ---
-    const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
+    // Config states
     const [bannerMsg, setBannerMsg] = useState('');
-    const [bannerActive, setBannerActive] = useState(false);
-
-    // --- UI STATES ---
-    const [searchTerm, setSearchTerm] = useState('');
-    const [studentFilterClass, setStudentFilterClass] = useState<string>('ALL');
+    const [bannerType, setBannerType] = useState<'info' | 'warning' | 'error' | 'success'>('info');
+    const [isBannerActive, setIsBannerActive] = useState(false);
 
     useEffect(() => {
-        fetchInitialData();
-        const todayStr = new Date().toISOString().split('T')[0];
-        const unsubAttendance = listenToAttendanceLogs(todayStr, (logs) => setAttendanceLogs(logs));
-        const unsubEvents = listenToEvents((evs) => setEvents(evs));
+        setIsLoading(true);
+        const unsubExams = listenToExams(setExams);
+        const unsubStudents = listenToStudents(setStudents);
+        const unsubEvents = listenToEvents(setEvents);
         const unsubConfig = listenToSystemConfig((cfg) => {
-            setSysConfig(cfg);
             setBannerMsg(cfg.bannerMessage || '');
-            setBannerActive(cfg.isBannerActive || false);
+            setBannerType(cfg.bannerType || 'info');
+            setIsBannerActive(cfg.isBannerActive || false);
         });
 
+        getAllPEIs().then(setPeis);
+        setIsLoading(false);
+
         return () => {
-            unsubAttendance();
+            unsubExams();
+            unsubStudents();
             unsubEvents();
             unsubConfig();
         };
     }, []);
 
-    const fetchInitialData = async () => {
-        setIsLoading(true);
-        try {
-            const [allExams, allStudents, peis, keys] = await Promise.all([
-                getExams(),
-                getStudents(),
-                getAllPEIs(),
-                getAnswerKeys()
-            ]);
-            setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
-            setStudents(allStudents.sort((a,b) => a.name.localeCompare(b.name)));
-            setAllPeis(peis.sort((a,b) => b.updatedAt - a.updatedAt));
-            setAnswerKeys(keys);
-        } catch (e) {
-            console.error("Erro ao carregar dados iniciais:", e);
-        } finally {
-            setIsLoading(false);
-        }
+    const handleUpdateStatus = async (id: string, status: ExamStatus) => {
+        await updateExamStatus(id, status);
     };
 
-    const handleSyncGennera = async () => {
-        if (!confirm("Isso irá buscar todos os alunos e turmas da Gennera. Deseja continuar?")) return;
-        setIsSyncing(true);
-        try {
-            await syncAllDataWithGennera((msg) => setSyncProgress(msg));
-            alert("Sincronização concluída com sucesso!");
-            fetchInitialData();
-        } catch (e: any) {
-            alert(`Erro na sincronização: ${e.message}`);
-        } finally {
-            setIsSyncing(false);
-            setSyncProgress('');
-        }
-    };
-
-    const handleOCRProcess = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!selectedKey || !e.target.files?.[0]) return;
-        setIsAnalyzing(true);
-        try {
-            const result = await analyzeAnswerSheet(e.target.files[0], Object.keys(selectedKey.answers).length);
-            setOcrResult(result);
-            if (result.studentId) {
-                const studentFound = students.find(s => s.id === result.studentId);
-                if (studentFound) {
-                    alert(`Gabarito identificado para: ${studentFound.name}`);
-                }
-            }
-        } catch (err) {
-            alert("Erro ao processar imagem para OCR.");
-        } finally {
-            setIsAnalyzing(false);
-        }
-    };
-
-    const handleUpdateExam = async (exam: ExamRequest, status: ExamStatus) => {
-        await updateExamStatus(exam.id, status);
-        setExams(exams.map(e => e.id === exam.id ? { ...e, status } : e));
+    const handleSaveConfig = async () => {
+        await updateSystemConfig({
+            bannerMessage: bannerMsg,
+            bannerType: bannerType,
+            isBannerActive: isBannerActive
+        });
+        alert("Configurações aplicadas ao sistema!");
     };
 
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
         <button
             onClick={() => setActiveTab(id as any)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
         >
             <Icon size={18} />
             <span>{label}</span>
         </button>
     );
 
-    const filteredStudents = students.filter(s => {
-        const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesClass = studentFilterClass === 'ALL' || s.className === studentFilterClass;
-        return matchesSearch && matchesClass;
-    });
-
-    const presentStudentIds = new Set(attendanceLogs.map(log => log.studentId));
-
     return (
-        <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8">
-            {/* Sidebar Admin */}
-            <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
-                <div className="mb-6">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-2">Painel de Gestão</p>
-                    <SidebarItem id="exams" label="Gráfica / Cópias" icon={Printer} />
-                    <SidebarItem id="students" label="Alunos / Turmas" icon={Users} />
-                    <SidebarItem id="omr" label="Correção OCR" icon={ScanLine} />
+        <div className="flex h-full bg-[#0f0f10]">
+            {/* SIDEBAR POLIDA */}
+            <div className="w-72 bg-black/40 border-r border-white/10 p-8 flex flex-col h-full shrink-0 z-20 shadow-2xl">
+                <div className="mb-10">
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-6 ml-2">Painel de Gestão</p>
+                    <SidebarItem id="exams" label="Fila de Impressão" icon={Printer} />
+                    <SidebarItem id="students" label="Base de Alunos" icon={Users} />
+                    <SidebarItem id="pei" label="Documentos AEE" icon={Heart} />
                     <SidebarItem id="calendar" label="Agenda Escolar" icon={Calendar} />
-                    <SidebarItem id="pei" label="AEE (PEI)" icon={Heart} />
-                    <SidebarItem id="config" label="Configuração" icon={Settings} />
+                    <SidebarItem id="config" label="Configurações" icon={Settings} />
+                </div>
+                
+                <div className="mt-auto p-5 bg-red-600/5 rounded-3xl border border-red-600/10">
+                    <p className="text-[10px] font-black text-red-500 uppercase mb-3">Servidor Google Cloud</p>
+                    <div className="flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></div>
+                        <span className="text-xs font-bold text-gray-300">Porta 8080 Ativa</span>
+                    </div>
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-transparent">
-                {/* GRÁFICA / CÓPIAS */}
+            {/* CONTEÚDO PRINCIPAL */}
+            <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
                 {activeTab === 'exams' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8">
-                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Pedidos da Gráfica</h1>
-                            <p className="text-gray-400">Acompanhe as solicitações de impressão enviadas pelos professores.</p>
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl">
+                        <header className="mb-12 flex justify-between items-end">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Fila de Provas</h1>
+                                <p className="text-gray-400 text-lg">Pedidos de professores aguardando processamento na gráfica.</p>
+                            </div>
+                            <div className="bg-red-600/10 px-6 py-3 rounded-2xl border border-red-600/20 shadow-lg">
+                                <span className="text-red-500 font-black text-xs uppercase tracking-widest">{exams.filter(e => e.status !== ExamStatus.COMPLETED).length} Pendentes</span>
+                            </div>
                         </header>
-                        <div className="grid grid-cols-1 gap-4">
-                            {exams.map(exam => (
-                                <div key={exam.id} className="bg-[#18181b] border border-white/5 rounded-3xl p-6 flex items-center justify-between group hover:border-red-600/30 transition-all shadow-xl">
-                                    <div className="flex items-center gap-6">
-                                        <div className={`h-16 w-16 rounded-2xl flex items-center justify-center ${exam.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500' : 'bg-green-500/10 text-green-500'}`}>
+                        
+                        <div className="grid grid-cols-1 gap-5">
+                            {exams.filter(e => e.status !== ExamStatus.COMPLETED).map(exam => (
+                                <div key={exam.id} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 flex items-center justify-between group hover:border-red-600/40 transition-all shadow-2xl">
+                                    <div className="flex items-center gap-8">
+                                        <div className={`h-16 w-16 rounded-[1.5rem] flex items-center justify-center shadow-lg ${exam.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500' : 'bg-blue-500/10 text-blue-500'}`}>
                                             <Printer size={32} />
                                         </div>
                                         <div>
-                                            <h3 className="text-xl font-bold text-white uppercase">{exam.title}</h3>
-                                            <p className="text-gray-400 text-sm">{exam.teacherName} • {exam.gradeLevel} • <b className="text-white">{exam.quantity} cópias</b></p>
+                                            <h3 className="text-xl font-bold text-white uppercase tracking-tight">{exam.title}</h3>
+                                            <p className="text-gray-400 font-medium uppercase text-xs tracking-wider mb-2">Prof. <b className="text-white">{exam.teacherName}</b> • {exam.gradeLevel}</p>
+                                            <div className="flex items-center gap-4">
+                                                <span className="bg-red-600 text-white font-black text-[10px] px-3 py-1 rounded-full uppercase shadow-lg shadow-red-900/20">{exam.quantity} CÓPIAS</span>
+                                                {exam.instructions && <span className="text-gray-500 text-[10px] font-bold uppercase italic">Obs: {exam.instructions}</span>}
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        {exam.fileUrl ? (
-                                            <a href={exam.fileUrl} target="_blank" rel="noreferrer" className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-blue-400 transition-all text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                                                <FileDown size={14} /> Abrir Material
+                                    <div className="flex items-center gap-4">
+                                        {exam.fileUrl && (
+                                            <a href={exam.fileUrl} target="_blank" rel="noreferrer" className="h-14 px-6 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-all">
+                                                <FileDown size={18} /> Arquivo
                                             </a>
-                                        ) : (
-                                            <span className="text-[10px] text-gray-500 uppercase font-bold">Manual</span>
                                         )}
-                                        {exam.status === ExamStatus.PENDING ? (
-                                            <Button onClick={() => handleUpdateExam(exam, ExamStatus.COMPLETED)} className="rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest">Concluir</Button>
-                                        ) : (
-                                            <span className="text-[10px] font-black text-green-500 uppercase bg-green-500/10 px-6 py-3 rounded-xl border border-green-500/20">Finalizado</span>
-                                        )}
+                                        <Button 
+                                            onClick={() => handleUpdateStatus(exam.id, exam.status === ExamStatus.PENDING ? ExamStatus.IN_PROGRESS : ExamStatus.COMPLETED)} 
+                                            className={`h-14 px-8 ${exam.status === ExamStatus.IN_PROGRESS ? 'bg-green-600' : 'bg-red-600'} rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-2xl`}
+                                        >
+                                            {exam.status === ExamStatus.PENDING ? 'Iniciar' : 'Concluir'}
+                                        </Button>
                                     </div>
                                 </div>
                             ))}
-                            {exams.length === 0 && <p className="text-center text-gray-500 py-10">Nenhum pedido de cópia pendente.</p>}
+                            {exams.filter(e => e.status !== ExamStatus.COMPLETED).length === 0 && (
+                                <div className="text-center py-32 opacity-20 flex flex-col items-center">
+                                    <Layers size={100} className="mb-6" />
+                                    <p className="text-2xl font-black uppercase tracking-[0.3em]">Gráfica Vazia</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
 
-                {/* ALUNOS / TURMAS */}
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <header className="mb-12 flex justify-between items-end">
                             <div>
-                                <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Gestão de Alunos</h1>
-                                <p className="text-gray-400">Gerencie turmas e realize a sincronização oficial com a Gennera.</p>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Base de Alunos</h1>
+                                <p className="text-gray-400 text-lg">Controle da base local de estudantes.</p>
                             </div>
-                            <div className="flex gap-4 w-full md:w-auto">
-                                <div className="relative flex-1 md:flex-initial">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                                    <input className="pl-12 pr-4 py-3 bg-black/40 border border-white/10 rounded-2xl text-white outline-none w-full md:w-64 focus:ring-2 focus:ring-red-600 transition-all" placeholder="Filtrar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                                </div>
-                                <Button onClick={handleSyncGennera} isLoading={isSyncing} variant="outline" className="border-white/10 text-white font-black uppercase text-xs px-6 rounded-xl hover:bg-white/5">
-                                    <RefreshCw size={16} className={`mr-2 ${isSyncing ? 'animate-spin' : ''}`}/> Sincronizar Gennera
-                                </Button>
-                            </div>
+                            <Button className="h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest"><Plus size={16} className="mr-2"/> Adicionar Aluno</Button>
                         </header>
-
-                        {isSyncing && (
-                            <div className="mb-6 p-6 bg-blue-600/10 border border-blue-500/20 rounded-3xl text-blue-400 font-bold text-center animate-pulse flex items-center justify-center gap-4">
-                                <Activity size={24}/> {syncProgress || 'Iniciando integração oficial...'}
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-8">
-                            {['ALL', ...CLASSES].map(cls => {
-                                const count = students.filter(s => cls === 'ALL' || s.className === cls).length;
-                                return (
-                                    <button key={cls} onClick={() => setStudentFilterClass(cls)} className={`p-4 rounded-2xl border transition-all text-left group ${studentFilterClass === cls ? 'bg-red-600 border-red-600 shadow-lg' : 'bg-[#18181b] border-white/5 hover:border-red-600/50'}`}>
-                                        <h4 className={`text-[9px] font-black uppercase tracking-widest ${studentFilterClass === cls ? 'text-red-100' : 'text-gray-500'}`}>{cls === 'ALL' ? 'Total' : 'Turma'}</h4>
-                                        <p className={`text-sm font-black truncate ${studentFilterClass === cls ? 'text-white' : 'text-gray-200'}`}>{cls === 'ALL' ? 'Todos' : cls}</p>
-                                        <p className={`text-[10px] font-bold ${studentFilterClass === cls ? 'text-red-200' : 'text-gray-500'}`}>{count} ALUNOS</p>
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <div className="bg-[#18181b] rounded-3xl border border-white/5 overflow-hidden shadow-2xl">
-                            <table className="w-full text-left">
-                                <thead className="bg-black/40 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-white/5">
-                                    <tr>
-                                        <th className="p-6">Nome do Aluno</th>
-                                        <th className="p-6">Turma</th>
-                                        <th className="p-6">Presença (Hoje)</th>
-                                    </tr>
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                             <table className="w-full text-left">
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5">
+                                    <tr><th className="p-8">Nome do Aluno</th><th className="p-8">Turma</th><th className="p-8">AEE</th><th className="p-8 text-center">Ações</th></tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/5 text-sm">
-                                    {filteredStudents.map(s => (
+                                <tbody className="divide-y divide-white/5">
+                                    {students.map(s => (
                                         <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                                            <td className="p-6 font-bold text-white uppercase">{s.name}</td>
-                                            <td className="p-6 text-gray-400 font-medium uppercase">{s.className}</td>
-                                            <td className="p-6">
-                                                {presentStudentIds.has(s.id) ? (
-                                                    <span className="text-green-500 font-black text-[10px] uppercase bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20">Presente</span>
-                                                ) : (
-                                                    <span className="text-gray-600 font-black text-[10px] uppercase tracking-wider">Ausente</span>
-                                                )}
+                                            <td className="p-8 font-bold text-white uppercase text-sm tracking-tight">{s.name}</td>
+                                            <td className="p-8"><span className="text-[10px] text-gray-400 font-black uppercase border border-white/10 px-4 py-1.5 rounded-full">{s.className}</span></td>
+                                            <td className="p-8">{s.isAEE ? <Heart size={18} className="text-red-500 fill-red-500/20" /> : <span className="text-gray-700">-</span>}</td>
+                                            <td className="p-8 text-center">
+                                                <button className="p-2 text-gray-500 hover:text-white transition-colors"><Settings size={18}/></button>
                                             </td>
                                         </tr>
                                     ))}
-                                    {filteredStudents.length === 0 && (
-                                        <tr><td colSpan={3} className="p-20 text-center text-gray-500">Nenhum aluno encontrado nesta seleção.</td></tr>
-                                    )}
                                 </tbody>
-                            </table>
+                             </table>
                         </div>
                     </div>
                 )}
 
-                {/* CORREÇÃO OMR/OCR */}
-                {activeTab === 'omr' && (
+                {activeTab === 'pei' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8">
-                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Correção Automatizada (OCR)</h1>
-                            <p className="text-gray-400">Capture a foto do gabarito para correção instantânea via I.A.</p>
-                        </header>
-                        
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-1 space-y-6">
-                                <div className="bg-[#18181b] border border-white/10 rounded-3xl p-8 shadow-2xl">
-                                    <h3 className="text-xl font-black text-white uppercase mb-6 flex items-center gap-2"><ClipboardList className="text-brand-500"/> Gabaritos Oficiais</h3>
-                                    <div className="space-y-3">
-                                        {answerKeys.length === 0 && <p className="text-gray-500 text-xs italic">Nenhum gabarito cadastrado no sistema.</p>}
-                                        {answerKeys.map(key => (
-                                            <button key={key.id} onClick={() => { setSelectedKey(key); setOcrResult(null); }} className={`w-full p-4 rounded-2xl border text-left transition-all ${selectedKey?.id === key.id ? 'bg-brand-600 border-brand-600 shadow-lg' : 'bg-black/40 border-white/5 hover:border-brand-500/50'}`}>
-                                                <p className="text-[10px] font-black uppercase text-brand-200 tracking-widest">{key.className}</p>
-                                                <p className="font-bold text-white truncate uppercase">{key.title}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold">{Object.keys(key.answers).length} Questões</p>
-                                            </button>
-                                        ))}
+                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Documentos AEE</h1><p className="text-gray-400 text-lg">Planejamentos Educacionais Individualizados (PEIs) registrados.</p></header>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {peis.map(p => (
+                                <div key={p.id} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl hover:border-red-600/30 transition-all">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="h-14 w-14 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500"><Heart size={28} /></div>
+                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{p.period}</span>
                                     </div>
+                                    <h3 className="font-bold text-white uppercase text-xl leading-tight mb-2">{p.studentName}</h3>
+                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-6">Prof. {p.teacherName} • {p.subject}</p>
+                                    <button className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-gray-300 hover:bg-white/10 transition-all flex items-center justify-center gap-3"><Eye size={18}/> Ver Completo</button>
                                 </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'config' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
+                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Sistema</h1><p className="text-gray-400 text-lg">Configurações de avisos e monitor de TV.</p></header>
+                        <div className="bg-[#18181b] border border-white/5 p-12 rounded-[3rem] shadow-2xl space-y-10">
+                            <div className="flex items-center justify-between p-8 bg-black/40 rounded-[2rem] border border-white/5 shadow-inner">
+                                <span className="font-black text-white uppercase text-xs tracking-[0.2em]">Exibir Banner no Hall</span>
+                                <button onClick={() => setIsBannerActive(!isBannerActive)} className={`w-16 h-10 rounded-full p-1.5 transition-all ${isBannerActive ? 'bg-red-600 shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'bg-gray-700'}`}>
+                                    <div className={`w-7 h-7 bg-white rounded-full shadow-lg transition-all ${isBannerActive ? 'translate-x-6' : ''}`} />
+                                </button>
                             </div>
-
-                            <div className="lg:col-span-2">
-                                {selectedKey ? (
-                                    <div className="bg-[#18181b] border border-white/10 rounded-3xl p-8 shadow-2xl min-h-[500px] flex flex-col relative overflow-hidden">
-                                        <div className="flex justify-between items-start mb-8 relative z-10">
-                                            <div>
-                                                <h3 className="text-2xl font-black text-white uppercase">{selectedKey.title}</h3>
-                                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">{selectedKey.className} • {selectedKey.subject}</p>
-                                            </div>
-                                            <Button variant="outline" className="border-white/10 text-white" onClick={() => setSelectedKey(null)}>Trocar Gabarito</Button>
-                                        </div>
-
-                                        <div className="flex-1 border-4 border-dashed border-white/10 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center group hover:border-brand-600 transition-all relative z-10">
-                                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleOCRProcess} disabled={isAnalyzing} />
-                                            {isAnalyzing ? (
-                                                <div className="flex flex-col items-center gap-4">
-                                                    <Loader2 size={80} className="text-brand-500 animate-spin" />
-                                                    <p className="text-2xl font-black text-white uppercase animate-pulse">Lendo gabarito...</p>
-                                                    <p className="text-gray-500">Aguarde, estamos processando as marcações.</p>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <ScanLine size={100} className="text-gray-700 group-hover:text-brand-500 transition-colors mb-6" />
-                                                    <p className="text-2xl font-black text-white uppercase mb-2">Selecione a Foto do Cartão</p>
-                                                    <p className="text-gray-500 max-w-sm">Use o botão ou arraste a imagem do gabarito preenchido pelo aluno para realizar a leitura.</p>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        {ocrResult && (
-                                            <div className="mt-8 bg-green-600/10 border border-green-500/20 rounded-3xl p-8 animate-in zoom-in-95 relative z-10 shadow-2xl">
-                                                <h4 className="text-xl font-black text-green-500 uppercase mb-6 flex items-center gap-3"><CheckCircle size={24}/> Resultado Identificado</h4>
-                                                <div className="flex justify-between items-center bg-black/40 p-6 rounded-2xl mb-6 border border-white/5">
-                                                    <div>
-                                                        <p className="text-gray-500 text-[10px] font-black uppercase mb-1">ID Aluno</p>
-                                                        <p className="text-white text-2xl font-black uppercase">{ocrResult.studentId || 'NÃO ENCONTRADO'}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-5 md:grid-cols-10 gap-3">
-                                                    {Object.entries(ocrResult.answers).map(([q, ans]) => (
-                                                        <div key={q} className="bg-black/60 p-3 rounded-xl text-center border border-white/5">
-                                                            <p className="text-[10px] text-gray-500 font-black mb-1">Q{q}</p>
-                                                            <p className="text-xl font-black text-white uppercase">{ans as string || '-'}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-brand-600/5 rounded-full blur-3xl pointer-events-none"></div>
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center bg-black/20 border-2 border-dashed border-white/10 rounded-3xl p-20 text-center opacity-40">
-                                        <Layers size={100} className="text-gray-600 mb-8" />
-                                        <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Selecione um Gabarito para Corrigir</h3>
-                                        <p className="text-gray-500 mt-2 max-w-sm mx-auto">Para iniciar a correção automática, primeiro escolha o gabarito de referência na lista lateral.</p>
-                                    </div>
-                                )}
+                            <div className="space-y-4">
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] ml-2">Texto do Aviso na TV</label>
+                                <textarea className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 transition-all shadow-inner" rows={4} value={bannerMsg} onChange={e => setBannerMsg(e.target.value)} placeholder="Digite o aviso para exibição pública..." />
                             </div>
+                            <Button onClick={handleSaveConfig} className="w-full h-18 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-sm shadow-2xl bg-red-600 hover:bg-red-700 active:scale-95 transition-all"><Save size={24} className="mr-3"/> Salvar e Aplicar</Button>
                         </div>
                     </div>
                 )}
