@@ -4,47 +4,20 @@ import { useAuth } from '../context/AuthContext';
 import { 
     getExams, 
     saveExam, 
-    getClassMaterials, 
-    saveClassMaterial,
-    deleteClassMaterial,
-    saveLessonPlan,
-    getLessonPlans,
-    deleteLessonPlan,
-    getStudents,
-    getPEIByStudentAndTeacher,
-    savePEI,
-    uploadClassMaterialFile,
-    getAnswerKeys,
-    saveAnswerKey,
-    deleteAnswerKey,
-    saveCorrection,
-    getCorrections,
+    uploadExamFile,
     listenToSystemConfig
 } from '../services/firebaseService';
-import { analyzeAnswerSheet, generateStructuredQuestions, suggestExamInstructions } from '../services/geminiService';
-import { ExamRequest, ExamStatus, MaterialType, ClassMaterial, LessonPlan, LessonPlanType, Student, PEIDocument, AnswerKey, StudentCorrection, SystemConfig } from '../types';
+import { ExamRequest, ExamStatus } from '../types';
 import { Button } from '../components/Button';
 import { 
-  Plus, UploadCloud, Trash2, Printer, Columns, Save, Edit3, FileText, 
-  BookOpen, CheckCircle, Wand2, Loader2, Sparkles, List, PlusCircle, Layout, FolderUp, 
-  Calendar, Layers, X, Search, ClipboardList, Users, Heart, PenTool, ArrowLeft, Info,
-  Eye, Type, GripVertical, ChevronRight, Settings2, BookOpenCheck,
-  ImageIcon, XCircle, ExternalLink, ScanLine, Target, GraduationCap, MessageCircle
+  Plus, UploadCloud, Printer, Save, Wand2, List, PlusCircle, Layout, X, 
+  Search, Eye, CheckCircle, Loader2, FileText, ImageIcon
 } from 'lucide-react';
 import { CLASSES } from '../constants';
 
-interface Question {
-    id: string;
-    type: 'objective' | 'discursive';
-    statement: string;
-    image?: string; 
-    options: string[];
-    answer?: number;
-}
-
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'provas' | 'create' | 'materials' | 'plans' | 'pei' | 'omr'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create'>('requests');
   const [creationMode, setCreationMode] = useState<'none' | 'upload' | 'create'>('none');
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -55,10 +28,8 @@ export const TeacherDashboard: React.FC = () => {
   const [examGrade, setExamGrade] = useState('');
   const [examSubject, setExamSubject] = useState(user?.subject || '');
   const [examInstructions, setExamInstructions] = useState('');
-  const [numColumns, setNumColumns] = useState<1 | 2>(1);
-  const [showScoreField, setShowScoreField] = useState(true);
   const [printQty, setPrintQty] = useState(30);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -74,10 +45,26 @@ export const TeacherDashboard: React.FC = () => {
     setIsLoading(false);
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files[0]) {
+          setUploadedFile(e.target.files[0]);
+      }
+  };
+
   const finalizeExam = async () => {
       if (!examTitle || !examGrade) return alert("Preencha o título e a turma.");
+      if (creationMode === 'upload' && !uploadedFile) return alert("Selecione um arquivo PDF.");
+      
       setIsSaving(true);
       try {
+          let fileUrl = '';
+          let fileName = 'prova_gerada.pdf';
+
+          if (creationMode === 'upload' && uploadedFile) {
+              fileUrl = await uploadExamFile(uploadedFile, user?.name || 'Professor');
+              fileName = uploadedFile.name;
+          }
+
           const examData: ExamRequest = {
               id: '',
               teacherId: user?.id || '',
@@ -87,16 +74,17 @@ export const TeacherDashboard: React.FC = () => {
               quantity: Number(printQty),
               gradeLevel: examGrade,
               instructions: examInstructions,
-              fileName: 'prova_gerada.pdf',
+              fileName: fileName,
+              fileUrl: fileUrl,
               status: ExamStatus.PENDING,
               createdAt: Date.now(),
               dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
               materialType: 'exam',
-              columns: numColumns,
+              columns: 1,
               headerData: {
                   schoolName: "CENTRO DE ESTUDOS PROF. MANOEL LEITE",
                   showStudentName: true,
-                  showScore: showScoreField
+                  showScore: true
               }
           };
           await saveExam(examData);
@@ -112,60 +100,6 @@ export const TeacherDashboard: React.FC = () => {
       finally { setIsSaving(false); }
   };
 
-  const renderA4Preview = () => (
-      <div className="bg-white shadow-2xl p-12 w-full max-w-[210mm] min-h-[297mm] mx-auto text-black font-serif border border-gray-200 animate-in fade-in duration-500 origin-top">
-          <div className="border-2 border-black p-4 mb-6 relative">
-              <div className="flex justify-between items-start mb-4">
-                  <div className="flex gap-4 items-center">
-                      <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-14 grayscale brightness-0" alt="Logo" />
-                      <div className="border-l-2 border-black pl-4">
-                          <h2 className="text-lg font-black leading-tight uppercase tracking-tight">C.E. Prof. Manoel Leite</h2>
-                          <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Ensino de Qualidade • 10 Anos</p>
-                      </div>
-                  </div>
-                  {showScoreField && (
-                      <div className="border-2 border-black px-4 py-2 text-center">
-                          <p className="text-[8px] font-black uppercase">Nota</p>
-                          <div className="h-6 w-12 border-b border-black"></div>
-                      </div>
-                  )}
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-xs font-bold uppercase mb-2">
-                  <div className="border-b border-black pb-1">Disciplina: {examSubject}</div>
-                  <div className="border-b border-black pb-1">Professor: {user?.name}</div>
-                  <div className="border-b border-black pb-1">Turma: {examGrade}</div>
-                  <div className="border-b border-black pb-1">Data: ____/____/____</div>
-              </div>
-              <div className="border-b border-black pb-1 text-xs font-bold uppercase">Aluno: __________________________________________________________________________</div>
-          </div>
-
-          <h1 className="text-center text-xl font-black uppercase mb-4 underline decoration-double">{examTitle}</h1>
-          {examInstructions && <p className="text-[11px] italic mb-6 border-l-4 border-gray-300 pl-4">{examInstructions}</p>}
-
-          <div className={numColumns === 2 ? "columns-2 gap-8 divide-x divide-gray-200" : ""}>
-              {questions.map((q, idx) => (
-                  <div key={q.id} className="mb-8 break-inside-avoid">
-                      <h4 className="font-bold text-sm mb-2">{idx + 1}. {q.statement || "Questão sem enunciado"}</h4>
-                      {q.type === 'objective' ? (
-                          <ul className="space-y-1 pl-4">
-                              {q.options.map((opt, oIdx) => (
-                                  <li key={oIdx} className="text-xs flex gap-2">
-                                      <span className="font-bold">{String.fromCharCode(65 + oIdx)})</span>
-                                      <span>{opt || "..."}</span>
-                                  </li>
-                              ))}
-                          </ul>
-                      ) : (
-                          <div className="space-y-2 mt-4 opacity-30">
-                               {[1, 2, 3, 4].map(l => <div key={l} className="border-b border-gray-400 h-6"></div>)}
-                          </div>
-                      )}
-                  </div>
-              ))}
-          </div>
-      </div>
-  );
-
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
         <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
@@ -180,12 +114,12 @@ export const TeacherDashboard: React.FC = () => {
             {activeTab === 'requests' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
                     <header className="mb-8">
-                        <h1 className="text-3xl font-bold text-white">Status de Impressão</h1>
+                        <h1 className="text-3xl font-bold text-white">Meus Pedidos</h1>
                         <p className="text-gray-400">Acompanhe suas solicitações enviadas para a gráfica.</p>
                     </header>
-                    <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+                    <div className="bg-[#18181b] rounded-3xl border border-white/10 overflow-hidden shadow-2xl">
                         <table className="w-full text-left">
-                            <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] font-black tracking-widest">
+                            <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5">
                                 <tr>
                                     <th className="p-6">Data</th>
                                     <th className="p-6">Título</th>
@@ -194,17 +128,17 @@ export const TeacherDashboard: React.FC = () => {
                                     <th className="p-6">Status</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-white/5">
                                 {exams.map(e => (
-                                    <tr key={e.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="p-6 text-sm text-gray-500 font-medium">{new Date(e.createdAt).toLocaleDateString()}</td>
-                                        <td className="p-6 font-bold text-gray-800 uppercase">{e.title}</td>
-                                        <td className="p-6"><span className="bg-gray-100 px-3 py-1 rounded-full text-xs font-bold text-gray-600">{e.gradeLevel}</span></td>
-                                        <td className="p-6 font-mono font-bold text-red-600">{e.quantity}</td>
+                                    <tr key={e.id} className="hover:bg-white/5 transition-colors">
+                                        <td className="p-6 text-sm text-gray-400 font-medium">{new Date(e.createdAt).toLocaleDateString()}</td>
+                                        <td className="p-6 font-bold text-white uppercase">{e.title}</td>
+                                        <td className="p-6"><span className="bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-gray-300">{e.gradeLevel}</span></td>
+                                        <td className="p-6 font-mono font-bold text-red-500">{e.quantity}</td>
                                         <td className="p-6">
                                             <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${
-                                                e.status === ExamStatus.PENDING ? 'bg-brand-100 text-brand-700' :
-                                                'bg-green-100 text-green-700'
+                                                e.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500' :
+                                                'bg-green-500/10 text-green-500'
                                             }`}>
                                                 {e.status === ExamStatus.PENDING ? 'Pendente' : 'Concluído'}
                                             </span>
@@ -213,7 +147,7 @@ export const TeacherDashboard: React.FC = () => {
                                 ))}
                                 {exams.length === 0 && !isLoading && (
                                     <tr>
-                                        <td colSpan={5} className="p-10 text-center text-gray-400">Nenhuma solicitação encontrada.</td>
+                                        <td colSpan={5} className="p-20 text-center text-gray-500 uppercase font-black tracking-widest opacity-20">Nenhuma solicitação encontrada</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -231,53 +165,76 @@ export const TeacherDashboard: React.FC = () => {
                                 <p className="text-gray-400 text-lg">Inicie a criação de uma nova avaliação:</p>
                              </div>
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <button onClick={() => setCreationMode('create')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-blue-600 transition-all group">
-                                    <div className="h-24 w-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><Wand2 size={48}/></div>
-                                    <h3 className="text-2xl font-black text-white uppercase mb-4">Gerar Manual/I.A.</h3>
-                                    <p className="text-gray-500">Criar agora com ajuda da inteligência artificial ou manualmente.</p>
+                                <button onClick={() => setCreationMode('create')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-brand-600 transition-all group">
+                                    <div className="h-24 w-24 bg-brand-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><Wand2 size={48}/></div>
+                                    <h3 className="text-2xl font-black text-white uppercase mb-4">Gerar Manual</h3>
+                                    <p className="text-gray-500">Crie o cabeçalho e instruções agora.</p>
                                 </button>
-                                <div className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center opacity-50 cursor-not-allowed">
-                                    <div className="h-24 w-24 bg-gray-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8"><UploadCloud size={48}/></div>
-                                    <h3 className="text-2xl font-black text-white uppercase mb-4">Upload PDF</h3>
-                                    <p className="text-gray-500">Função em desenvolvimento.</p>
-                                </div>
+                                <button onClick={() => setCreationMode('upload')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-blue-600 transition-all group">
+                                    <div className="h-24 w-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><UploadCloud size={48}/></div>
+                                    <h3 className="text-2xl font-black text-white uppercase mb-4">Enviar PDF</h3>
+                                    <p className="text-gray-500">Já tem a prova pronta? Faça o upload aqui.</p>
+                                </button>
                              </div>
                         </div>
                     ) : (
-                        <div className="h-[calc(100vh-180px)] flex gap-8">
-                            <div className="w-[450px] flex flex-col gap-4">
-                                <div className="flex-1 bg-[#18181b] rounded-[2.5rem] border border-white/5 p-8 overflow-y-auto custom-scrollbar shadow-2xl">
-                                    <div className="space-y-6">
-                                        <h3 className="text-xl font-black text-white uppercase flex items-center gap-2"><Layout size={20} className="text-brand-500"/> Configuração</h3>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Título do Exame</label>
-                                            <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Avaliação Bimestral de História" />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Turma</label>
-                                                <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={examGrade} onChange={e => setExamGrade(e.target.value)}>
-                                                    <option value="">Selecione...</option>
-                                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Quantidade</label>
-                                                <input type="number" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Instruções Adicionais</label>
-                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" rows={3} value={examInstructions} onChange={e => setExamInstructions(e.target.value)} placeholder="Ex: Impressão frente e verso..."></textarea>
-                                        </div>
-                                        <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-2xl bg-brand-600 hover:bg-brand-700">
-                                            Enviar para Gráfica
-                                        </Button>
-                                    </div>
+                        <div className="max-w-3xl mx-auto">
+                            <div className="bg-[#18181b] rounded-[2.5rem] border border-white/10 p-10 shadow-2xl">
+                                <div className="flex items-center justify-between mb-10">
+                                    <h3 className="text-2xl font-black text-white uppercase flex items-center gap-4">
+                                        {creationMode === 'upload' ? <UploadCloud className="text-blue-500" /> : <Layout className="text-brand-500" />}
+                                        {creationMode === 'upload' ? 'Upload de Prova' : 'Configuração de Prova'}
+                                    </h3>
+                                    <button onClick={() => setCreationMode('none')} className="text-gray-500 hover:text-white"><X size={32}/></button>
                                 </div>
-                            </div>
-                            <div className="flex-1 bg-black/40 rounded-[3rem] border border-white/10 p-12 overflow-y-auto flex justify-center custom-scrollbar">
-                                {renderA4Preview()}
+
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Título do Exame</label>
+                                        <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Avaliação Mensal de Geografia" />
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
+                                            <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={examGrade} onChange={e => setExamGrade(e.target.value)}>
+                                                <option value="">Selecione...</option>
+                                                {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Qtd. de Cópias</label>
+                                            <input type="number" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
+                                        </div>
+                                    </div>
+
+                                    {creationMode === 'upload' && (
+                                        <div className="bg-black/20 border-2 border-dashed border-white/10 rounded-3xl p-10 text-center hover:border-blue-600 transition-all relative">
+                                            <input type="file" accept=".pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
+                                            {uploadedFile ? (
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <FileText size={48} className="text-blue-500 animate-bounce" />
+                                                    <p className="text-white font-bold uppercase text-sm">{uploadedFile.name}</p>
+                                                    <p className="text-xs text-gray-500">Pronto para envio</p>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <UploadCloud size={48} className="text-gray-600 mb-2" />
+                                                    <p className="text-gray-400 font-bold uppercase text-xs tracking-widest">Clique para selecionar o PDF</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Instruções para a Gráfica</label>
+                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" rows={3} value={examInstructions} onChange={e => setExamInstructions(e.target.value)} placeholder="Ex: Impressão frente e verso, grampeado..."></textarea>
+                                    </div>
+
+                                    <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-2xl bg-brand-600 hover:bg-brand-700 tracking-widest">
+                                        Enviar para Gráfica
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     )}

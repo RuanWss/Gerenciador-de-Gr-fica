@@ -71,7 +71,6 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
                 
                 await batch.commit();
             }
-            // Pequena pausa para evitar sobrecarga no Firestore
             await new Promise(resolve => setTimeout(resolve, 100));
         }
 
@@ -82,60 +81,13 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
     }
 };
 
-// --- USERS ---
-export const getUserProfile = async (uid: string): Promise<User | null> => {
-    const docRef = doc(db, USERS_COLLECTION, uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-        return { id: docSnap.id, ...docSnap.data() } as User;
-    }
-    return null;
-};
-
-export const ensureUserProfile = async (user: User): Promise<void> => {
-    const docRef = doc(db, USERS_COLLECTION, user.id);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) {
-        await setDoc(docRef, {
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            subject: user.subject || '',
-            classes: user.classes || []
-        });
-    }
-};
-
-// --- STUDENTS ---
-export const getStudents = async (): Promise<Student[]> => {
-    const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-};
-
-export const listenToStudents = (callback: (students: Student[]) => void) => {
-    return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
-    }, (error) => console.error("Error listening to students:", error));
-};
-
-export const updateStudent = async (student: Student): Promise<void> => {
-    const { id, ...data } = student;
-    if (!id) return;
-    await setDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data), { merge: true });
-};
-
-export const deleteStudent = async (id: string): Promise<void> => {
-    if (!id) return;
-    await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
-};
-
-export const uploadStudentPhoto = async (file: File, studentId: string): Promise<string> => {
-    const storageRef = ref(storage, `students/${studentId}_${Date.now()}.jpg`);
+// --- EXAMS & FILES ---
+export const uploadExamFile = async (file: File, teacherName: string): Promise<string> => {
+    const storageRef = ref(storage, `exams/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${file.name}`);
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
 };
 
-// --- EXAMS ---
 export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
     let q;
     if (teacherId) {
@@ -160,7 +112,72 @@ export const updateExamStatus = async (examId: string, status: ExamStatus): Prom
     await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
 };
 
-// --- OUTROS ---
+// --- USERS ---
+export const getUserProfile = async (uid: string): Promise<User | null> => {
+    const docRef = doc(db, USERS_COLLECTION, uid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() } as User;
+    }
+    return null;
+};
+
+// Adicionado para corrigir erro no HRDashboard: Cria um novo usuário no Firebase Auth (usando app secundário para não deslogar o admin) e perfil no Firestore.
+export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
+    const secondaryApp = initializeApp(firebaseConfig, `SecondaryApp_${Date.now()}`);
+    const secondaryAuth = getAuth(secondaryApp);
+    try {
+        const userCredential = await createUser(secondaryAuth, email, 'cemal2016');
+        const newUser = userCredential.user;
+        await updateProfileAuth(newUser, { displayName: name });
+        const userRef = doc(db, USERS_COLLECTION, newUser.uid);
+        await setDoc(userRef, {
+            id: newUser.uid,
+            name: name,
+            email: email,
+            role: roles[0],
+            roles: roles,
+            subject: '',
+            classes: []
+        });
+    } finally {
+        await deleteApp(secondaryApp);
+    }
+};
+
+// Adicionado para corrigir erro no HRDashboard: Atualiza os papéis de acesso de um usuário existente via e-mail.
+export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
+    const usersRef = collection(db, USERS_COLLECTION);
+    const q = query(usersRef, where("email", "==", email), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+        const userDoc = snap.docs[0];
+        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), {
+            role: roles[0],
+            roles: roles
+        });
+    }
+};
+
+// --- STUDENTS ---
+export const getStudents = async (): Promise<Student[]> => {
+    const snapshot = await getDocs(collection(db, STUDENTS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+};
+
+export const listenToStudents = (callback: (students: Student[]) => void) => {
+    return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+    }, (error) => console.error("Error listening to students:", error));
+};
+
+export const updateStudent = async (student: Student): Promise<void> => {
+    const { id, ...data } = student;
+    if (!id) return;
+    await setDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data), { merge: true });
+};
+
+// --- OTHERS ---
 export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
     let q;
     if (teacherId) {
@@ -218,6 +235,15 @@ export const deleteLessonPlan = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
 };
 
+export const listenToAttendanceLogs = (dateString: string, callback: (logs: AttendanceLog[]) => void) => {
+    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
+    return onSnapshot(q, (snapshot) => {
+        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
+        logs.sort((a,b) => b.timestamp - a.timestamp);
+        callback(logs);
+    }, (error) => console.error("Error listening to attendance logs:", error));
+};
+
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
     const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("studentId", "==", log.studentId), where("timestamp", ">", fiveMinutesAgo));
@@ -226,15 +252,6 @@ export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     const { id, ...data } = log;
     await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), data);
     return true;
-};
-
-export const listenToAttendanceLogs = (dateString: string, callback: (logs: AttendanceLog[]) => void) => {
-    const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
-    return onSnapshot(q, (snapshot) => {
-        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
-        logs.sort((a,b) => b.timestamp - a.timestamp);
-        callback(logs);
-    }, (error) => console.error("Error listening to attendance logs:", error));
 };
 
 export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
@@ -359,34 +376,6 @@ export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAtte
         logs.sort((a,b) => b.timestamp - a.timestamp);
         callback(logs);
     }, (error) => console.error("Error listening to staff logs:", error));
-};
-
-export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        throw { code: 'auth/email-already-in-use', message: 'Email já está em uso.' };
-    }
-    await addDoc(collection(db, USERS_COLLECTION), {
-        name,
-        email,
-        role: roles[0],
-        roles,
-        subject: '',
-        classes: []
-    });
-};
-
-export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
-    const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-        const userDoc = snap.docs[0];
-        await updateDoc(doc(db, USERS_COLLECTION, userDoc.id), { 
-            roles, 
-            role: roles[0] 
-        });
-    }
 };
 
 export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
