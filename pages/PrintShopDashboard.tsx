@@ -114,17 +114,19 @@ export const PrintShopDashboard: React.FC = () => {
             setStudents(allStudents.sort((a,b) => a.name.localeCompare(b.name)));
             setAllPeis(peis.sort((a,b) => b.updatedAt - a.updatedAt));
             setAnswerKeys(keys);
+        } catch (e) {
+            console.error("Erro ao carregar dados iniciais:", e);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleSyncGennera = async () => {
-        if (!confirm("Isso irá sincronizar todos os alunos e turmas cadastrados no Gennera. Deseja continuar?")) return;
+        if (!confirm("Isso irá buscar todos os alunos e turmas da Gennera. Deseja continuar?")) return;
         setIsSyncing(true);
         try {
             await syncAllDataWithGennera((msg) => setSyncProgress(msg));
-            alert("Sincronização com Gennera finalizada!");
+            alert("Sincronização concluída com sucesso!");
             fetchInitialData();
         } catch (e: any) {
             alert(`Erro na sincronização: ${e.message}`);
@@ -141,7 +143,6 @@ export const PrintShopDashboard: React.FC = () => {
             const result = await analyzeAnswerSheet(e.target.files[0], Object.keys(selectedKey.answers).length);
             setOcrResult(result);
             if (result.studentId) {
-                // Tenta encontrar o aluno
                 const studentFound = students.find(s => s.id === result.studentId);
                 if (studentFound) {
                     alert(`Gabarito identificado para: ${studentFound.name}`);
@@ -162,7 +163,7 @@ export const PrintShopDashboard: React.FC = () => {
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
         <button
             onClick={() => setActiveTab(id as any)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10 hover:text-white'}`}
         >
             <Icon size={18} />
             <span>{label}</span>
@@ -182,7 +183,7 @@ export const PrintShopDashboard: React.FC = () => {
             {/* Sidebar Admin */}
             <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
                 <div className="mb-6">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-2">Painel Gestão</p>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-2">Painel de Gestão</p>
                     <SidebarItem id="exams" label="Gráfica / Cópias" icon={Printer} />
                     <SidebarItem id="students" label="Alunos / Turmas" icon={Users} />
                     <SidebarItem id="omr" label="Correção OCR" icon={ScanLine} />
@@ -192,13 +193,13 @@ export const PrintShopDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-transparent">
                 {/* GRÁFICA / CÓPIAS */}
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8">
                             <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Pedidos da Gráfica</h1>
-                            <p className="text-gray-400">Gerenciamento de impressões pendentes dos professores.</p>
+                            <p className="text-gray-400">Acompanhe as solicitações de impressão enviadas pelos professores.</p>
                         </header>
                         <div className="grid grid-cols-1 gap-4">
                             {exams.map(exam => (
@@ -219,13 +220,14 @@ export const PrintShopDashboard: React.FC = () => {
                                             <span className="text-[10px] text-gray-500 uppercase font-bold">Manual</span>
                                         )}
                                         {exam.status === ExamStatus.PENDING ? (
-                                            <Button onClick={() => handleUpdateExam(exam, ExamStatus.COMPLETED)} className="rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest">Finalizar</Button>
+                                            <Button onClick={() => handleUpdateExam(exam, ExamStatus.COMPLETED)} className="rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest">Concluir</Button>
                                         ) : (
-                                            <span className="text-[10px] font-black text-green-500 uppercase bg-green-500/10 px-6 py-3 rounded-xl border border-green-500/20">Concluído</span>
+                                            <span className="text-[10px] font-black text-green-500 uppercase bg-green-500/10 px-6 py-3 rounded-xl border border-green-500/20">Finalizado</span>
                                         )}
                                     </div>
                                 </div>
                             ))}
+                            {exams.length === 0 && <p className="text-center text-gray-500 py-10">Nenhum pedido de cópia pendente.</p>}
                         </div>
                     </div>
                 )}
@@ -233,17 +235,17 @@ export const PrintShopDashboard: React.FC = () => {
                 {/* ALUNOS / TURMAS */}
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex justify-between items-center">
+                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div>
                                 <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Gestão de Alunos</h1>
-                                <p className="text-gray-400">Sincronização com Gennera e monitoramento de presença.</p>
+                                <p className="text-gray-400">Gerencie turmas e realize a sincronização oficial com a Gennera.</p>
                             </div>
-                            <div className="flex gap-4">
-                                <div className="relative">
+                            <div className="flex gap-4 w-full md:w-auto">
+                                <div className="relative flex-1 md:flex-initial">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                                    <input className="pl-10 pr-4 py-2 bg-black/40 border border-white/10 rounded-xl text-white outline-none w-64" placeholder="Filtrar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                    <input className="pl-10 pr-4 py-2 bg-black/40 border border-white/10 rounded-xl text-white outline-none w-full md:w-64" placeholder="Filtrar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                                 </div>
-                                <Button onClick={handleSyncGennera} isLoading={isSyncing} variant="outline" className="border-white/10 text-white font-black uppercase text-xs px-6 rounded-xl hover:bg-white/5 transition-all">
+                                <Button onClick={handleSyncGennera} isLoading={isSyncing} variant="outline" className="border-white/10 text-white font-black uppercase text-xs px-6 rounded-xl hover:bg-white/5">
                                     <RefreshCw size={16} className={`mr-2 ${isSyncing ? 'animate-spin' : ''}`}/> Sincronizar Gennera
                                 </Button>
                             </div>
@@ -251,7 +253,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                         {isSyncing && (
                             <div className="mb-6 p-6 bg-blue-600/10 border border-blue-500/20 rounded-3xl text-blue-400 font-bold text-center animate-pulse flex items-center justify-center gap-4">
-                                <Activity size={24}/> {syncProgress || 'Iniciando integração...'}
+                                <Activity size={24}/> {syncProgress || 'Iniciando integração oficial...'}
                             </div>
                         )}
 
@@ -259,7 +261,7 @@ export const PrintShopDashboard: React.FC = () => {
                             {['ALL', ...CLASSES].map(cls => {
                                 const count = students.filter(s => cls === 'ALL' || s.className === cls).length;
                                 return (
-                                    <button key={cls} onClick={() => setStudentFilterClass(cls)} className={`p-4 rounded-2xl border transition-all text-left group ${studentFilterClass === cls ? 'bg-red-600 border-red-600 shadow-lg shadow-red-900/20' : 'bg-[#18181b] border-white/5 hover:border-red-600/50'}`}>
+                                    <button key={cls} onClick={() => setStudentFilterClass(cls)} className={`p-4 rounded-2xl border transition-all text-left group ${studentFilterClass === cls ? 'bg-red-600 border-red-600 shadow-lg' : 'bg-[#18181b] border-white/5 hover:border-red-600/50'}`}>
                                         <h4 className={`text-[9px] font-black uppercase tracking-widest ${studentFilterClass === cls ? 'text-red-100' : 'text-gray-500'}`}>{cls === 'ALL' ? 'Total' : 'Turma'}</h4>
                                         <p className={`text-sm font-black truncate ${studentFilterClass === cls ? 'text-white' : 'text-gray-200'}`}>{cls === 'ALL' ? 'Todos' : cls}</p>
                                         <p className={`text-[10px] font-bold ${studentFilterClass === cls ? 'text-red-200' : 'text-gray-500'}`}>{count} ALUNOS</p>
@@ -274,7 +276,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     <tr>
                                         <th className="p-6">Nome do Aluno</th>
                                         <th className="p-6">Turma</th>
-                                        <th className="p-6">Status Presença (Hoje)</th>
+                                        <th className="p-6">Presença (Hoje)</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5 text-sm">
@@ -286,11 +288,14 @@ export const PrintShopDashboard: React.FC = () => {
                                                 {presentStudentIds.has(s.id) ? (
                                                     <span className="text-green-500 font-black text-[10px] uppercase bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20">Presente</span>
                                                 ) : (
-                                                    <span className="text-gray-600 font-black text-[10px] uppercase">Ausente</span>
+                                                    <span className="text-gray-600 font-black text-[10px] uppercase tracking-wider">Ausente</span>
                                                 )}
                                             </td>
                                         </tr>
                                     ))}
+                                    {filteredStudents.length === 0 && (
+                                        <tr><td colSpan={3} className="p-20 text-center text-gray-500">Nenhum aluno encontrado nesta seleção.</td></tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -301,8 +306,8 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'omr' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-8">
-                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Correção de Gabaritos (OCR)</h1>
-                            <p className="text-gray-400">Utilize a I.A. Gemini para corrigir cartões-resposta escaneados ou fotografados.</p>
+                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Correção Automatizada (OCR)</h1>
+                            <p className="text-gray-400">Capture a foto do gabarito para correção instantânea via I.A.</p>
                         </header>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -310,12 +315,12 @@ export const PrintShopDashboard: React.FC = () => {
                                 <div className="bg-[#18181b] border border-white/10 rounded-3xl p-8 shadow-2xl">
                                     <h3 className="text-xl font-black text-white uppercase mb-6 flex items-center gap-2"><ClipboardList className="text-brand-500"/> Gabaritos Oficiais</h3>
                                     <div className="space-y-3">
-                                        {answerKeys.length === 0 && <p className="text-gray-500 text-sm italic">Nenhum gabarito cadastrado pelos professores.</p>}
+                                        {answerKeys.length === 0 && <p className="text-gray-500 text-xs italic">Nenhum gabarito cadastrado no sistema.</p>}
                                         {answerKeys.map(key => (
                                             <button key={key.id} onClick={() => { setSelectedKey(key); setOcrResult(null); }} className={`w-full p-4 rounded-2xl border text-left transition-all ${selectedKey?.id === key.id ? 'bg-brand-600 border-brand-600 shadow-lg' : 'bg-black/40 border-white/5 hover:border-brand-500/50'}`}>
                                                 <p className="text-[10px] font-black uppercase text-brand-200 tracking-widest">{key.className}</p>
                                                 <p className="font-bold text-white truncate uppercase">{key.title}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold">{Object.keys(key.answers).length} Questões de Múltipla Escolha</p>
+                                                <p className="text-[10px] text-gray-400 font-bold">{Object.keys(key.answers).length} Questões</p>
                                             </button>
                                         ))}
                                     </div>
@@ -328,9 +333,9 @@ export const PrintShopDashboard: React.FC = () => {
                                         <div className="flex justify-between items-start mb-8 relative z-10">
                                             <div>
                                                 <h3 className="text-2xl font-black text-white uppercase">{selectedKey.title}</h3>
-                                                <p className="text-gray-400 font-bold uppercase text-xs tracking-wider">{selectedKey.className} • {selectedKey.subject}</p>
+                                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">{selectedKey.className} • {selectedKey.subject}</p>
                                             </div>
-                                            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5" onClick={() => setSelectedKey(null)}>Trocar Gabarito</Button>
+                                            <Button variant="outline" className="border-white/10 text-white" onClick={() => setSelectedKey(null)}>Trocar Gabarito</Button>
                                         </div>
 
                                         <div className="flex-1 border-4 border-dashed border-white/10 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center group hover:border-brand-600 transition-all relative z-10">
@@ -338,34 +343,30 @@ export const PrintShopDashboard: React.FC = () => {
                                             {isAnalyzing ? (
                                                 <div className="flex flex-col items-center gap-4">
                                                     <Loader2 size={80} className="text-brand-500 animate-spin" />
-                                                    <p className="text-2xl font-black text-white uppercase animate-pulse">Analisando Gabarito com I.A...</p>
-                                                    <p className="text-gray-500">Isso pode levar alguns segundos.</p>
+                                                    <p className="text-2xl font-black text-white uppercase animate-pulse">Lendo gabarito...</p>
+                                                    <p className="text-gray-500">Aguarde, estamos processando as marcações.</p>
                                                 </div>
                                             ) : (
                                                 <>
                                                     <ScanLine size={100} className="text-gray-700 group-hover:text-brand-500 transition-colors mb-6" />
                                                     <p className="text-2xl font-black text-white uppercase mb-2">Selecione a Foto do Cartão</p>
-                                                    <p className="text-gray-500 max-w-sm">Capture a imagem do cartão-resposta. Garanta que o cabeçalho e todas as questões estejam nítidos.</p>
+                                                    <p className="text-gray-500 max-w-sm">Use o botão ou arraste a imagem do gabarito preenchido pelo aluno para realizar a leitura.</p>
                                                 </>
                                             )}
                                         </div>
 
                                         {ocrResult && (
                                             <div className="mt-8 bg-green-600/10 border border-green-500/20 rounded-3xl p-8 animate-in zoom-in-95 relative z-10 shadow-2xl">
-                                                <h4 className="text-xl font-black text-green-500 uppercase mb-6 flex items-center gap-3"><CheckCircle size={24}/> Resultado da Identificação</h4>
-                                                <div className="flex justify-between items-center bg-black/40 p-6 rounded-2xl mb-6 border border-white/5 shadow-inner">
+                                                <h4 className="text-xl font-black text-green-500 uppercase mb-6 flex items-center gap-3"><CheckCircle size={24}/> Resultado Identificado</h4>
+                                                <div className="flex justify-between items-center bg-black/40 p-6 rounded-2xl mb-6 border border-white/5">
                                                     <div>
-                                                        <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">ID Aluno Identificado</p>
-                                                        <p className="text-white text-2xl font-black uppercase tracking-tighter">{ocrResult.studentId || 'NÃO IDENTIFICADO'}</p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">Nota Preliminar</p>
-                                                        <p className="text-brand-500 text-3xl font-black">---</p>
+                                                        <p className="text-gray-500 text-[10px] font-black uppercase mb-1">ID Aluno</p>
+                                                        <p className="text-white text-2xl font-black uppercase">{ocrResult.studentId || 'NÃO ENCONTRADO'}</p>
                                                     </div>
                                                 </div>
-                                                <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-3">
+                                                <div className="grid grid-cols-5 md:grid-cols-10 gap-3">
                                                     {Object.entries(ocrResult.answers).map(([q, ans]) => (
-                                                        <div key={q} className="bg-black/60 p-3 rounded-xl text-center border border-white/5 group hover:border-brand-500 transition-all">
+                                                        <div key={q} className="bg-black/60 p-3 rounded-xl text-center border border-white/5">
                                                             <p className="text-[10px] text-gray-500 font-black mb-1">Q{q}</p>
                                                             <p className="text-xl font-black text-white uppercase">{ans as string || '-'}</p>
                                                         </div>
@@ -373,20 +374,21 @@ export const PrintShopDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                         )}
-                                        
                                         <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-brand-600/5 rounded-full blur-3xl pointer-events-none"></div>
                                     </div>
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center bg-black/20 border-2 border-dashed border-white/10 rounded-3xl p-20 text-center opacity-40">
                                         <Layers size={100} className="text-gray-600 mb-8" />
-                                        <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Aguardando Seleção de Gabarito</h3>
-                                        <p className="text-gray-500 mt-2 max-w-sm mx-auto">Escolha o gabarito de referência na lista lateral para iniciar o processamento de correção por visão computacional.</p>
+                                        <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Selecione um Gabarito para Corrigir</h3>
+                                        <p className="text-gray-500 mt-2 max-w-sm mx-auto">Para iniciar a correção automática, primeiro escolha o gabarito de referência na lista lateral.</p>
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
                 )}
+                
+                {/* Outras abas (Agenda, PEI, Config) já implementadas no arquivo base */}
             </div>
         </div>
     );

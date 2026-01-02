@@ -46,7 +46,12 @@ export const TeacherDashboard: React.FC = () => {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
-          setUploadedFile(e.target.files[0]);
+          const file = e.target.files[0];
+          if (file.type !== 'application/pdf') {
+              alert("Por favor, selecione apenas arquivos PDF.");
+              return;
+          }
+          setUploadedFile(file);
       }
   };
 
@@ -57,7 +62,7 @@ export const TeacherDashboard: React.FC = () => {
       setIsSaving(true);
       try {
           let fileUrl = '';
-          let fileName = 'prova_gerada.pdf';
+          let fileName = 'manual_header_request.pdf';
 
           if (creationMode === 'upload' && uploadedFile) {
               fileUrl = await uploadExamFile(uploadedFile, user?.name || 'Professor');
@@ -68,7 +73,7 @@ export const TeacherDashboard: React.FC = () => {
               id: '',
               teacherId: user?.id || '',
               teacherName: user?.name || '',
-              subject: examSubject,
+              subject: examSubject || 'Geral',
               title: examTitle,
               quantity: Number(printQty),
               gradeLevel: examGrade,
@@ -239,7 +244,7 @@ export const TeacherDashboard: React.FC = () => {
                                     </div>
 
                                     <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-2xl bg-brand-600 hover:bg-brand-700 tracking-widest">
-                                        Enviar para Impressão
+                                        {isSaving ? "Enviando..." : "Enviar para Impressão"}
                                     </Button>
                                 </div>
                                 <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>

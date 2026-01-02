@@ -44,44 +44,57 @@ const sanitizeForFirestore = (obj: any) => {
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Buscando turmas na Gennera...");
+        if (onProgress) onProgress("Buscando turmas ativas na Gennera...");
         const classes = await fetchGenneraClasses();
         
         if (!classes || classes.length === 0) {
-            throw new Error("Nenhuma turma encontrada na API Gennera.");
+            throw new Error("A API Gennera não retornou nenhuma turma ativa no momento.");
         }
 
+        if (onProgress) onProgress(`Sincronizando ${classes.length} turmas encontradas...`);
+        
         let totalSynced = 0;
+
         for (const cls of classes) {
-            if (onProgress) onProgress(`Sincronizando: ${cls.name}...`);
+            if (onProgress) onProgress(`Baixando alunos da turma: ${cls.name}...`);
             
             const studentsFromGennera = await fetchGenneraStudentsByClass(cls.id, cls.name);
             
             if (studentsFromGennera && studentsFromGennera.length > 0) {
-                const batch = writeBatch(db);
-                for (const student of studentsFromGennera) {
-                    const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                    batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
-                    totalSynced++;
+                // Batch writing to be more efficient
+                const chunks = [];
+                for (let i = 0; i < studentsFromGennera.length; i += 50) {
+                    chunks.push(studentsFromGennera.slice(i, i + 50));
                 }
-                await batch.commit();
+
+                for (const chunk of chunks) {
+                    const batch = writeBatch(db);
+                    for (const student of chunk) {
+                        const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
+                        batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
+                        totalSynced++;
+                    }
+                    await batch.commit();
+                }
             }
-            // Pequeno delay para evitar rate limits
+            // Delay anti-throttling
             await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        if (onProgress) onProgress(`Sucesso! ${totalSynced} alunos atualizados.`);
+        if (onProgress) onProgress(`Sincronização concluída! ${totalSynced} alunos atualizados.`);
     } catch (error: any) {
-        console.error("[Gennera Sync Error]", error);
-        throw new Error(error.message || "Erro na sincronização.");
+        console.error("[Firebase Sync Error]", error);
+        throw new Error(error.message || "Erro inesperado durante o processo de sincronização.");
     }
 };
 
-// --- EXAMS ---
+// --- EXAMS & FILES ---
 export const uploadExamFile = async (file: File, teacherName: string): Promise<string> => {
-    const storageRef = ref(storage, `exams/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
+    // Sanitize filename
+    const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+    const storageRef = ref(storage, `exams/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
 };
 
 export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
@@ -97,10 +110,11 @@ export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
 
 export const saveExam = async (exam: ExamRequest): Promise<void> => {
     const { id, ...data } = exam;
+    const sanitizedData = sanitizeForFirestore(data);
     if (id) {
-        await setDoc(doc(db, EXAMS_COLLECTION, id), data);
+        await setDoc(doc(db, EXAMS_COLLECTION, id), sanitizedData);
     } else {
-        await addDoc(collection(db, EXAMS_COLLECTION), data);
+        await addDoc(collection(db, EXAMS_COLLECTION), sanitizedData);
     }
 };
 
