@@ -1,8 +1,7 @@
 
 import { Student, SchoolClass } from '../types';
 
-// URL da Cloud Function no Google Cloud fornecida pelo usuário
-// Nota: O Cloud Run espera o parâmetro 'url' para redirecionar o tráfego
+// URL do seu Proxy no Cloud Run
 const CORS_PROXY = 'https://cors-proxy-376976972882.europe-west1.run.app';
 const BASE_URL = 'https://api2.gennera.com.br/api/v1';
 const INSTITUTION_ID = '891';
@@ -10,8 +9,6 @@ const API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJuYW1lIjoiVXN1w6FyaW8g
 
 async function genneraRequest(endpoint: string) {
   const targetUrl = `${BASE_URL}${endpoint}`;
-  // O proxy no GCP espera a URL de destino no parâmetro 'url'
-  // Adicionamos encodeURIComponent para garantir que caracteres especiais na URL de destino não quebrem o proxy
   const proxiedUrl = `${CORS_PROXY}?url=${encodeURIComponent(targetUrl)}`;
   
   try {
@@ -19,19 +16,17 @@ async function genneraRequest(endpoint: string) {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${API_TOKEN}`,
-        'X-Api-Key': API_TOKEN,
         'Accept': 'application/json',
         'Content-Type': 'application/json'
       }
     });
 
     if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Erro Gennera (${response.status}):`, errorText.substring(0, 200));
-        throw new Error(`Falha no Proxy de CORS (Status: ${response.status}). Verifique os logs do Cloud Run.`);
+        throw new Error(`Erro API Gennera: ${response.status}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    return data;
   } catch (error: any) {
     console.error("[Gennera Fetch Error]", error);
     throw error;
@@ -41,11 +36,12 @@ async function genneraRequest(endpoint: string) {
 export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/unidades-letivas/turmas`);
-    const list = Array.isArray(data) ? data : (data.lista || data.data || []);
+    // A API do Gennera pode retornar o array diretamente ou dentro de uma propriedade 'data' ou 'lista'
+    const list = Array.isArray(data) ? data : (data.data || data.lista || []);
     
     return list.map((t: any) => ({
-      id: String(t.id || t.idTurma || t.codigo),
-      name: String(t.sigla || t.nome || t.descricao || `Turma ${t.id}`).toUpperCase(),
+      id: String(t.id || t.idTurma),
+      name: String(t.sigla || t.nome || t.descricao).toUpperCase(),
       shift: (t.turno || '').toString().toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
     }));
   } catch (error: any) {
@@ -56,11 +52,11 @@ export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
 export const fetchGenneraStudentsByClass = async (classId: string, className: string): Promise<Student[]> => {
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/turmas/${classId}/alunos`);
-    const list = Array.isArray(data) ? data : (data.lista || data.data || []);
+    const list = Array.isArray(data) ? data : (data.data || data.lista || []);
 
     return list.map((a: any) => ({
       id: String(a.id_matricula || a.id_aluno || a.id),
-      name: String(a.nome_pessoa || a.nome_aluno || a.nome || "SEM NOME").trim().toUpperCase(),
+      name: String(a.nome_pessoa || a.nome_aluno || a.nome).trim().toUpperCase(),
       classId: String(classId),
       className: String(className),
       photoUrl: a.url_foto || a.foto || ''
