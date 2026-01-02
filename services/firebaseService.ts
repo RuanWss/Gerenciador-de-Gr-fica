@@ -56,7 +56,8 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
         let totalSynced = 0;
 
         for (const cls of classes) {
-            if (onProgress) onProgress(`Turma: ${cls.name}...`);
+            if (onProgress) onProgress(`Processando Turma: ${cls.name}...`);
+            
             const studentsFromGennera = await fetchGenneraStudentsByClass(cls.id, cls.name);
             
             if (studentsFromGennera && studentsFromGennera.length > 0) {
@@ -70,6 +71,8 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
                 
                 await batch.commit();
             }
+            // Pequena pausa para evitar sobrecarga no Firestore
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
 
         if (onProgress) onProgress(`Sincronização concluída! ${totalSynced} alunos atualizados.`);
@@ -157,7 +160,7 @@ export const updateExamStatus = async (examId: string, status: ExamStatus): Prom
     await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
 };
 
-// --- OUTROS --- (Mantendo os demais serviços)
+// --- OUTROS ---
 export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
     let q;
     if (teacherId) {
@@ -234,7 +237,6 @@ export const listenToAttendanceLogs = (dateString: string, callback: (logs: Atte
     }, (error) => console.error("Error listening to attendance logs:", error));
 };
 
-// Added missing listenToSchedule export to handle real-time schedule updates for the PublicSchedule page.
 export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
@@ -363,7 +365,7 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
     const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
     const snap = await getDocs(q);
     if (!snap.empty) {
-        throw { code: 'auth/email-already-in-use', message: 'Email already in use' };
+        throw { code: 'auth/email-already-in-use', message: 'Email já está em uso.' };
     }
     await addDoc(collection(db, USERS_COLLECTION), {
         name,

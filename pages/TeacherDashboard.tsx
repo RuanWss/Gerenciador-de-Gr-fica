@@ -105,7 +105,10 @@ export const TeacherDashboard: React.FC = () => {
           setCreationMode('none');
           setActiveTab('requests');
           fetchData();
-      } catch (e) { alert("Erro ao salvar prova."); }
+      } catch (e) { 
+          console.error(e);
+          alert("Erro ao salvar prova."); 
+      }
       finally { setIsSaving(false); }
   };
 
@@ -114,7 +117,7 @@ export const TeacherDashboard: React.FC = () => {
           <div className="border-2 border-black p-4 mb-6 relative">
               <div className="flex justify-between items-start mb-4">
                   <div className="flex gap-4 items-center">
-                      <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-14 grayscale brightness-0" />
+                      <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-14 grayscale brightness-0" alt="Logo" />
                       <div className="border-l-2 border-black pl-4">
                           <h2 className="text-lg font-black leading-tight uppercase tracking-tight">C.E. Prof. Manoel Leite</h2>
                           <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Ensino de Qualidade • 10 Anos</p>
@@ -200,7 +203,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <td className="p-6 font-mono font-bold text-red-600">{e.quantity}</td>
                                         <td className="p-6">
                                             <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${
-                                                e.status === ExamStatus.PENDING ? 'bg-yellow-100 text-yellow-700' :
+                                                e.status === ExamStatus.PENDING ? 'bg-brand-100 text-brand-700' :
                                                 'bg-green-100 text-green-700'
                                             }`}>
                                                 {e.status === ExamStatus.PENDING ? 'Pendente' : 'Concluído'}
@@ -208,6 +211,11 @@ export const TeacherDashboard: React.FC = () => {
                                         </td>
                                     </tr>
                                 ))}
+                                {exams.length === 0 && !isLoading && (
+                                    <tr>
+                                        <td colSpan={5} className="p-10 text-center text-gray-400">Nenhuma solicitação encontrada.</td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -262,7 +270,7 @@ export const TeacherDashboard: React.FC = () => {
                                             <label className="block text-[10px] font-black text-gray-500 uppercase mb-2">Instruções Adicionais</label>
                                             <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" rows={3} value={examInstructions} onChange={e => setExamInstructions(e.target.value)} placeholder="Ex: Impressão frente e verso..."></textarea>
                                         </div>
-                                        <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-2xl bg-red-600 hover:bg-red-700">
+                                        <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-2xl bg-brand-600 hover:bg-brand-700">
                                             Enviar para Gráfica
                                         </Button>
                                     </div>
@@ -276,5 +284,6 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
         </div>
+    </div>
   );
 };
