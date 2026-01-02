@@ -44,44 +44,40 @@ const sanitizeForFirestore = (obj: any) => {
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Buscando turmas ativas na Gennera...");
+        if (onProgress) onProgress("Buscando turmas na Gennera...");
         const classes = await fetchGenneraClasses();
         
         if (!classes || classes.length === 0) {
-            throw new Error("A API Gennera não retornou nenhuma turma ativa.");
+            throw new Error("Nenhuma turma encontrada na API Gennera.");
         }
 
-        if (onProgress) onProgress(`Sincronizando ${classes.length} turmas encontradas...`);
-        
         let totalSynced = 0;
-
         for (const cls of classes) {
-            if (onProgress) onProgress(`Processando Turma: ${cls.name}...`);
+            if (onProgress) onProgress(`Sincronizando: ${cls.name}...`);
             
             const studentsFromGennera = await fetchGenneraStudentsByClass(cls.id, cls.name);
             
             if (studentsFromGennera && studentsFromGennera.length > 0) {
                 const batch = writeBatch(db);
-                
                 for (const student of studentsFromGennera) {
                     const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
                     batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
                     totalSynced++;
                 }
-                
                 await batch.commit();
             }
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Pequeno delay para evitar rate limits
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
 
-        if (onProgress) onProgress(`Sincronização concluída! ${totalSynced} alunos atualizados.`);
+        if (onProgress) onProgress(`Sucesso! ${totalSynced} alunos atualizados.`);
     } catch (error: any) {
-        console.error("[Firebase Sync Error]", error);
-        throw new Error(error.message || "Erro durante o processo de sincronização.");
+        console.error("[Gennera Sync Error]", error);
+        throw new Error(error.message || "Erro na sincronização.");
     }
 };
 
-// --- EXAMS & FILES ---
+// --- EXAMS ---
 export const uploadExamFile = async (file: File, teacherName: string): Promise<string> => {
     const storageRef = ref(storage, `exams/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${file.name}`);
     await uploadBytes(storageRef, file);
@@ -122,7 +118,6 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     return null;
 };
 
-// Adicionado para corrigir erro no HRDashboard: Cria um novo usuário no Firebase Auth (usando app secundário para não deslogar o admin) e perfil no Firestore.
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
     const secondaryApp = initializeApp(firebaseConfig, `SecondaryApp_${Date.now()}`);
     const secondaryAuth = getAuth(secondaryApp);
@@ -145,7 +140,6 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
     }
 };
 
-// Adicionado para corrigir erro no HRDashboard: Atualiza os papéis de acesso de um usuário existente via e-mail.
 export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {
     const usersRef = collection(db, USERS_COLLECTION);
     const q = query(usersRef, where("email", "==", email), limit(1));

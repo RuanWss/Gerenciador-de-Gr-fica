@@ -1,7 +1,7 @@
 
 import { Student, SchoolClass } from '../types';
 
-// URL do seu Proxy no Cloud Run
+// URL do seu Proxy no Cloud Run para evitar erros de CORS
 const CORS_PROXY = 'https://cors-proxy-376976972882.europe-west1.run.app';
 const BASE_URL = 'https://api2.gennera.com.br/api/v1';
 const INSTITUTION_ID = '891';
@@ -22,11 +22,11 @@ async function genneraRequest(endpoint: string) {
     });
 
     if (!response.ok) {
-        throw new Error(`Erro API Gennera: ${response.status}`);
+        const errText = await response.text();
+        throw new Error(`Erro API Gennera: ${response.status} - ${errText}`);
     }
 
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error: any) {
     console.error("[Gennera Fetch Error]", error);
     throw error;
@@ -36,16 +36,15 @@ async function genneraRequest(endpoint: string) {
 export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
   try {
     const data = await genneraRequest(`/institutions/${INSTITUTION_ID}/unidades-letivas/turmas`);
-    // A API do Gennera pode retornar o array diretamente ou dentro de uma propriedade 'data' ou 'lista'
     const list = Array.isArray(data) ? data : (data.data || data.lista || []);
     
     return list.map((t: any) => ({
-      id: String(t.id || t.idTurma),
+      id: String(t.id || t.idTurma || t.codigo),
       name: String(t.sigla || t.nome || t.descricao).toUpperCase(),
       shift: (t.turno || '').toString().toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
-    }));
+    })).filter((t: any) => t.id && t.name);
   } catch (error: any) {
-    throw new Error(`Falha ao buscar turmas: ${error.message}`);
+    throw new Error(`Falha ao buscar turmas Gennera: ${error.message}`);
   }
 };
 
@@ -60,9 +59,9 @@ export const fetchGenneraStudentsByClass = async (classId: string, className: st
       classId: String(classId),
       className: String(className),
       photoUrl: a.url_foto || a.foto || ''
-    }));
+    })).filter((a: any) => a.id && a.name);
   } catch (error) {
-    console.warn(`Erro ao buscar alunos da turma ${className}`);
+    console.warn(`[Gennera] Erro ao buscar alunos da turma ${className}:`, error);
     return [];
   }
 };
