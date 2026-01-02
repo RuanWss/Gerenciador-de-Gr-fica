@@ -44,34 +44,38 @@ const sanitizeForFirestore = (obj: any) => {
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Conectando ao Google Cloud Run...");
+        if (onProgress) onProgress("Iniciando conexão com Gennera via Cloud Run...");
         const classes = await fetchGenneraClasses();
         
         if (onProgress) onProgress(`Sincronizando ${classes.length} turmas...`);
         
         const batch = writeBatch(db);
         for (const cls of classes) {
-            const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
-            students.forEach(student => {
-                const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
-            });
+            try {
+                const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
+                students.forEach(student => {
+                    const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
+                    batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
+                });
+            } catch (e) {
+                console.warn(`Falha ao sincronizar alunos da turma ${cls.name}`);
+            }
         }
         await batch.commit();
-        if (onProgress) onProgress("Sincronização concluída!");
+        if (onProgress) onProgress("Base de dados sincronizada com sucesso!");
     } catch (error) {
-        console.error(error);
-        throw new Error("Falha na sincronização Gennera/Cloud Run.");
+        console.error("Erro na sincronização:", error);
+        throw new Error("Falha na sincronização Gennera/Cloud Run. Verifique a conexão.");
     }
 };
 
-// --- LISTENERS ---
+// --- LISTENERS WITH ERROR HANDLING ---
 
 export const listenToExams = (callback: (exams: ExamRequest[]) => void) => {
     return onSnapshot(collection(db, EXAMS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExamRequest)));
     }, (error) => {
-        if (error.code !== 'permission-denied') console.error("Exams Listener:", error);
+        if (error.code !== 'permission-denied') console.error("Erro Exams:", error);
     });
 };
 
@@ -79,7 +83,7 @@ export const listenToStudents = (callback: (students: Student[]) => void) => {
     return onSnapshot(collection(db, STUDENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
     }, (error) => {
-        if (error.code !== 'permission-denied') console.error("Students Listener:", error);
+        if (error.code !== 'permission-denied') console.error("Erro Students:", error);
     });
 };
 
@@ -92,7 +96,7 @@ export const listenToSystemConfig = (callback: (config: SystemConfig) => void) =
             callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
         }
     }, (error) => {
-        if (error.code !== 'permission-denied') console.warn("Config Listener:", error);
+        if (error.code !== 'permission-denied') console.warn("Erro Config (Aguardando Auth):", error.message);
     });
 };
 
@@ -100,7 +104,7 @@ export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
     return onSnapshot(collection(db, EVENTS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
     }, (error) => {
-        if (error.code !== 'permission-denied') console.error("Events Listener:", error);
+        if (error.code !== 'permission-denied') console.error("Erro Events:", error);
     });
 };
 
@@ -108,7 +112,7 @@ export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) 
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
     }, (error) => {
-        if (error.code !== 'permission-denied') console.error("Schedule Listener:", error);
+        if (error.code !== 'permission-denied') console.error("Erro Schedule:", error);
     });
 };
 
@@ -116,12 +120,16 @@ export const listenToAttendanceLogs = (dateString: string, callback: (logs: Atte
     const q = query(collection(db, ATTENDANCE_LOGS_COLLECTION), where("dateString", "==", dateString));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro Attendance:", error);
     });
 };
 
 export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
     return onSnapshot(collection(db, STAFF_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro Staff:", error);
     });
 };
 
@@ -129,6 +137,8 @@ export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAtte
     const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString), orderBy("timestamp", "desc"));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro StaffLogs:", error);
     });
 };
 
@@ -136,23 +146,32 @@ export const listenToClassMaterials = (className: string, onSuccess: (mats: Clas
     const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
     return onSnapshot(q, (snapshot) => {
         onSuccess(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial)));
-    }, onError);
+    }, (error) => {
+        if (error.code === 'permission-denied') {
+            if (onError) onError(error);
+        } else {
+            console.error("Erro Materials:", error);
+        }
+    });
 };
 
 export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
     return onSnapshot(collection(db, LIBRARY_BOOKS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro Library:", error);
     });
 };
 
 export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) => {
     return onSnapshot(collection(db, LIBRARY_LOANS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro Loans:", error);
     });
 };
 
 // --- GETTERS ---
-
 export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
     const q = teacherId 
         ? query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId))
@@ -199,8 +218,7 @@ export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> 
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
 };
 
-// --- SETTERS / UPDATERS / UPLOADERS ---
-
+// --- SETTERS ---
 export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
     await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
 };
@@ -251,7 +269,7 @@ export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'succ
         if (!snapshot.empty) {
             const lastLog = snapshot.docs[0].data();
             const diff = Date.now() - lastLog.timestamp;
-            if (diff < 120000) return 'too_soon'; // 2 minutes
+            if (diff < 120000) return 'too_soon';
         }
         await addDoc(collection(db, STAFF_LOGS_COLLECTION), sanitizeForFirestore(log));
         return 'success';
@@ -311,10 +329,8 @@ export const createLoan = async (loan: LibraryLoan): Promise<void> => {
     const batch = writeBatch(db);
     const loanRef = doc(collection(db, LIBRARY_LOANS_COLLECTION));
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
-    
     batch.set(loanRef, sanitizeForFirestore({ ...loan, id: loanRef.id }));
     batch.update(bookRef, { availableQuantity: increment(-1) });
-    
     await batch.commit();
 };
 
@@ -322,10 +338,8 @@ export const returnLoan = async (loanId: string, bookId: string): Promise<void> 
     const batch = writeBatch(db);
     const loanRef = doc(db, LIBRARY_LOANS_COLLECTION, loanId);
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
-    
     batch.update(loanRef, { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
     batch.update(bookRef, { availableQuantity: increment(1) });
-    
     await batch.commit();
 };
 
@@ -350,11 +364,9 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
 };
 
 // --- AUTH MANAGEMENT ---
-
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
     const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
     const secondaryAuth = getAuth(secondaryApp);
-    
     try {
         const result = await createUser(secondaryAuth, email, 'cemal2016');
         const userProfile: User = {
