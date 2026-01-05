@@ -1,10 +1,12 @@
 
 // Use modular SDK v9 imports
-import { initializeApp } from 'firebase/app';
+// Fixing "no exported member" errors by using @firebase/app directly
+import { initializeApp } from '@firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 // Import getStorage from the modular storage package
-import { getStorage } from 'firebase/storage';
+// Fixing "no exported member" errors by using @firebase/storage directly
+import { getStorage } from '@firebase/storage';
 
 // Estas são as credenciais do seu projeto Firebase
 export const firebaseConfig = {

@@ -1,7 +1,8 @@
 
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
 // Use modular SDK v9 imports from firebase packages
-import { initializeApp, deleteApp } from 'firebase/app';
+// Fixing "no exported member" errors by using @firebase/app directly
+import { initializeApp, deleteApp } from '@firebase/app';
 import { 
     getAuth, 
     createUserWithEmailAndPassword, 
@@ -13,7 +14,8 @@ import {
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
 } from 'firebase/firestore';
 // Fix: Ensure modular storage functions are correctly imported from the modular storage path
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+// Fixing "no exported member" errors by using @firebase/storage directly
+import { ref, uploadBytes, getDownloadURL, deleteObject } from '@firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
@@ -393,6 +395,7 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
 };
 
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
+    // Secondary initialization using @firebase/app directly
     const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
     const secondaryAuth = getAuth(secondaryApp);
     try {

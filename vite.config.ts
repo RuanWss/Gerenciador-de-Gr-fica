@@ -5,8 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [
     react({
-      // Usamos 'classic' para evitar a dependência de 'react/jsx-runtime' 
-      // que falha ao tentar resolver sub-pacotes via CDN no build.
+      // Usamos 'classic' para garantir compatibilidade com o JSX vindo de CDNs
       jsxRuntime: 'classic',
     }),
   ],
@@ -21,16 +20,17 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Definimos como externos todos os módulos carregados via CDN.
-      // É necessário incluir caminhos específicos como 'react-dom/client'.
+      // Mapeamento de módulos que não devem ser empacotados (carregados via index.html)
       external: [
         'react',
         'react-dom',
         'react-dom/client',
         'firebase/app',
+        '@firebase/app',
         'firebase/auth',
         'firebase/firestore',
         'firebase/storage',
+        '@firebase/storage',
         '@google/genai',
         'lucide-react',
         'face-api.js'
@@ -41,9 +41,11 @@ export default defineConfig({
           'react-dom': 'ReactDOM',
           'react-dom/client': 'ReactDOM',
           'firebase/app': 'firebase',
+          '@firebase/app': 'firebase',
           'firebase/auth': 'firebase',
           'firebase/firestore': 'firebase',
           'firebase/storage': 'firebase',
+          '@firebase/storage': 'firebase',
         }
       }
     }
