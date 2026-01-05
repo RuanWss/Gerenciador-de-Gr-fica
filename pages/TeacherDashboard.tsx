@@ -6,18 +6,14 @@ import {
     saveExam, 
     uploadExamFile,
     getClassMaterials,
-    saveClassMaterial,
-    uploadClassMaterialFile,
-    deleteClassMaterial
 } from '../services/firebaseService';
 import { ExamRequest, ExamStatus, ClassMaterial } from '../types';
 import { Button } from '../components/Button';
 import { 
-  Plus, UploadCloud, Printer, Save, Wand2, List, PlusCircle, Layout, X, 
-  Search, Eye, CheckCircle, Loader2, FileText, ImageIcon, BookOpen, Trash2, FileUp, Folder, File as FileIcon,
-  Clock, AlertCircle
+  Plus, UploadCloud, List, PlusCircle, Layout, X, 
+  Wand2, Folder, File as FileIcon, Trash2, CheckCircle, FileUp
 } from 'lucide-react';
-import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
+import { CLASSES } from '../constants';
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -28,13 +24,13 @@ export const TeacherDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // --- FORM STATES (GRÁFICA) ---
+  // --- FORM STATES ---
   const [examTitle, setExamTitle] = useState('');
   const [examGrade, setExamGrade] = useState('');
   const [examSubject, setExamSubject] = useState(user?.subject || '');
   const [examInstructions, setExamInstructions] = useState('');
   const [printQty, setPrintQty] = useState(30);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -56,23 +52,31 @@ export const TeacherDashboard: React.FC = () => {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          setUploadedFile(e.target.files[0]);
+      if (e.target.files) {
+          const filesArray = Array.from(e.target.files);
+          setUploadedFiles(prev => [...prev, ...filesArray]);
       }
+  };
+
+  const removeFile = (index: number) => {
+      setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const finalizeExam = async () => {
       if (!examTitle || !examGrade) return alert("Preencha o título e a turma.");
-      if (creationMode === 'upload' && !uploadedFile) return alert("Selecione um arquivo para impressão.");
+      if (creationMode === 'upload' && uploadedFiles.length === 0) return alert("Selecione pelo menos um arquivo.");
       
       setIsSaving(true);
       try {
-          let fileUrl = '';
-          let fileName = 'pedido_manual.pdf';
+          const fileUrls: string[] = [];
+          const fileNames: string[] = [];
 
-          if (creationMode === 'upload' && uploadedFile) {
-              fileUrl = await uploadExamFile(uploadedFile, user?.name || 'Professor');
-              fileName = uploadedFile.name;
+          if (creationMode === 'upload' && uploadedFiles.length > 0) {
+              for (const file of uploadedFiles) {
+                  const url = await uploadExamFile(file, user?.name || 'Professor');
+                  fileUrls.push(url);
+                  fileNames.push(file.name);
+              }
           }
 
           const examData: ExamRequest = {
@@ -84,8 +88,8 @@ export const TeacherDashboard: React.FC = () => {
               quantity: Number(printQty),
               gradeLevel: examGrade,
               instructions: examInstructions,
-              fileName: fileName,
-              fileUrl: fileUrl,
+              fileNames: fileNames.length > 0 ? fileNames : ['pedido_manual.pdf'],
+              fileUrls: fileUrls,
               status: ExamStatus.PENDING,
               createdAt: Date.now(),
               dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -115,12 +119,11 @@ export const TeacherDashboard: React.FC = () => {
       setExamTitle('');
       setExamGrade('');
       setExamInstructions('');
-      setUploadedFile(null);
+      setUploadedFiles([]);
   };
 
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
-        {/* SIDEBAR INTERNA */}
         <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
             <div className="mb-6">
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-2">Gráfica & Provas</p>
@@ -131,7 +134,6 @@ export const TeacherDashboard: React.FC = () => {
         </div>
         
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-            {/* ABA: FILA DA GRÁFICA */}
             {activeTab === 'requests' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
                     <header className="mb-8">
@@ -156,7 +158,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <td className="p-6">
                                             <div className="flex flex-col">
                                                 <span className="font-bold text-white uppercase">{e.title}</span>
-                                                <span className="text-[10px] text-gray-500 uppercase font-black">{e.fileName}</span>
+                                                <span className="text-[10px] text-gray-500 uppercase font-black">{e.fileNames?.length || 1} anexo(s)</span>
                                             </div>
                                         </td>
                                         <td className="p-6"><span className="bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-gray-300">{e.gradeLevel}</span></td>
@@ -173,18 +175,12 @@ export const TeacherDashboard: React.FC = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {exams.length === 0 && !isLoading && (
-                                    <tr>
-                                        <td colSpan={5} className="p-20 text-center text-gray-600 uppercase font-black tracking-widest opacity-20">Nenhum pedido recente</td>
-                                    </tr>
-                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
             )}
 
-            {/* ABA: NOVO PEDIDO */}
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
                     {creationMode === 'none' ? (
@@ -197,102 +193,87 @@ export const TeacherDashboard: React.FC = () => {
                                 <button onClick={() => setCreationMode('upload')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-red-600 transition-all group shadow-2xl">
                                     <div className="h-24 w-24 bg-red-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><UploadCloud size={48}/></div>
                                     <h3 className="text-2xl font-black text-white uppercase mb-4">Fazer Upload</h3>
-                                    <p className="text-gray-500">Envie PDF, Word ou imagens prontas para imprimir.</p>
+                                    <p className="text-gray-500">Envie PDF, Word ou imagens prontas.</p>
                                 </button>
                                 <button onClick={() => setCreationMode('create')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-blue-600 transition-all group shadow-2xl">
                                     <div className="h-24 w-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><Wand2 size={48}/></div>
                                     <h3 className="text-2xl font-black text-white uppercase mb-4">Pedido Manual</h3>
-                                    <p className="text-gray-500">Solicite apenas a impressão de um cabeçalho oficial CEMAL.</p>
+                                    <p className="text-gray-500">Solicite apenas a impressão de cabeçalho.</p>
                                 </button>
                              </div>
                         </div>
                     ) : (
                         <div className="max-w-3xl mx-auto">
-                            <div className="bg-[#18181b] rounded-[2.5rem] border border-white/10 p-10 shadow-2xl relative overflow-hidden">
-                                <div className="flex items-center justify-between mb-10 relative z-10">
+                            <div className="bg-[#18181b] rounded-[2.5rem] border border-white/10 p-10 shadow-2xl relative">
+                                <div className="flex items-center justify-between mb-10">
                                     <h3 className="text-2xl font-black text-white uppercase flex items-center gap-4">
                                         {creationMode === 'upload' ? <UploadCloud className="text-red-500" /> : <Layout className="text-blue-500" />}
-                                        {creationMode === 'upload' ? 'Upload para Gráfica' : 'Solicitação de Cabeçalho'}
+                                        Novo Pedido
                                     </h3>
-                                    <button onClick={() => { setCreationMode('none'); setUploadedFile(null); }} className="text-gray-500 hover:text-white transition-colors"><X size={32}/></button>
+                                    <button onClick={() => { setCreationMode('none'); setUploadedFiles([]); }} className="text-gray-500 hover:text-white"><X size={32}/></button>
                                 </div>
 
-                                <div className="space-y-6 relative z-10">
+                                <div className="space-y-6">
                                     <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Título da Prova / Avaliação</label>
-                                        <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Avaliação Bimestral de Geografia" />
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Título da Prova</label>
+                                        <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Avaliação Bimestral" />
                                     </div>
                                     
                                     <div className="grid grid-cols-2 gap-6">
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma</label>
                                             <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={examGrade} onChange={e => setExamGrade(e.target.value)}>
                                                 <option value="">Selecione...</option>
                                                 {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Quantidade de Cópias</label>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Quantidade</label>
                                             <input type="number" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
                                         </div>
                                     </div>
 
                                     {creationMode === 'upload' && (
-                                        <div className="bg-black/30 border-2 border-dashed border-white/10 rounded-3xl p-12 text-center hover:border-red-600 transition-all relative group">
-                                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
-                                            {uploadedFile ? (
+                                        <div className="space-y-4">
+                                            <div className="bg-black/30 border-2 border-dashed border-white/10 rounded-3xl p-8 text-center hover:border-red-600 transition-all relative group">
+                                                <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} />
                                                 <div className="flex flex-col items-center gap-2">
-                                                    <FileIcon size={56} className="text-red-500 animate-bounce" />
-                                                    <p className="text-white font-black uppercase text-sm tracking-tight">{uploadedFile.name}</p>
-                                                    <p className="text-xs text-red-400 font-bold">Arquivo pronto para a gráfica</p>
+                                                    <FileUp size={48} className="text-gray-600 group-hover:text-red-500 mb-2" />
+                                                    <p className="text-gray-400 font-black uppercase text-xs tracking-widest">Clique ou arraste múltiplos arquivos</p>
                                                 </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center gap-2">
-                                                    <UploadCloud size={56} className="text-gray-600 mb-4 group-hover:text-red-500 transition-colors" />
-                                                    <p className="text-gray-400 font-black uppercase text-xs tracking-widest">Clique ou solte qualquer arquivo aqui</p>
+                                            </div>
+                                            
+                                            {uploadedFiles.length > 0 && (
+                                                <div className="bg-black/20 rounded-2xl p-4 border border-white/5 space-y-2">
+                                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Arquivos selecionados:</p>
+                                                    {uploadedFiles.map((f, i) => (
+                                                        <div key={i} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5">
+                                                            <div className="flex items-center gap-3">
+                                                                <FileIcon size={16} className="text-red-500" />
+                                                                <span className="text-xs text-white font-bold truncate max-w-[200px]">{f.name}</span>
+                                                            </div>
+                                                            <button onClick={() => removeFile(i)} className="text-gray-500 hover:text-red-500 p-1">
+                                                                <X size={16} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>
                                     )}
 
                                     <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Observações / Instruções p/ Gráfica</label>
-                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" rows={3} value={examInstructions} onChange={e => setExamInstructions(e.target.value)} placeholder="Ex: Impressão frente e verso, grampeado..."></textarea>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Instruções Extras</label>
+                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" rows={2} value={examInstructions} onChange={e => setExamInstructions(e.target.value)} placeholder="Frente e verso, grampeado..."></textarea>
                                     </div>
 
-                                    <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl text-lg font-black uppercase shadow-2xl bg-red-600 hover:bg-red-700 tracking-widest">
+                                    <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl text-lg font-black uppercase tracking-widest bg-red-600 shadow-2xl">
                                         Enviar para Gráfica
                                     </Button>
                                 </div>
                             </div>
                         </div>
                     )}
-                </div>
-            )}
-
-            {/* ABA: MATERIAIS DE AULA (Apenas para fins de visualização) */}
-            {activeTab === 'materials' && (
-                <div className="animate-in fade-in slide-in-from-right-4">
-                     <header className="mb-8">
-                        <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Materiais de Aula</h1>
-                        <p className="text-gray-400">Arquivos compartilhados com a sala virtual dos alunos.</p>
-                    </header>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {materials.map(m => (
-                            <div key={m.id} className="bg-[#18181b] border border-white/5 rounded-3xl p-6 hover:border-red-600 transition-all shadow-xl">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500">
-                                        <BookOpen size={24} />
-                                    </div>
-                                </div>
-                                <h3 className="font-bold text-white uppercase truncate mb-1">{m.title}</h3>
-                                <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-4">{m.className} • {m.subject}</p>
-                                <a href={m.fileUrl} target="_blank" rel="noreferrer" className="w-full py-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase text-gray-300 hover:bg-white/10 transition-all">
-                                    <Eye size={14}/> Abrir Material
-                                </a>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             )}
         </div>

@@ -19,7 +19,7 @@ export interface User {
   password?: string;
   subject?: string;
   classes?: string[];
-  phone?: string; // Telefone para receber avisos de provas prontas
+  phone?: string;
 }
 
 export enum ExamStatus {
@@ -39,8 +39,8 @@ export interface ExamRequest {
   quantity: number;
   gradeLevel: string;
   instructions: string;
-  fileName: string;
-  fileUrl?: string;
+  fileNames: string[]; // Alterado para array
+  fileUrls: string[];  // Alterado para array
   status: ExamStatus;
   createdAt: number;
   dueDate: string;
@@ -91,8 +91,8 @@ export interface SystemConfig {
   tvStart?: string;
   tvEnd?: string;
   whatsappInstance?: string; 
-  whatsappApiKey?: string;   // Chave da Evolution
-  whatsappBaseUrl?: string;  // URL da sua Evolution
+  whatsappApiKey?: string;   
+  whatsappBaseUrl?: string;  
   printShopNumber?: string;   
   enableAutomations?: boolean;
 }
