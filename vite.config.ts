@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [
     react({
-      // Usamos 'classic' para que o Vite transforme JSX em React.createElement
-      // Isso evita a dependência de 'react/jsx-runtime' que falha ao externalizar CDN
+      // Usamos 'classic' para evitar a dependência de 'react/jsx-runtime' 
+      // que falha ao tentar resolver sub-pacotes via CDN no build.
       jsxRuntime: 'classic',
     }),
   ],
@@ -21,10 +21,12 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Definimos como externos todos os módulos que você carrega via CDN no index.html
+      // Definimos como externos todos os módulos carregados via CDN.
+      // É necessário incluir caminhos específicos como 'react-dom/client'.
       external: [
         'react',
         'react-dom',
+        'react-dom/client',
         'firebase/app',
         'firebase/auth',
         'firebase/firestore',
@@ -37,6 +39,7 @@ export default defineConfig({
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
+          'react-dom/client': 'ReactDOM',
           'firebase/app': 'firebase',
           'firebase/auth': 'firebase',
           'firebase/firestore': 'firebase',

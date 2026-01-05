@@ -12,7 +12,7 @@ import {
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
 } from 'firebase/firestore';
-// Fix: Ensure modular storage functions are correctly imported from firebase/storage
+// Fix: Ensure modular storage functions are correctly imported from the modular storage path
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 

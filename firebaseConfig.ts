@@ -3,7 +3,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
-// Fix: Ensure getStorage is correctly imported from the modular storage package
+// Import getStorage from the modular storage package
 import { getStorage } from 'firebase/storage';
 
 // Estas são as credenciais do seu projeto Firebase
@@ -18,10 +18,14 @@ export const firebaseConfig = {
 };
 
 // Initialize Firebase with modular SDK
+// Create the main Firebase app instance
 const app = initializeApp(firebaseConfig);
+
+// Initialize Firebase services using the app instance
 export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 });
 export const storage = getStorage(app);
+
 export default app;
