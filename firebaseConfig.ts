@@ -3,6 +3,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
+// Fix: Ensure getStorage is correctly imported from the modular storage package
 import { getStorage } from 'firebase/storage';
 
 // Estas são as credenciais do seu projeto Firebase
