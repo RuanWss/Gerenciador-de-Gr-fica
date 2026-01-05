@@ -11,7 +11,7 @@ import { ExamRequest, ExamStatus, ClassMaterial } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, List, PlusCircle, Layout, X, 
-  Wand2, Folder, File as FileIcon, Trash2, CheckCircle, FileUp
+  Wand2, Folder, File as FileIcon, Trash2, CheckCircle, FileUp, FileDown, ExternalLink, Search
 } from 'lucide-react';
 import { CLASSES } from '../constants';
 
@@ -23,6 +23,7 @@ export const TeacherDashboard: React.FC = () => {
   const [materials, setMaterials] = useState<ClassMaterial[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   
   // --- FORM STATES ---
   const [examTitle, setExamTitle] = useState('');
@@ -122,6 +123,11 @@ export const TeacherDashboard: React.FC = () => {
       setUploadedFiles([]);
   };
 
+  const filteredExams = exams.filter(e => 
+    e.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    e.gradeLevel.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
         <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
@@ -136,29 +142,53 @@ export const TeacherDashboard: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             {activeTab === 'requests' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-8">
-                        <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Fila da Gráfica</h1>
-                        <p className="text-gray-400">Acompanhe o status das impressões solicitadas.</p>
+                    <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+                        <div>
+                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Fila da Gráfica</h1>
+                            <p className="text-gray-400">Acompanhe o status e confira os arquivos enviados.</p>
+                        </div>
+                        <div className="relative w-full md:w-80">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                            <input 
+                                className="w-full bg-[#18181b] border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm"
+                                placeholder="Buscar por Título ou Turma..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                            />
+                        </div>
                     </header>
                     <div className="bg-[#18181b] rounded-3xl border border-white/5 overflow-hidden shadow-2xl">
                         <table className="w-full text-left">
                             <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5">
                                 <tr>
                                     <th className="p-6">Data</th>
-                                    <th className="p-6">Prova / Título</th>
+                                    <th className="p-6">Título / Anexos</th>
                                     <th className="p-6">Turma</th>
                                     <th className="p-6">Cópias</th>
                                     <th className="p-6">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
-                                {exams.map(e => (
+                                {filteredExams.map(e => (
                                     <tr key={e.id} className="hover:bg-white/5 transition-colors">
                                         <td className="p-6 text-sm text-gray-400 font-medium">{new Date(e.createdAt).toLocaleDateString()}</td>
                                         <td className="p-6">
-                                            <div className="flex flex-col">
+                                            <div className="flex flex-col gap-2">
                                                 <span className="font-bold text-white uppercase">{e.title}</span>
-                                                <span className="text-[10px] text-gray-500 uppercase font-black">{e.fileNames?.length || 1} anexo(s)</span>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {e.fileUrls && e.fileUrls.map((url, idx) => (
+                                                        <a 
+                                                            key={idx} 
+                                                            href={url} 
+                                                            target="_blank" 
+                                                            rel="noreferrer" 
+                                                            className="flex items-center gap-1.5 bg-red-600/10 hover:bg-red-600/20 px-2 py-1 rounded-lg border border-red-600/20 text-[10px] font-bold text-red-500 transition-all"
+                                                            title={e.fileNames?.[idx]}
+                                                        >
+                                                            <FileDown size={12}/> {e.fileNames?.[idx]?.substring(0, 15)}...
+                                                        </a>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="p-6"><span className="bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-gray-300">{e.gradeLevel}</span></td>
@@ -175,6 +205,11 @@ export const TeacherDashboard: React.FC = () => {
                                         </td>
                                     </tr>
                                 ))}
+                                {filteredExams.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="p-12 text-center text-gray-500 font-bold uppercase text-xs">Nenhum pedido encontrado.</td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

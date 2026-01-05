@@ -6,7 +6,7 @@ import {
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
@@ -44,32 +44,84 @@ const sanitizeForFirestore = (obj: any) => {
 // --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
-        if (onProgress) onProgress("Iniciando conexão com Gennera via Cloud Run...");
+        if (onProgress) onProgress("Conectando ao Gateway...");
         const classes = await fetchGenneraClasses();
         
+        if (!classes || classes.length === 0) {
+            throw new Error("Nenhuma turma retornada pela API Gennera.");
+        }
+
         if (onProgress) onProgress(`Sincronizando ${classes.length} turmas...`);
         
-        const batch = writeBatch(db);
+        // Firestore limita batches a 500 operações. Vamos processar turma por turma para segurança.
         for (const cls of classes) {
             try {
+                if (onProgress) onProgress(`Buscando alunos: ${cls.name}`);
                 const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
-                students.forEach(student => {
-                    const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
-                    batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
-                });
+                
+                if (students.length > 0) {
+                    const batch = writeBatch(db);
+                    students.forEach(student => {
+                        const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
+                        batch.set(studentRef, sanitizeForFirestore(student), { merge: true });
+                    });
+                    await batch.commit();
+                }
             } catch (e) {
-                console.warn(`Falha ao sincronizar alunos da turma ${cls.name}`);
+                console.warn(`Erro na turma ${cls.name}:`, e);
             }
         }
-        await batch.commit();
-        if (onProgress) onProgress("Base de dados sincronizada com sucesso!");
-    } catch (error) {
-        console.error("Erro na sincronização:", error);
-        throw new Error("Falha na sincronização Gennera/Cloud Run. Verifique a conexão.");
+        
+        if (onProgress) onProgress("Sincronização concluída com sucesso!");
+    } catch (error: any) {
+        console.error("Erro crítico na sincronização:", error);
+        throw new Error(error.message || "Falha na sincronização Gennera.");
     }
 };
 
-// --- LISTENERS WITH ERROR HANDLING ---
+// --- SEMESTER CLEANUP ---
+export const cleanupSemesterExams = async (semester: 1 | 2, year: number): Promise<number> => {
+    const startDate = semester === 1 ? new Date(year, 0, 1).getTime() : new Date(year, 6, 1).getTime();
+    const endDate = semester === 1 ? new Date(year, 5, 30, 23, 59, 59).getTime() : new Date(year, 11, 31, 23, 59, 59).getTime();
+
+    const q = query(collection(db, EXAMS_COLLECTION), where("createdAt", ">=", startDate), where("createdAt", "<=", endDate));
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) return 0;
+
+    const batch = writeBatch(db);
+    let count = 0;
+
+    for (const d of snapshot.docs) {
+        batch.delete(d.ref);
+        count++;
+    }
+
+    await batch.commit();
+    return count;
+};
+
+// --- LISTENERS ---
+
+// Added listenToSchedule as it was missing and required by PublicSchedule.tsx
+export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) => {
+    return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro Schedule:", error);
+    });
+};
+
+// Added listenToClassMaterials as it was missing and required by ClassroomFiles.tsx
+export const listenToClassMaterials = (className: string, callback: (materials: ClassMaterial[]) => void, onError?: (error: any) => void) => {
+    const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial)));
+    }, (error) => {
+        if (onError) onError(error);
+        else if (error.code !== 'permission-denied') console.error("Erro Materials:", error);
+    });
+};
 
 export const listenToExams = (callback: (exams: ExamRequest[]) => void) => {
     return onSnapshot(collection(db, EXAMS_COLLECTION), (snapshot) => {
@@ -96,7 +148,7 @@ export const listenToSystemConfig = (callback: (config: SystemConfig) => void) =
             callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
         }
     }, (error) => {
-        if (error.code !== 'permission-denied') console.warn("Erro Config (Aguardando Auth):", error.message);
+        if (error.code !== 'permission-denied') console.warn("Erro Config:", error.message);
     });
 };
 
@@ -105,14 +157,6 @@ export const listenToEvents = (callback: (events: SchoolEvent[]) => void) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SchoolEvent)));
     }, (error) => {
         if (error.code !== 'permission-denied') console.error("Erro Events:", error);
-    });
-};
-
-export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
-    return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
-    }, (error) => {
-        if (error.code !== 'permission-denied') console.error("Erro Schedule:", error);
     });
 };
 
@@ -139,19 +183,6 @@ export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAtte
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog)));
     }, (error) => {
         if (error.code !== 'permission-denied') console.error("Erro StaffLogs:", error);
-    });
-};
-
-export const listenToClassMaterials = (className: string, onSuccess: (mats: ClassMaterial[]) => void, onError?: (err: any) => void) => {
-    const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
-    return onSnapshot(q, (snapshot) => {
-        onSuccess(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial)));
-    }, (error) => {
-        if (error.code === 'permission-denied') {
-            if (onError) onError(error);
-        } else {
-            console.error("Erro Materials:", error);
-        }
     });
 };
 
@@ -197,11 +228,6 @@ export const getAllPEIs = async (): Promise<PEIDocument[]> => {
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PEIDocument));
 };
 
-export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
-    const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
-};
-
 export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
     const q = teacherId 
         ? query(collection(db, CLASS_MATERIALS_COLLECTION), where("teacherId", "==", teacherId))
@@ -232,6 +258,14 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
 export const uploadExamFile = async (file: File, teacherName: string): Promise<string> => {
     const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
     const storageRef = ref(storage, `exams/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+};
+
+// Added uploadReportFile as it was missing and required by AEEDashboard.tsx
+export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
+    const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
+    const storageRef = ref(storage, `reports/${studentName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);
     const snapshot = await uploadBytes(storageRef, file);
     return await getDownloadURL(snapshot.ref);
 };
@@ -305,12 +339,6 @@ export const saveClassMaterial = async (material: ClassMaterial): Promise<void> 
     else await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), sanitizeForFirestore(data));
 };
 
-export const uploadClassMaterialFile = async (file: File, teacherName: string): Promise<string> => {
-    const storageRef = ref(storage, `materials/${teacherName.replace(/\s+/g, '_')}_${Date.now()}_${file.name}`);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
-};
-
 export const deleteClassMaterial = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, CLASS_MATERIALS_COLLECTION, id));
 };
@@ -347,12 +375,6 @@ export const updateStudent = async (student: Student): Promise<void> => {
     await setDoc(doc(db, STUDENTS_COLLECTION, student.id), sanitizeForFirestore(student));
 };
 
-export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
-    const storageRef = ref(storage, `reports/${studentName.replace(/\s+/g, '_')}_${Date.now()}_${file.name}`);
-    const snapshot = await uploadBytes(storageRef, file);
-    return await getDownloadURL(snapshot.ref);
-};
-
 export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
     const { id, ...data } = event;
     if (id) await setDoc(doc(db, EVENTS_COLLECTION, id), sanitizeForFirestore(data));
@@ -363,7 +385,6 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, EVENTS_COLLECTION, id));
 };
 
-// --- AUTH MANAGEMENT ---
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
     const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
     const secondaryAuth = getAuth(secondaryApp);
