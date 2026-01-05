@@ -1,7 +1,5 @@
-
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
-// Use modular SDK v9 imports from firebase packages
-// Fixing "no exported member" errors by using @firebase/app directly
+// Use @firebase/app for modular SDK functions to avoid shadowing/compatibility issues.
 import { initializeApp, deleteApp } from '@firebase/app';
 import { 
     getAuth, 
@@ -13,8 +11,7 @@ import {
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
 } from 'firebase/firestore';
-// Fix: Ensure modular storage functions are correctly imported from the modular storage path
-// Fixing "no exported member" errors by using @firebase/storage directly
+// Use @firebase/storage for modular SDK functions.
 import { ref, uploadBytes, getDownloadURL, deleteObject } from '@firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
@@ -62,7 +59,6 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
 
         if (onProgress) onProgress(`Sincronizando ${classes.length} turmas...`);
         
-        // Firestore limita batches a 500 operações. Vamos processar turma por turma para segurança.
         for (const cls of classes) {
             try {
                 if (onProgress) onProgress(`Buscando alunos: ${cls.name}`);
@@ -111,8 +107,6 @@ export const cleanupSemesterExams = async (semester: 1 | 2, year: number): Promi
 };
 
 // --- LISTENERS ---
-
-// Listener for schedule entries used in PublicSchedule
 export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) => {
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
@@ -121,7 +115,6 @@ export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) =
     });
 };
 
-// Listener for class materials used in ClassroomFiles
 export const listenToClassMaterials = (className: string, callback: (materials: ClassMaterial[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
     return onSnapshot(q, (snapshot) => {
@@ -271,7 +264,6 @@ export const uploadExamFile = async (file: File, teacherName: string): Promise<s
     return await getDownloadURL(snapshot.ref);
 };
 
-// Helper to upload student report files for AEE
 export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
     const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
     const storageRef = ref(storage, `reports/${studentName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);
@@ -395,7 +387,6 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
 };
 
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    // Secondary initialization using @firebase/app directly
     const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
     const secondaryAuth = getAuth(secondaryApp);
     try {
