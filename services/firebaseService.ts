@@ -1,7 +1,13 @@
 
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
+// Use modular SDK v9 imports from firebase packages
 import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword as createUser, updateProfile as updateProfileAuth, signOut } from 'firebase/auth';
+import { 
+    getAuth, 
+    createUserWithEmailAndPassword, 
+    updateProfile, 
+    signOut 
+} from 'firebase/auth';
 import { 
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
@@ -389,7 +395,7 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
     const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
     const secondaryAuth = getAuth(secondaryApp);
     try {
-        const result = await createUser(secondaryAuth, email, 'cemal2016');
+        const result = await createUserWithEmailAndPassword(secondaryAuth, email, 'cemal2016');
         const userProfile: User = {
             id: result.user.uid,
             name: name,

@@ -1,10 +1,11 @@
 
+// Use modular SDK v9 imports
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Configuração real do projeto
+// Estas são as credenciais do seu projeto Firebase
 export const firebaseConfig = {
   apiKey: "AIzaSyDAKoXebsuV8kN9jZXa0md-aMUsbawusU4",
   authDomain: "area-do-adm.firebaseapp.com",
@@ -17,11 +18,8 @@ export const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-
-// Inicializa o Firestore forçando Long Polling para evitar erros de conexão (WebSockets blocked)
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
 });
-
 export const storage = getStorage(app);
 export default app;

@@ -1,17 +1,22 @@
 
-const express = require('express');
-const path = require('path');
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 const port = process.env.PORT || 8080;
 
-// Middleware para servir arquivos estáticos da build
+// Entrega os arquivos da pasta 'dist' (gerada pelo build do Vite)
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Redireciona todas as rotas para o index.html (SPA routing)
+// Redireciona todas as rotas para o index.html (padrão SPA)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(port, () => {
-  console.log(`Aplicação rodando na porta ${port}`);
+  console.log(`Sistema CEMAL rodando na porta ${port}`);
 });

@@ -2,7 +2,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { auth } from '../firebaseConfig';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from 'firebase/auth';
+// Use modular SDK v9 imports from firebase/auth
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  updatePassword 
+} from 'firebase/auth';
 import { getUserProfile } from '../services/firebaseService';
 
 interface AuthContextType {
