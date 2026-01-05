@@ -15,15 +15,17 @@ app.use(express.json());
 // e simplificar a integração com o ERP.
 app.all('/gennera-api/*', async (req, res) => {
   // Captura o restante da URL após /gennera-api/
-  let targetPath = req.params[0];
+  let targetPath = req.params[0] || req.url.split('/gennera-api/')[1];
   
   // Limpeza de barras duplicadas
-  if (targetPath.startsWith('/')) {
+  if (targetPath && targetPath.startsWith('/')) {
     targetPath = targetPath.substring(1);
   }
   
   const targetUrl = `https://api2.gennera.com.br/api/v1/${targetPath}`;
   
+  console.log(`[PROXY] Chamando Gennera: ${req.method} ${targetUrl}`);
+
   try {
     const fetchOptions = {
       method: req.method,
@@ -34,14 +36,15 @@ app.all('/gennera-api/*', async (req, res) => {
     };
 
     // Repassa o corpo da requisição para métodos de escrita
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && Object.keys(req.body).length > 0) {
       fetchOptions.body = JSON.stringify(req.body);
     }
 
     const response = await fetch(targetUrl, fetchOptions);
     const contentType = response.headers.get('content-type');
     
-    // Repassa o status e o corpo da resposta original
+    console.log(`[PROXY] Resposta Gennera: ${response.status}`);
+
     if (contentType && contentType.includes('application/json')) {
       const data = await response.json();
       res.status(response.status).json(data);
@@ -50,7 +53,7 @@ app.all('/gennera-api/*', async (req, res) => {
       res.status(response.status).send(text);
     }
   } catch (error) {
-    console.error('Erro no Proxy Gennera:', error.message);
+    console.error('[PROXY ERROR]:', error.message);
     res.status(500).json({ 
       error: 'Falha ao conectar com o ERP Gennera via Proxy Interno',
       details: error.message 
