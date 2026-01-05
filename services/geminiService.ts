@@ -1,13 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const getClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key not found in environment variables");
-  }
-  return new GoogleGenAI({ apiKey: apiKey });
-};
+// Initialize GoogleGenAI once with the API Key from environment variables
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateStructuredQuestions = async (
   topic: string,
@@ -15,15 +10,34 @@ export const generateStructuredQuestions = async (
   quantity: number = 1
 ) => {
   try {
-    const ai = getClient();
-    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Crie ${quantity} questões de múltipla escolha sobre "${topic}" para o nível "${gradeLevel}". 
-      Retorne APENAS um JSON seguindo esta estrutura: 
-      [{ "statement": "texto", "options": ["A", "B", "C", "D"], "answer": 0 }]`,
+      contents: `Crie ${quantity} questões de múltipla escolha sobre "${topic}" para o nível "${gradeLevel}".`,
       config: {
         responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              statement: {
+                type: Type.STRING,
+                description: 'The question text.',
+              },
+              options: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: 'The multiple choice options.',
+              },
+              answer: {
+                type: Type.INTEGER,
+                description: 'The zero-based index of the correct option.',
+              },
+            },
+            required: ["statement", "options", "answer"],
+            propertyOrdering: ["statement", "options", "answer"],
+          },
+        },
       }
     });
 
@@ -36,13 +50,12 @@ export const generateStructuredQuestions = async (
 
 export const suggestExamInstructions = async (examType: string): Promise<string> => {
     try {
-        const ai = getClient();
         const prompt = `Escreva instruções curtas e formais para o cabeçalho de uma prova escolar do tipo: "${examType}".`;
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt
         });
-        return response.text || "";
+        return response.text || "Leia atentamente as questões antes de responder. Utilize caneta azul ou preta.";
     } catch (error) {
         return "Leia atentamente as questões antes de responder. Utilize caneta azul ou preta.";
     }
@@ -59,7 +72,6 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export const analyzeAnswerSheet = async (file: File, numQuestions: number): Promise<{ studentId?: string; answers: Record<number, string> }> => {
   try {
-    const ai = getClient();
     const base64Data = await fileToBase64(file);
     
     const prompt = `
@@ -73,9 +85,6 @@ export const analyzeAnswerSheet = async (file: File, numQuestions: number): Prom
       4. Retorne APENAS um objeto JSON com:
          - "studentId": string com o ID do aluno se identificado no QR Code ou cabeçalho.
          - "answers": objeto onde a chave é o número da questão (1 a ${numQuestions}) e o valor é a letra (A, B, C, D ou E).
-      
-      EXEMPLO DE SAÍDA:
-      { "studentId": "id-aluno-123", "answers": { "1": "A", "2": "C", "3": "B" } }
     `;
 
     const response = await ai.models.generateContent({
@@ -88,6 +97,16 @@ export const analyzeAnswerSheet = async (file: File, numQuestions: number): Prom
       },
       config: { 
         responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            studentId: { type: Type.STRING },
+            answers: {
+              type: Type.OBJECT,
+              additionalProperties: { type: Type.STRING }
+            }
+          }
+        },
         temperature: 0.1
       }
     });

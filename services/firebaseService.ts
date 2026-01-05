@@ -12,7 +12,7 @@ import {
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
 } from 'firebase/firestore';
-// Fix: Ensure modular storage functions are correctly imported
+// Fix: Ensure modular storage functions are correctly imported from firebase/storage
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
@@ -110,7 +110,7 @@ export const cleanupSemesterExams = async (semester: 1 | 2, year: number): Promi
 
 // --- LISTENERS ---
 
-// Added listenToSchedule as it was missing and required by PublicSchedule.tsx
+// Listener for schedule entries used in PublicSchedule
 export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) => {
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
@@ -119,7 +119,7 @@ export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) =
     });
 };
 
-// Added listenToClassMaterials as it was missing and required by ClassroomFiles.tsx
+// Listener for class materials used in ClassroomFiles
 export const listenToClassMaterials = (className: string, callback: (materials: ClassMaterial[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, CLASS_MATERIALS_COLLECTION), where("className", "==", className));
     return onSnapshot(q, (snapshot) => {
@@ -269,7 +269,7 @@ export const uploadExamFile = async (file: File, teacherName: string): Promise<s
     return await getDownloadURL(snapshot.ref);
 };
 
-// Added uploadReportFile as it was missing and required by AEEDashboard.tsx
+// Helper to upload student report files for AEE
 export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
     const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
     const storageRef = ref(storage, `reports/${studentName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);

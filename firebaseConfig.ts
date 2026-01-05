@@ -17,6 +17,7 @@ export const firebaseConfig = {
   measurementId: "G-YVH4JK7ME0"
 };
 
+// Initialize Firebase with modular SDK
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
