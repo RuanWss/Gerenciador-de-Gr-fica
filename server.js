@@ -10,10 +10,14 @@ const port = process.env.PORT || 8080;
 
 app.use(express.json());
 
-// --- PROXY NATIVO PARA GENNERA ---
+// --- PROXY PARA API GENNERA ---
+// Este endpoint atua como um Backend-for-Frontend (BFF) para evitar erros de CORS 
+// e simplificar a integração com o ERP.
 app.all('/gennera-api/*', async (req, res) => {
+  // Captura o restante da URL após /gennera-api/
   let targetPath = req.params[0];
-  // Remove barra inicial se existir no path capturado
+  
+  // Limpeza de barras duplicadas
   if (targetPath.startsWith('/')) {
     targetPath = targetPath.substring(1);
   }
@@ -29,13 +33,15 @@ app.all('/gennera-api/*', async (req, res) => {
       }
     };
 
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
+    // Repassa o corpo da requisição para métodos de escrita
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
       fetchOptions.body = JSON.stringify(req.body);
     }
 
     const response = await fetch(targetUrl, fetchOptions);
     const contentType = response.headers.get('content-type');
     
+    // Repassa o status e o corpo da resposta original
     if (contentType && contentType.includes('application/json')) {
       const data = await response.json();
       res.status(response.status).json(data);
@@ -45,18 +51,22 @@ app.all('/gennera-api/*', async (req, res) => {
     }
   } catch (error) {
     console.error('Erro no Proxy Gennera:', error.message);
-    res.status(500).json({ error: 'Falha ao conectar com o ERP Gennera via Proxy Interno' });
+    res.status(500).json({ 
+      error: 'Falha ao conectar com o ERP Gennera via Proxy Interno',
+      details: error.message 
+    });
   }
 });
 
-// Entrega os arquivos estáticos da pasta 'dist'
+// Entrega os arquivos estáticos da pasta 'dist' (build do Vite)
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // Suporte ao roteamento do React (Single Page Application)
+// Redireciona todas as rotas não tratadas para o index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 app.listen(port, () => {
-  console.log(`BFF CEMAL (Proxy Gennera + Web) rodando na porta ${port}`);
+  console.log(`🚀 BFF CEMAL (Proxy Gennera + Web) rodando na porta ${port}`);
 });
