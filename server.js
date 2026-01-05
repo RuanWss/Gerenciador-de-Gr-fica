@@ -1,4 +1,3 @@
-
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,9 +11,13 @@ const port = process.env.PORT || 8080;
 app.use(express.json());
 
 // --- PROXY NATIVO PARA GENNERA ---
-// Atua como ponte entre o Navegador e a API da Gennera para evitar erros de CORS
 app.all('/gennera-api/*', async (req, res) => {
-  const targetPath = req.params[0];
+  let targetPath = req.params[0];
+  // Remove barra inicial se existir no path capturado
+  if (targetPath.startsWith('/')) {
+    targetPath = targetPath.substring(1);
+  }
+  
   const targetUrl = `https://api2.gennera.com.br/api/v1/${targetPath}`;
   
   try {
@@ -31,16 +34,22 @@ app.all('/gennera-api/*', async (req, res) => {
     }
 
     const response = await fetch(targetUrl, fetchOptions);
-    const data = await response.json();
+    const contentType = response.headers.get('content-type');
     
-    res.status(response.status).json(data);
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json();
+      res.status(response.status).json(data);
+    } else {
+      const text = await response.text();
+      res.status(response.status).send(text);
+    }
   } catch (error) {
     console.error('Erro no Proxy Gennera:', error.message);
     res.status(500).json({ error: 'Falha ao conectar com o ERP Gennera via Proxy Interno' });
   }
 });
 
-// Entrega os arquivos estáticos da pasta 'dist' (gerada pelo vite build)
+// Entrega os arquivos estáticos da pasta 'dist'
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // Suporte ao roteamento do React (Single Page Application)
