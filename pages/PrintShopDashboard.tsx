@@ -14,7 +14,10 @@ import {
     deleteSchoolEvent,
     syncAllDataWithGennera,
     getAllPEIs,
-    cleanupSemesterExams
+    cleanupSemesterExams,
+    listenToSchedule,
+    saveScheduleEntry,
+    deleteScheduleEntry
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -24,7 +27,9 @@ import {
     LessonPlan, 
     SystemConfig, 
     SchoolEvent,
-    PEIDocument
+    PEIDocument,
+    ScheduleEntry,
+    TimeSlot
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -50,11 +55,32 @@ import {
     RotateCcw,
     ChevronRight as ChevronIcon,
     AlertTriangle,
-    Eraser
+    Eraser,
+    Clock
 } from 'lucide-react';
+import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
+
+const MORNING_SLOTS: TimeSlot[] = [
+    { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
+    { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
+    { id: 'm3', start: '09:20', end: '10:10', type: 'class', label: '3º Horário', shift: 'morning' },
+    { id: 'm4', start: '10:10', end: '11:00', type: 'class', label: '4º Horário', shift: 'morning' },
+    { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
+];
+
+const AFTERNOON_SLOTS: TimeSlot[] = [
+    { id: 'a1', start: '13:00', end: '13:50', type: 'class', label: '1º Horário', shift: 'afternoon' },
+    { id: 'a2', start: '13:50', end: '14:40', type: 'class', label: '2º Horário', shift: 'afternoon' },
+    { id: 'a3', start: '14:40', end: '15:30', type: 'class', label: '3º Horário', shift: 'afternoon' },
+    { id: 'a4', start: '16:00', end: '16:50', type: 'class', label: '4º Horário', shift: 'afternoon' },
+    { id: 'a5', start: '16:50', end: '17:40', type: 'class', label: '5º Horário', shift: 'afternoon' },
+    { id: 'a6', start: '17:40', end: '18:30', type: 'class', label: '6º Horário', shift: 'afternoon' },
+    { id: 'a7', start: '18:30', end: '19:20', type: 'class', label: '7º Horário', shift: 'afternoon' },
+    { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
+];
 
 export const PrintShopDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'pei' | 'calendar' | 'plans' | 'config'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'pei' | 'calendar' | 'plans' | 'schedule' | 'config'>('exams');
     const [isLoading, setIsLoading] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [syncMsg, setSyncMsg] = useState('');
@@ -67,10 +93,16 @@ export const PrintShopDashboard: React.FC = () => {
     const [events, setEvents] = useState<SchoolEvent[]>([]);
     const [plans, setPlans] = useState<LessonPlan[]>([]);
     const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+    const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     
     // Filters
-    const [currentMonth, setCurrentMonth] = useState(new Date());
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Schedule Form State
+    const [showScheduleForm, setShowScheduleForm] = useState(false);
+    const [newSchedule, setNewSchedule] = useState<Partial<ScheduleEntry>>({
+        classId: '', className: '', dayOfWeek: 1, slotId: '', subject: '', professor: ''
+    });
 
     // Config states
     const [bannerMsg, setBannerMsg] = useState('');
@@ -83,6 +115,7 @@ export const PrintShopDashboard: React.FC = () => {
         const unsubExams = listenToExams(setExams);
         const unsubStudents = listenToStudents(setStudents);
         const unsubEvents = listenToEvents(setEvents);
+        const unsubSchedule = listenToSchedule(setSchedule);
         const unsubAttendance = listenToAttendanceLogs(todayStr, setAttendanceLogs);
         const unsubConfig = listenToSystemConfig((cfg) => {
             setBannerMsg(cfg.bannerMessage || '');
@@ -99,11 +132,37 @@ export const PrintShopDashboard: React.FC = () => {
             unsubEvents();
             unsubAttendance();
             unsubConfig();
+            unsubSchedule();
         };
     }, []);
 
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
+    };
+
+    const handleSaveSchedule = async () => {
+        if (!newSchedule.classId || !newSchedule.slotId || !newSchedule.subject) return alert("Preencha os campos obrigatórios");
+        
+        const className = CLASSES.find(c => c.toLowerCase().includes(newSchedule.classId!.toLowerCase())) || newSchedule.classId!;
+        
+        await saveScheduleEntry({
+            id: '',
+            classId: newSchedule.classId!,
+            className: className,
+            dayOfWeek: Number(newSchedule.dayOfWeek),
+            slotId: newSchedule.slotId!,
+            subject: newSchedule.subject!,
+            professor: newSchedule.professor || 'Não informado'
+        });
+        
+        setShowScheduleForm(false);
+        setNewSchedule({ classId: '', className: '', dayOfWeek: 1, slotId: '', subject: '', professor: '' });
+    };
+
+    const handleDeleteSchedule = async (id: string) => {
+        if (confirm("Excluir este horário?")) {
+            await deleteScheduleEntry(id);
+        }
     };
 
     const handleSync = async () => {
@@ -120,23 +179,6 @@ export const PrintShopDashboard: React.FC = () => {
         }
     };
 
-    const handleSemesterCleanup = async (semester: 1 | 2) => {
-        const year = new Date().getFullYear();
-        const semName = semester === 1 ? "1º Semestre (Jan-Jun)" : "2º Semestre (Jul-Dez)";
-        
-        if (!confirm(`ATENÇÃO: Deseja apagar permanentemente todos os pedidos de impressão do ${semName} de ${year}? Esta ação não pode ser desfeita.`)) return;
-        
-        setIsCleaning(true);
-        try {
-            const count = await cleanupSemesterExams(semester, year);
-            alert(`Limpeza concluída! ${count} registros foram removidos.`);
-        } catch (e) {
-            alert("Erro ao realizar limpeza.");
-        } finally {
-            setIsCleaning(false);
-        }
-    };
-
     const handleSaveConfig = async () => {
         await updateSystemConfig({
             bannerMessage: bannerMsg,
@@ -144,6 +186,23 @@ export const PrintShopDashboard: React.FC = () => {
             isBannerActive: isBannerActive
         });
         alert("Configurações aplicadas!");
+    };
+
+    // Fix: Added missing handleSemesterCleanup function
+    const handleSemesterCleanup = async (semester: 1 | 2) => {
+        const year = new Date().getFullYear();
+        if (confirm(`Deseja realmente apagar todos os pedidos de impressão do ${semester}º semestre de ${year}? Esta ação é irreversível.`)) {
+            setIsCleaning(true);
+            try {
+                const count = await cleanupSemesterExams(semester, year);
+                alert(`${count} registros de pedidos de impressão foram removidos.`);
+            } catch (e: any) {
+                console.error(e);
+                alert("Falha na limpeza de dados: " + e.message);
+            } finally {
+                setIsCleaning(false);
+            }
+        }
     };
 
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
@@ -159,7 +218,6 @@ export const PrintShopDashboard: React.FC = () => {
         </button>
     );
 
-    // Filter Logic
     const filteredExams = exams.filter(e => 
         e.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
         e.teacherName.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -224,6 +282,7 @@ export const PrintShopDashboard: React.FC = () => {
                 <div className="mb-10">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-8 ml-2 opacity-50">Administração</p>
                     <SidebarItem id="exams" label="Central de Cópias" icon={Printer} />
+                    <SidebarItem id="schedule" label="Quadro de Horários" icon={Clock} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
                     <SidebarItem id="pei" label="Documentos AEE" icon={Heart} />
                     <SidebarItem id="calendar" label="Agenda Escolar" icon={Calendar} />
@@ -283,6 +342,118 @@ export const PrintShopDashboard: React.FC = () => {
                             <div className="grid grid-cols-1 gap-8">
                                 {finishedExams.map(exam => <ExamCard key={exam.id} exam={exam} />)}
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* QUADRO DE HORARIOS */}
+                {activeTab === 'schedule' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl">
+                         <header className="mb-12 flex justify-between items-center">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Quadro de Horários TV</h1>
+                                <p className="text-gray-400 text-lg mt-1 font-medium italic">Configure as aulas que aparecem no monitor principal.</p>
+                            </div>
+                            <Button onClick={() => setShowScheduleForm(true)} className="h-16 px-10 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] bg-red-600 shadow-xl shadow-red-900/20">
+                                <Plus size={18} className="mr-3"/> Adicionar Horário
+                            </Button>
+                        </header>
+
+                        {showScheduleForm && (
+                            <div className="bg-[#18181b] border border-white/10 rounded-[2.5rem] p-10 mb-12 shadow-2xl animate-in slide-in-from-top-4">
+                                <div className="flex justify-between items-center mb-8">
+                                    <h3 className="text-xl font-black text-white uppercase tracking-widest flex items-center gap-3"><Clock className="text-red-600"/> Novo Registro de Aula</h3>
+                                    <button onClick={() => setShowScheduleForm(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Turma</label>
+                                        <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-red-600" value={newSchedule.classId} onChange={e => setNewSchedule({...newSchedule, classId: e.target.value})}>
+                                            <option value="">Selecione...</option>
+                                            <option value="6efaf">6º ANO EFAF</option>
+                                            <option value="7efaf">7º ANO EFAF</option>
+                                            <option value="8efaf">8º ANO EFAF</option>
+                                            <option value="9efaf">9º ANO EFAF</option>
+                                            <option value="1em">1ª SÉRIE EM</option>
+                                            <option value="2em">2ª SÉRIE EM</option>
+                                            <option value="3em">3ª SÉRIE EM</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Dia da Semana</label>
+                                        <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-red-600" value={newSchedule.dayOfWeek} onChange={e => setNewSchedule({...newSchedule, dayOfWeek: Number(e.target.value)})}>
+                                            <option value={1}>Segunda-feira</option>
+                                            <option value={2}>Terça-feira</option>
+                                            <option value={3}>Quarta-feira</option>
+                                            <option value={4}>Quinta-feira</option>
+                                            <option value={5}>Sexta-feira</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Horário / Turno</label>
+                                        <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-red-600" value={newSchedule.slotId} onChange={e => setNewSchedule({...newSchedule, slotId: e.target.value})}>
+                                            <option value="">Selecione...</option>
+                                            <optgroup label="Manhã" className="bg-gray-900">
+                                                {MORNING_SLOTS.map(s => <option key={s.id} value={s.id}>{s.label} ({s.start})</option>)}
+                                            </optgroup>
+                                            <optgroup label="Tarde" className="bg-gray-900">
+                                                {AFTERNOON_SLOTS.map(s => <option key={s.id} value={s.id}>{s.label} ({s.start})</option>)}
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Disciplina</label>
+                                        <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-red-600" placeholder="Ex: Matemática" value={newSchedule.subject} onChange={e => setNewSchedule({...newSchedule, subject: e.target.value})} />
+                                    </div>
+                                    <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Professor</label>
+                                        <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white outline-none focus:border-red-600" placeholder="Nome Completo" value={newSchedule.professor} onChange={e => setNewSchedule({...newSchedule, professor: e.target.value})} />
+                                    </div>
+                                    <div className="flex items-end">
+                                        <Button onClick={handleSaveSchedule} className="w-full h-12 rounded-xl font-black uppercase text-[10px] tracking-widest bg-green-600">Salvar Aula</Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="bg-[#18181b] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
+                             <table className="w-full text-left">
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-[0.3em] border-b border-white/5">
+                                    <tr>
+                                        <th className="p-8">Dia</th>
+                                        <th className="p-8">Turma</th>
+                                        <th className="p-8">Horário</th>
+                                        <th className="p-8">Aula / Professor</th>
+                                        <th className="p-8 text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {schedule.sort((a,b) => a.dayOfWeek - b.dayOfWeek).map(s => {
+                                        const days = ['', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+                                        const slotLabel = [...MORNING_SLOTS, ...AFTERNOON_SLOTS].find(sl => sl.id === s.slotId)?.label || s.slotId;
+                                        
+                                        return (
+                                            <tr key={s.id} className="hover:bg-white/[0.03] transition-colors">
+                                                <td className="p-8 font-black text-[10px] text-gray-500 uppercase tracking-widest">{days[s.dayOfWeek]}</td>
+                                                <td className="p-8 font-bold text-white uppercase text-sm">{s.className}</td>
+                                                <td className="p-8"><span className="bg-black/30 px-3 py-1 rounded-full text-[10px] font-bold text-red-400 border border-red-900/30 uppercase">{slotLabel}</span></td>
+                                                <td className="p-8">
+                                                    <p className="font-bold text-gray-200 uppercase">{s.subject}</p>
+                                                    <p className="text-[10px] text-gray-500 font-medium uppercase tracking-tight">{s.professor}</p>
+                                                </td>
+                                                <td className="p-8 text-center">
+                                                    <button onClick={() => handleDeleteSchedule(s.id)} className="text-gray-600 hover:text-red-500 transition-all p-2 rounded-lg hover:bg-red-500/10">
+                                                        <Trash2 size={18}/>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {schedule.length === 0 && (
+                                         <tr><td colSpan={5} className="p-20 text-center text-gray-600 font-bold uppercase tracking-widest">Nenhum horário cadastrado.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 )}

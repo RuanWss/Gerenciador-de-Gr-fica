@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-// Adicionando 'School' aos ícones importados do lucide-react
-import { Clock, X, Maximize2, Maximize, Minimize, Volume2, Megaphone, ArrowRight, School } from 'lucide-react';
+// Add missing 'List' icon to the lucide-react imports
+import { Clock, X, Maximize2, Maximize, Minimize, Volume2, Megaphone, ArrowRight, School, Timer, User, BookOpen, List } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -46,6 +46,7 @@ export const PublicSchedule: React.FC = () => {
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [currentSlot, setCurrentSlot] = useState<TimeSlot | null>(null);
+    const [progress, setProgress] = useState(0);
     const [showModal, setShowModal] = useState(false);
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [audioEnabled, setAudioEnabled] = useState(false);
@@ -94,7 +95,9 @@ export const PublicSchedule: React.FC = () => {
     const checkCurrentStatus = (now: Date) => {
         const hours = now.getHours();
         const minutes = now.getMinutes();
+        const seconds = now.getSeconds();
         const timeVal = hours * 60 + minutes;
+        const exactTimeVal = timeVal + seconds / 60;
 
         let shift: 'morning' | 'afternoon' | 'off' = 'off';
 
@@ -113,10 +116,18 @@ export const PublicSchedule: React.FC = () => {
                 const [endH, endM] = s.end.split(':').map(Number);
                 const startVal = startH * 60 + startM;
                 const endVal = endH * 60 + endM;
-                return timeVal >= startVal && timeVal < endVal;
+                return exactTimeVal >= startVal && exactTimeVal < endVal;
             });
 
             if (foundSlot) {
+                const [startH, startM] = foundSlot.start.split(':').map(Number);
+                const [endH, endM] = foundSlot.end.split(':').map(Number);
+                const startVal = startH * 60 + startM;
+                const endVal = endH * 60 + endM;
+                const totalDuration = endVal - startVal;
+                const elapsed = exactTimeVal - startVal;
+                setProgress((elapsed / totalDuration) * 100);
+
                 if (foundSlot.id !== lastSlotId.current) {
                     lastSlotId.current = foundSlot.id;
                     setCurrentSlot(foundSlot);
@@ -125,6 +136,7 @@ export const PublicSchedule: React.FC = () => {
             } else {
                 lastSlotId.current = '';
                 setCurrentSlot(null);
+                setProgress(0);
             }
         } else {
             setCurrentSlot(null);
@@ -192,117 +204,144 @@ export const PublicSchedule: React.FC = () => {
     const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
 
     return (
-        <div className="h-screen w-full bg-[#050505] text-white overflow-hidden flex flex-col relative font-sans">
-            {/* GRADIENT OVERLAY TOP */}
-            <div className="absolute top-0 left-0 w-full h-[60%] bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-red-950/30 via-transparent to-transparent pointer-events-none" />
+        <div className="h-screen w-full bg-black text-white overflow-hidden flex flex-col relative font-sans">
+            {/* BACKGROUND GRADIENT */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black"></div>
             
             <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
 
             {!audioEnabled && (
-                <div onClick={enableAudio} className="fixed inset-0 z-[9999] bg-black/98 flex flex-col items-center justify-center cursor-pointer p-4 text-center">
-                    <div className="bg-red-600 p-8 rounded-full mb-6 animate-pulse shadow-[0_0_60px_rgba(220,38,38,0.4)]">
+                <div onClick={enableAudio} className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center cursor-pointer p-4 text-center">
+                    <div className="bg-red-600 p-8 rounded-full mb-6 animate-pulse shadow-[0_0_50px_rgba(220,38,38,0.5)]">
                         <Volume2 size={48} />
                     </div>
                     <h1 className="text-3xl font-black text-white uppercase tracking-widest mb-2">Monitor CEMAL</h1>
-                    <p className="text-lg font-medium text-gray-500">Clique para ativar áudio e sincronizar</p>
+                    <p className="text-lg font-medium text-gray-500">Clique em qualquer lugar para sincronizar o áudio</p>
                 </div>
             )}
 
-            {/* HEADER AREA - AS PER IMAGE */}
-            <header className="shrink-0 w-full flex flex-col items-center pt-8 pb-4 z-10">
-                {/* LOGO */}
-                <div className="mb-6">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-[4.5vh] w-auto object-contain brightness-110" alt="Logo CEMAL" />
-                </div>
-
-                {/* CLOCK */}
-                <h1 className="text-[clamp(6rem,18vh,24vh)] leading-[0.9] font-clock font-black text-white tabular-nums drop-shadow-2xl">
-                    {timeString}
-                </h1>
-
-                {/* DATE PILL */}
-                <div className="mt-6 bg-white/5 border border-white/10 px-10 py-2.5 rounded-full backdrop-blur-md">
-                    <p className="text-[clamp(0.7rem,1.8vh,2.2vh)] text-gray-400 font-bold tracking-[0.25em] uppercase">{dateString}</p>
-                </div>
-
-                {/* SHIFT STATUS PILL */}
-                <div className="mt-8 flex items-center gap-3 px-6 py-2 bg-black/40 rounded-full border border-white/5 shadow-xl">
-                    <span className={`h-2.5 w-2.5 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></span>
-                    <span className="text-[clamp(0.6rem,1.5vh,1.8vh)] font-black tracking-[0.2em] text-white uppercase">
-                        {currentShift === 'morning' ? 'TURNO MATUTINO' : currentShift === 'afternoon' ? 'TURNO VESPERTINO' : 'SESSÃO ENCERRADA'}
-                    </span>
-                </div>
-            </header>
-
-            {/* SYSTEM BANNER - OPTIONAL OVERLAY */}
-            {isBannerVisible() && (
-                <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full max-w-4xl z-50 animate-in slide-in-from-top-4">
-                    <div className={`mx-4 p-4 rounded-2xl border-[4px] shadow-2xl flex items-center justify-center gap-4 ${
-                        sysConfig?.bannerType === 'error' ? 'border-red-600 bg-red-900/60' : 
-                        sysConfig?.bannerType === 'warning' ? 'border-yellow-500 bg-yellow-900/60' : 
-                        'border-blue-600 bg-blue-900/60'
-                    }`}>
-                        <Megaphone size={32} className="animate-bounce shrink-0" />
-                        <p className="text-2xl md:text-3xl font-black uppercase text-center text-white">{sysConfig?.bannerMessage}</p>
+            {/* HEADER AREA */}
+            <header className="shrink-0 w-full flex flex-col items-center pt-10 pb-6 z-10 relative">
+                <div className="mb-6 flex items-center gap-4">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-[5vh] w-auto object-contain" alt="Logo CEMAL" />
+                    <div className="h-10 w-px bg-white/20"></div>
+                    <div className="flex flex-col">
+                        <span className="text-[1.8vh] font-black text-red-600 tracking-widest uppercase">Quadro de Horários</span>
+                        <span className="text-[1.4vh] text-gray-500 font-bold uppercase">{currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Sessão Encerrada'}</span>
                     </div>
                 </div>
+
+                <div className="flex flex-col items-center">
+                    <h1 className="text-[clamp(6rem,18vh,22vh)] leading-none font-clock font-black text-white tracking-tighter tabular-nums drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
+                        {timeString}
+                    </h1>
+                    <div className="mt-4 bg-white/5 border border-white/10 px-8 py-2 rounded-full backdrop-blur-md">
+                        <p className="text-[2.2vh] text-gray-300 font-bold tracking-widest uppercase">{dateString}</p>
+                    </div>
+                </div>
+
+                {/* PROGRESS BAR FOR CURRENT CLASS */}
+                {currentSlot && (
+                    <div className="w-full max-w-3xl mt-8 px-6">
+                        <div className="flex justify-between items-end mb-2">
+                             <span className="text-xs font-black text-red-500 uppercase tracking-widest flex items-center gap-2">
+                                <Timer size={14}/> {currentSlot.label} ({currentSlot.start} - {currentSlot.end})
+                             </span>
+                             <span className="text-xs font-black text-gray-500 uppercase">{Math.round(progress)}% Concluído</span>
+                        </div>
+                        <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 backdrop-blur-sm">
+                            <div 
+                                className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-1000 ease-linear shadow-[0_0_15px_rgba(220,38,38,0.5)]" 
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
+            </header>
+
+            {/* SYSTEM BANNER (SCROLLING IF ACTIVE) */}
+            {isBannerVisible() && (
+                <div className={`absolute top-0 left-0 w-full z-50 p-4 flex items-center justify-center gap-4 ${
+                    sysConfig?.bannerType === 'error' ? 'bg-red-600' : 
+                    sysConfig?.bannerType === 'warning' ? 'bg-yellow-500 text-black' : 
+                    'bg-blue-600'
+                }`}>
+                    <Megaphone size={24} className="animate-bounce" />
+                    <p className="text-2xl font-black uppercase tracking-tight">{sysConfig?.bannerMessage}</p>
+                </div>
             )}
 
-            {/* MAIN GRID - DYNAMIC AS PER IMAGE */}
-            <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 pb-12 overflow-hidden flex items-center justify-center">
+            {/* MAIN GRID */}
+            <main className="flex-1 w-full max-w-[1600px] mx-auto px-8 pb-12 overflow-hidden flex items-center justify-center z-10">
                 {currentShift === 'off' ? (
-                     <div className="flex flex-col items-center justify-center p-12 text-center bg-white/[0.02] rounded-[3rem] border border-white/5 backdrop-blur-xl">
-                        <School size={80} className="text-red-600/20 mb-6"/>
-                        <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">C.E. Prof. Manoel Leite</h2>
-                        <p className="text-xl text-red-500 font-bold uppercase tracking-[0.3em]">Aguardando próximo turno</p>
+                     <div className="flex flex-col items-center justify-center p-16 text-center bg-white/[0.03] rounded-[3rem] border border-white/10 backdrop-blur-2xl">
+                        <School size={120} className="text-red-600/30 mb-8"/>
+                        <h2 className="text-5xl font-black text-white uppercase tracking-tighter mb-4">C.E. Prof. Manoel Leite</h2>
+                        <p className="text-2xl text-red-500 font-bold uppercase tracking-[0.4em] animate-pulse">Aguardando próximo turno</p>
                      </div>
                 ) : (
-                    <div className="grid gap-6 w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 items-stretch content-center">
+                    <div className="grid gap-8 w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 content-center items-stretch h-full py-4">
                         {activeClasses.map(cls => {
                             const entry = getEntry(cls.id);
                             const nextEntry = getNextEntry(cls.id);
 
                             return (
-                                <article key={cls.id} className="flex flex-col bg-[#111] border border-white/5 rounded-2xl overflow-hidden shadow-2xl transition-all hover:scale-[1.02] hover:border-red-900/50 group">
-                                    <div className="shrink-0 bg-[#0a0a0a] flex items-center justify-center border-b border-white/5 p-4">
-                                        <h2 className="text-[clamp(1.1rem,2.8vh,3.2vh)] font-black text-white uppercase tracking-tight truncate w-full text-center">{cls.name}</h2>
+                                <article key={cls.id} className="flex flex-col bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl transition-all relative group hover:bg-white/5 hover:border-red-600/30">
+                                    {/* CLASS HEADER */}
+                                    <div className="bg-black/40 flex items-center justify-center p-6 border-b border-white/5">
+                                        <h2 className="text-[clamp(1.2rem,3vh,3.5vh)] font-black text-white uppercase tracking-tight truncate w-full text-center">{cls.name}</h2>
                                     </div>
                                     
-                                    <div className="flex-1 min-h-[180px] flex flex-col p-6">
+                                    <div className="flex-1 flex flex-col p-8 space-y-8">
                                         {currentSlot?.type === 'break' ? (
-                                             <div className="flex-1 flex flex-col items-center justify-center gap-4 animate-pulse">
-                                                <Clock size={40} className="text-yellow-600/40"/>
-                                                <span className="text-2xl font-black text-yellow-600 uppercase tracking-widest">INTERVALO</span>
+                                             <div className="flex-1 flex flex-col items-center justify-center gap-6 animate-pulse">
+                                                <div className="h-24 w-24 bg-yellow-500/10 rounded-full flex items-center justify-center text-yellow-500 border border-yellow-500/20">
+                                                    <Clock size={48}/>
+                                                </div>
+                                                <span className="text-3xl font-black text-yellow-500 uppercase tracking-[0.2em]">INTERVALO</span>
                                              </div>
                                         ) : entry ? (
                                             <>
-                                                <div className="flex-[2] flex flex-col items-center justify-center text-center gap-1.5 mb-6">
-                                                    <p className="text-[0.6rem] font-black text-red-600 uppercase tracking-[0.2em] opacity-80">AULA AGORA</p>
-                                                    <h3 className="text-[clamp(1.4rem,4vh,5vh)] leading-[1.1] font-black text-white uppercase line-clamp-2">{entry.subject}</h3>
-                                                    <p className="text-[clamp(0.8rem,1.8vh,2.2vh)] font-bold text-gray-400 uppercase truncate w-full">{entry.professor}</p>
+                                                {/* CURRENT SUBJECT */}
+                                                <div className="flex-1 flex flex-col items-center justify-center text-center">
+                                                    <span className="inline-block px-3 py-1 bg-red-600/10 text-red-500 rounded-full text-[1.2vh] font-black uppercase tracking-widest mb-4 border border-red-500/20">
+                                                        Aula Agora
+                                                    </span>
+                                                    <h3 className="text-[clamp(1.5rem,4.5vh,5.5vh)] leading-[1.1] font-black text-white uppercase line-clamp-2 drop-shadow-lg mb-3">
+                                                        {entry.subject}
+                                                    </h3>
+                                                    <div className="flex items-center gap-2 text-gray-400 font-bold uppercase text-[1.8vh] tracking-tight">
+                                                        <User size={16} className="text-red-600"/>
+                                                        <span>{entry.professor}</span>
+                                                    </div>
                                                 </div>
 
-                                                <div className="shrink-0 flex flex-col items-center justify-center p-3.5 bg-white/[0.02] rounded-xl border border-white/5 relative group-hover:bg-white/5 transition-colors">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-[0.55rem] font-black text-gray-500 uppercase tracking-widest">A SEGUIR</span>
-                                                        <ArrowRight size={10} className="text-red-900"/>
+                                                {/* NEXT SUBJECT HINT */}
+                                                <div className="shrink-0 bg-black/60 p-5 rounded-3xl border border-white/5 relative">
+                                                    <div className="absolute -top-3 left-6 px-3 py-0.5 bg-gray-800 rounded-full border border-white/10">
+                                                        <span className="text-[1vh] font-black text-gray-500 uppercase tracking-widest">A Seguir</span>
                                                     </div>
-
+                                                    
                                                     {nextEntry ? (
-                                                        <div className="flex flex-col items-center w-full">
-                                                            <p className="text-[clamp(0.8rem,2vh,2.4vh)] font-black text-gray-300 uppercase truncate w-full tracking-tight">{nextEntry.subject}</p>
+                                                        <div className="flex flex-col gap-1">
+                                                            <p className="text-[1.8vh] font-black text-gray-300 uppercase truncate tracking-tight">{nextEntry.subject}</p>
+                                                            <p className="text-[1.4vh] text-gray-500 font-bold uppercase truncate opacity-80">{nextEntry.professor}</p>
                                                         </div>
                                                     ) : (
-                                                        <p className="text-[clamp(0.7rem,1.8vh,2vh)] font-black text-gray-700 uppercase tracking-widest">FIM DO TURNO</p>
+                                                        <p className="text-[1.6vh] font-black text-gray-700 uppercase tracking-widest text-center py-2">Fim do Turno</p>
                                                     )}
                                                 </div>
                                             </>
                                         ) : (
-                                            <div className="flex-1 flex flex-col items-center justify-center opacity-30 select-none">
-                                                <span className="text-[clamp(1.5rem,4vh,5vh)] font-black tracking-[0.4em] uppercase text-gray-600">LIVRE</span>
+                                            <div className="flex-1 flex flex-col items-center justify-center opacity-20 group-hover:opacity-40 transition-opacity">
+                                                <BookOpen size={80} className="mb-6" />
+                                                <span className="text-[3vh] font-black tracking-[0.5em] uppercase text-gray-600">LIVRE</span>
                                             </div>
                                         )}
                                     </div>
+                                    
+                                    {/* AMBIENT ACCENT */}
+                                    <div className={`absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-transparent via-red-600/50 to-transparent transition-all ${entry ? 'opacity-100' : 'opacity-0'}`}></div>
                                 </article>
                             )
                         })}
@@ -311,119 +350,153 @@ export const PublicSchedule: React.FC = () => {
             </main>
 
             {/* FLOATING ACTION BUTTONS */}
-            <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50">
+            <div className="fixed bottom-8 right-8 flex flex-col gap-4 z-50">
                 <button 
                     onClick={toggleFullScreen} 
-                    className="p-4 bg-black/60 hover:bg-white/10 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl active:scale-95"
+                    className="p-5 bg-black/40 hover:bg-white/10 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl active:scale-95"
                     aria-label={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
                 >
-                    {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
+                    {isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}
                 </button>
                 <button 
                     onClick={() => setShowModal(true)} 
-                    className="p-4 bg-black/60 hover:bg-white/10 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl active:scale-95"
+                    className="p-5 bg-black/40 hover:bg-white/10 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl active:scale-95"
                     aria-label="Ver Quadro Completo"
                 >
-                    <Maximize2 size={22} />
+                    <Maximize2 size={24} />
                 </button>
             </div>
 
-             {/* FULL SCHEDULE MODAL */}
+             {/* FULL SCHEDULE MODAL (OVERLAY) */}
              {showModal && (
-                 <div className="fixed inset-0 z-[100] bg-black/98 backdrop-blur-3xl flex items-center justify-center p-4 animate-in fade-in duration-300">
-                    <div className="w-full h-full max-w-[95vw] max-h-[95vh] bg-[#0c0c0e] rounded-[2rem] border border-white/10 flex flex-col overflow-hidden">
-                        <header className="p-6 md:p-8 border-b border-white/10 flex justify-between items-center bg-[#141417] shrink-0">
-                            <h2 className="text-xl md:text-2xl font-black text-white flex items-center gap-3 uppercase tracking-tighter">
-                                Quadro Geral de Horários
-                            </h2>
-                            <button onClick={() => setShowModal(false)} className="bg-red-600/10 p-3 rounded-xl hover:bg-red-600 text-red-500 hover:text-white transition-all">
-                                <X size={24} />
+                 <div className="fixed inset-0 z-[200] bg-black/98 backdrop-blur-3xl flex items-center justify-center p-8 animate-in fade-in duration-300">
+                    <div className="w-full h-full max-w-7xl bg-[#0c0c0e] rounded-[3rem] border border-white/10 flex flex-col overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)]">
+                        <header className="p-8 border-b border-white/10 flex justify-between items-center bg-[#141417]">
+                            <div>
+                                <h2 className="text-3xl font-black text-white flex items-center gap-4 uppercase tracking-tighter">
+                                    <List className="text-red-600"/> Grade Geral de Horários
+                                </h2>
+                                <p className="text-gray-500 font-bold text-sm uppercase tracking-widest mt-1">Sincronizado com a base de dados central</p>
+                            </div>
+                            <button onClick={() => setShowModal(false)} className="bg-red-600 text-white p-4 rounded-2xl hover:bg-red-700 transition-all shadow-lg shadow-red-900/20">
+                                <X size={32} />
                             </button>
                         </header>
-                        <div className="flex-1 overflow-auto p-6 md:p-10 custom-scrollbar">
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
-                                {/* MATUTINO */}
-                                <section className="bg-white/[0.02] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
-                                    <div className="bg-blue-600/10 p-4 border-b border-blue-600/10 text-center">
+                        
+                        <div className="flex-1 overflow-auto p-8 custom-scrollbar bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white/[0.02] via-transparent to-transparent">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
+                                {/* MATUTINO TABLE */}
+                                <section className="space-y-6">
+                                    <div className="flex items-center gap-3 px-4 py-2 bg-blue-600/10 border border-blue-600/20 rounded-xl w-fit">
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
                                         <h3 className="text-sm font-black text-blue-400 uppercase tracking-widest">Matutino (EFAF)</h3>
                                     </div>
-                                    <table className="w-full text-left">
-                                        <thead className="bg-black/60 text-white border-b border-white/10">
-                                            <tr>
-                                                <th className="p-3 font-black uppercase text-[10px] w-20 text-center">Hora</th>
-                                                {MORNING_CLASSES.map(c => <th key={c.id} className="p-3 font-black uppercase text-[10px] text-center border-l border-white/5">{c.name}</th>)}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/5">
-                                            {MORNING_SLOTS.map(slot => (
-                                                <tr key={slot.id} className={`${slot.type === 'break' ? 'bg-yellow-500/5' : ''}`}>
-                                                    <td className="p-3 text-center border-r border-white/5">
-                                                        <span className="text-[10px] font-black text-red-600 font-mono">{slot.start}</span>
-                                                    </td>
-                                                    {MORNING_CLASSES.map(cls => {
-                                                        const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
-                                                        return (
-                                                            <td key={cls.id + slot.id} className="p-3 text-center border-l border-white/5">
-                                                                {slot.type === 'break' ? (
-                                                                    <span className="text-[8px] font-black text-yellow-600 uppercase">INTERVALO</span>
-                                                                ) : entry ? (
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-black text-white text-[10px] uppercase truncate">{entry.subject}</span>
-                                                                        <span className="text-[8px] text-gray-500 font-bold uppercase truncate">{entry.professor}</span>
-                                                                    </div>
-                                                                ) : <span className="text-gray-800 text-xs">—</span>}
-                                                            </td>
-                                                        )
-                                                    })}
+                                    <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-black/60 text-gray-400 border-b border-white/10 text-[10px] font-black uppercase tracking-widest">
+                                                <tr>
+                                                    <th className="p-4 text-center w-24">Hora</th>
+                                                    {MORNING_CLASSES.map(c => <th key={c.id} className="p-4 text-center border-l border-white/5">{c.name}</th>)}
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {MORNING_SLOTS.map(slot => (
+                                                    <tr key={slot.id} className={`hover:bg-white/[0.02] ${slot.type === 'break' ? 'bg-yellow-500/5' : ''}`}>
+                                                        <td className="p-4 text-center border-r border-white/5">
+                                                            <span className="text-xs font-black text-red-600 font-mono">{slot.start}</span>
+                                                        </td>
+                                                        {MORNING_CLASSES.map(cls => {
+                                                            const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
+                                                            return (
+                                                                <td key={cls.id + slot.id} className="p-4 text-center border-l border-white/5">
+                                                                    {slot.type === 'break' ? (
+                                                                        <span className="text-[10px] font-black text-yellow-600 uppercase tracking-tighter">INTERVALO</span>
+                                                                    ) : entry ? (
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-bold text-white text-[11px] uppercase truncate max-w-[120px]">{entry.subject}</span>
+                                                                            <span className="text-[9px] text-gray-500 font-medium uppercase truncate max-w-[120px]">{entry.professor}</span>
+                                                                        </div>
+                                                                    ) : <span className="text-gray-800 text-xs">—</span>}
+                                                                </td>
+                                                            )
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </section>
 
-                                {/* VESPERTINO */}
-                                <section className="bg-white/[0.02] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
-                                     <div className="bg-red-600/10 p-4 border-b border-red-600/10 text-center">
+                                {/* VESPERTINO TABLE */}
+                                <section className="space-y-6">
+                                    <div className="flex items-center gap-3 px-4 py-2 bg-red-600/10 border border-red-600/20 rounded-xl w-fit">
+                                        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                                         <h3 className="text-sm font-black text-red-400 uppercase tracking-widest">Vespertino (E.M.)</h3>
                                     </div>
-                                    <table className="w-full text-left">
-                                        <thead className="bg-black/60 text-white border-b border-white/10">
-                                            <tr>
-                                                <th className="p-3 font-black uppercase text-[10px] w-20 text-center">Hora</th>
-                                                {AFTERNOON_CLASSES.map(c => <th key={c.id} className="p-3 font-black uppercase text-[10px] text-center border-l border-white/5">{c.name}</th>)}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/5">
-                                            {AFTERNOON_SLOTS.map(slot => (
-                                                <tr key={slot.id} className={`${slot.type === 'break' ? 'bg-yellow-500/5' : ''}`}>
-                                                    <td className="p-3 text-center border-r border-white/5">
-                                                        <span className="text-[10px] font-black text-red-600 font-mono">{slot.start}</span>
-                                                    </td>
-                                                    {AFTERNOON_CLASSES.map(cls => {
-                                                        const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
-                                                        return (
-                                                            <td key={cls.id + slot.id} className="p-3 text-center border-l border-white/5">
-                                                                {slot.type === 'break' ? (
-                                                                    <span className="text-[8px] font-black text-yellow-600 uppercase">INTERVALO</span>
-                                                                ) : entry ? (
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-black text-white text-[10px] uppercase truncate">{entry.subject}</span>
-                                                                        <span className="text-[8px] text-gray-500 font-bold uppercase truncate">{entry.professor}</span>
-                                                                    </div>
-                                                                ) : <span className="text-gray-800 text-xs">—</span>}
-                                                            </td>
-                                                        )
-                                                    })}
+                                    <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-black/60 text-gray-400 border-b border-white/10 text-[10px] font-black uppercase tracking-widest">
+                                                <tr>
+                                                    <th className="p-4 text-center w-24">Hora</th>
+                                                    {AFTERNOON_CLASSES.map(c => <th key={c.id} className="p-4 text-center border-l border-white/5">{c.name}</th>)}
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {AFTERNOON_SLOTS.map(slot => (
+                                                    <tr key={slot.id} className={`hover:bg-white/[0.02] ${slot.type === 'break' ? 'bg-yellow-500/5' : ''}`}>
+                                                        <td className="p-4 text-center border-r border-white/5">
+                                                            <span className="text-xs font-black text-red-600 font-mono">{slot.start}</span>
+                                                        </td>
+                                                        {AFTERNOON_CLASSES.map(cls => {
+                                                            const entry = getFullEntry(cls.id, slot.id, currentTime.getDay());
+                                                            return (
+                                                                <td key={cls.id + slot.id} className="p-4 text-center border-l border-white/5">
+                                                                    {slot.type === 'break' ? (
+                                                                        <span className="text-[10px] font-black text-yellow-600 uppercase tracking-tighter">INTERVALO</span>
+                                                                    ) : entry ? (
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-bold text-white text-[11px] uppercase truncate max-w-[120px]">{entry.subject}</span>
+                                                                            <span className="text-[9px] text-gray-500 font-medium uppercase truncate max-w-[120px]">{entry.professor}</span>
+                                                                        </div>
+                                                                    ) : <span className="text-gray-800 text-xs">—</span>}
+                                                                </td>
+                                                            )
+                                                        })}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </section>
                             </div>
                         </div>
                     </div>
                 </div>
              )}
+
+            <style>{`
+                @keyframes pulse-soft {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.7; }
+                }
+                .animate-pulse-soft {
+                    animation: pulse-soft 3s ease-in-out infinite;
+                }
+                .custom-scrollbar::-webkit-scrollbar {
+                    width: 8px;
+                    height: 8px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background: rgba(255, 255, 255, 0.1);
+                    border-radius: 10px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background: rgba(255, 255, 255, 0.2);
+                }
+            `}</style>
         </div>
     );
 };

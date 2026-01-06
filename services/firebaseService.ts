@@ -1,3 +1,4 @@
+
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
 // Use @firebase/app for modular SDK functions to avoid shadowing/compatibility issues.
 import { initializeApp, deleteApp } from '@firebase/app';
@@ -255,6 +256,16 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
     const { id, ...data } = exam;
     if (id) await setDoc(doc(db, EXAMS_COLLECTION, id), sanitizeForFirestore(data));
     else await addDoc(collection(db, EXAMS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
+    const { id, ...data } = entry;
+    if (id) await setDoc(doc(db, SCHEDULE_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, SCHEDULE_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const deleteScheduleEntry = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, SCHEDULE_COLLECTION, id));
 };
 
 export const uploadExamFile = async (file: File, teacherName: string): Promise<string> => {
