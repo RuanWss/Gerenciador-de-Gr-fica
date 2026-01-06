@@ -22,7 +22,8 @@ import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, List, PlusCircle, Layout, X, 
   Wand2, Folder, File as FileIcon, Trash2, Edit3, CheckCircle, FileUp, FileDown, ExternalLink, Search,
-  BookOpen, Heart, FileText, Calendar, Save, Eye, ChevronRight, Download, Info, Target, LayoutPanelLeft, Compass
+  BookOpen, Heart, FileText, Calendar, Save, Eye, ChevronRight, Download, Info, Target, LayoutPanelLeft, Compass,
+  LayoutPanelTop, Image as ImageIcon, ArrowLeft
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -40,7 +41,7 @@ const FormSection = ({ title, icon: Icon, children }: { title: string, icon: any
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials' | 'planning' | 'pei'>('requests');
-  const [creationMode, setCreationMode] = useState<'none' | 'upload' | 'create'>('none');
+  const [creationMode, setCreationMode] = useState<'none' | 'upload' | 'create' | 'header'>('none');
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [materials, setMaterials] = useState<ClassMaterial[]>([]);
   const [plans, setPlans] = useState<LessonPlan[]>([]);
@@ -321,6 +322,15 @@ export const TeacherDashboard: React.FC = () => {
           didacticResources: '',
           evaluation: ''
       });
+  };
+
+  const handleDownloadHeader = (url: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredExams = exams.filter(e => 
@@ -608,7 +618,7 @@ export const TeacherDashboard: React.FC = () => {
                                 <h2 className="text-2xl font-black text-white uppercase tracking-tight">{newPlan.id ? 'Editar Planejamento' : 'Novo Planejamento'}</h2>
                                 <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">Prof. {user?.name}</p>
                             </div>
-                            <button onClick={() => setShowPlanModal(false)} className="text-gray-500 hover:text-white transition-colors"><X size={32}/></button>
+                            <button onClick={() => setShowPlanModal(false)} className="text-gray-500 hover:text-gray-900 transition-colors"><X size={32}/></button>
                         </div>
                         
                         <div className="space-y-8">
@@ -803,12 +813,52 @@ export const TeacherDashboard: React.FC = () => {
                                     <h3 className="text-2xl font-black text-white uppercase mb-4">Fazer Upload</h3>
                                     <p className="text-gray-500">Envie PDF, Word ou imagens prontas.</p>
                                 </button>
-                                <button onClick={() => setCreationMode('create')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-blue-600 transition-all group shadow-2xl">
-                                    <div className="h-24 w-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><Wand2 size={48}/></div>
-                                    <h3 className="text-2xl font-black text-white uppercase mb-4">Pedido Manual</h3>
-                                    <p className="text-gray-500">Solicite apenas a impressão de cabeçalho.</p>
+                                <button onClick={() => setCreationMode('header')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-blue-600 transition-all group shadow-2xl">
+                                    <div className="h-24 w-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><LayoutPanelTop size={48}/></div>
+                                    <h3 className="text-2xl font-black text-white uppercase mb-4">Cabeçalho</h3>
+                                    <p className="text-gray-500">Baixe o cabeçalho oficial da escola.</p>
                                 </button>
                              </div>
+                        </div>
+                    ) : creationMode === 'header' ? (
+                        <div className="max-w-4xl mx-auto py-12">
+                            <div className="flex items-center gap-4 mb-8">
+                                <button onClick={() => setCreationMode('none')} className="p-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-all">
+                                    <ArrowLeft size={24} />
+                                </button>
+                                <div>
+                                    <h1 className="text-3xl font-black text-white uppercase tracking-tight">Cabeçalhos Oficiais</h1>
+                                    <p className="text-gray-400">Selecione o modelo para baixar o cabeçalho oficial.</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col group hover:border-red-600/30 transition-all">
+                                    <div className="h-48 bg-black/40 rounded-2xl mb-6 flex items-center justify-center overflow-hidden border border-white/5 group-hover:border-red-600/20 transition-all">
+                                        <ImageIcon size={64} className="text-gray-700 group-hover:text-red-600/40 transition-all" />
+                                    </div>
+                                    <h3 className="text-xl font-black text-white uppercase mb-2">Cabeçalho de Prova</h3>
+                                    <p className="text-gray-500 text-sm mb-8">Modelo padrão para avaliações e testes bimestrais.</p>
+                                    <button 
+                                        onClick={() => handleDownloadHeader('https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png', 'CABECALHO_PROVA_CEMAL.png')}
+                                        className="mt-auto w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl flex items-center justify-center gap-2 uppercase tracking-widest text-xs transition-all shadow-xl shadow-red-900/20"
+                                    >
+                                        <Download size={18}/> Baixar Agora
+                                    </button>
+                                </div>
+                                <div className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col group hover:border-blue-600/30 transition-all">
+                                    <div className="h-48 bg-black/40 rounded-2xl mb-6 flex items-center justify-center overflow-hidden border border-white/5 group-hover:border-blue-600/20 transition-all">
+                                        <ImageIcon size={64} className="text-gray-700 group-hover:text-blue-600/40 transition-all" />
+                                    </div>
+                                    <h3 className="text-xl font-black text-white uppercase mb-2">Cabeçalho de Apostila</h3>
+                                    <p className="text-gray-500 text-sm mb-8">Modelo otimizado para materiais e apostilas de aula.</p>
+                                    <button 
+                                        onClick={() => handleDownloadHeader('https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png', 'CABECALHO_APOSTILA_CEMAL.png')}
+                                        className="mt-auto w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl flex items-center justify-center gap-2 uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-900/20"
+                                    >
+                                        <Download size={18}/> Baixar Agora
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <div className="max-w-3xl mx-auto">
