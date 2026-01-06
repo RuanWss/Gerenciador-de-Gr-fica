@@ -132,6 +132,13 @@ export const TeacherDashboard: React.FC = () => {
 
   const finalizeExam = async () => {
       if (!examTitle || !examGrade) return alert("Preencha o título e a turma.");
+      
+      // Validação de quantidade baseada no número de alunos (Solicitação da Imagem)
+      const studentsInClassCount = students.filter(s => s.className === examGrade).length;
+      if (printQty > studentsInClassCount) {
+          return alert(`Erro: A quantidade de cópias (${printQty}) não pode ser maior que o número de alunos cadastrados nesta turma (${studentsInClassCount}).`);
+      }
+
       if (creationMode === 'upload' && uploadedFiles.length === 0) return alert("Selecione pelo menos um arquivo.");
       
       setIsSaving(true);
@@ -292,6 +299,7 @@ export const TeacherDashboard: React.FC = () => {
       setExamGrade('');
       setExamInstructions('');
       setUploadedFiles([]);
+      setPrintQty(30);
   };
 
   const resetPlanForm = () => {
@@ -320,13 +328,28 @@ export const TeacherDashboard: React.FC = () => {
       });
   };
 
-  const handleDownloadHeader = (url: string, filename: string) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownloadHeader = async (url: string, filename: string) => {
+    try {
+      // Usamos fetch + blob para forçar o download direto sem abrir a imagem no navegador
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      // Fallback simple link download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   const filteredExams = exams.filter(e => 
@@ -811,7 +834,7 @@ export const TeacherDashboard: React.FC = () => {
                              </div>
                         </div>
                     ) : creationMode === 'header' ? (
-                        <div className="max-w-4xl mx-auto py-12">
+                        <div className="max-w-5xl mx-auto py-12">
                             <div className="flex items-center gap-4 mb-8">
                                 <button onClick={() => setCreationMode('none')} className="p-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full transition-all">
                                     <ArrowLeft size={24} />
@@ -821,38 +844,42 @@ export const TeacherDashboard: React.FC = () => {
                                     <p className="text-gray-400">Selecione o modelo desejado para download imediato.</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                                 <button 
                                     onClick={() => handleDownloadHeader('https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png', 'CABECALHO_PROVA_CEMAL.png')}
-                                    className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col text-left group hover:border-red-600 transition-all shadow-2xl active:scale-95"
+                                    className="bg-[#111114] border border-white/5 rounded-[2.5rem] flex flex-col text-left group hover:border-red-600 transition-all shadow-2xl active:scale-95 overflow-hidden"
                                 >
-                                    <div className="h-48 w-full bg-black/40 rounded-2xl mb-6 flex items-center justify-center border border-white/5 group-hover:border-red-600/20 transition-all">
-                                        <div className="flex flex-col items-center text-red-500 gap-3 group-hover:animate-pulse">
-                                            <ImageIcon size={64} className="opacity-40" />
-                                            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Modelo Prova</span>
+                                    <div className="h-64 w-full bg-black/60 flex items-center justify-center border-b border-white/5 relative group-hover:border-red-600/20 transition-all">
+                                        <img src="https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png" className="w-full h-full object-contain opacity-40 group-hover:opacity-100 transition-opacity p-4" />
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-950/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <span className="text-[12px] font-black uppercase tracking-[0.3em] text-red-500 bg-black/80 px-4 py-2 rounded-lg">Modelo Prova</span>
                                         </div>
                                     </div>
-                                    <h3 className="text-xl font-black text-white uppercase mb-2">Cabeçalho de Prova</h3>
-                                    <p className="text-gray-500 text-sm mb-6">Padrão oficial para avaliações e testes bimestrais.</p>
-                                    <div className="mt-auto flex items-center gap-2 text-red-500 font-black text-xs uppercase tracking-widest bg-red-500/10 px-4 py-3 rounded-xl w-fit">
-                                        <Download size={18}/> Download Imediato
+                                    <div className="p-8 flex-1 flex flex-col">
+                                        <h3 className="text-2xl font-black text-white uppercase mb-2">Cabeçalho de Prova</h3>
+                                        <p className="text-gray-500 text-sm mb-8 leading-relaxed">Padrão oficial para avaliações e testes bimestrais.</p>
+                                        <div className="mt-auto flex items-center gap-3 text-red-500 font-black text-xs uppercase tracking-[0.15em] bg-red-600/10 px-6 py-4 rounded-2xl w-full border border-red-600/20 group-hover:bg-red-600/20 transition-all">
+                                            <Download size={20}/> Download Imediato
+                                        </div>
                                     </div>
                                 </button>
 
                                 <button 
                                     onClick={() => handleDownloadHeader('https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png', 'CABECALHO_APOSTILA_CEMAL.png')}
-                                    className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col text-left group hover:border-blue-600 transition-all shadow-2xl active:scale-95"
+                                    className="bg-[#111114] border border-white/5 rounded-[2.5rem] flex flex-col text-left group hover:border-blue-600 transition-all shadow-2xl active:scale-95 overflow-hidden"
                                 >
-                                    <div className="h-48 w-full bg-black/40 rounded-2xl mb-6 flex items-center justify-center border border-white/5 group-hover:border-blue-600/20 transition-all">
-                                        <div className="flex flex-col items-center text-blue-500 gap-3 group-hover:animate-pulse">
-                                            <ImageIcon size={64} className="opacity-40" />
-                                            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Modelo Apostila</span>
+                                    <div className="h-64 w-full bg-black/60 flex items-center justify-center border-b border-white/5 relative group-hover:border-blue-600/20 transition-all">
+                                        <img src="https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png" className="w-full h-full object-contain opacity-40 group-hover:opacity-100 transition-opacity p-4" />
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-950/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <span className="text-[12px] font-black uppercase tracking-[0.3em] text-blue-500 bg-black/80 px-4 py-2 rounded-lg">Modelo Apostila</span>
                                         </div>
                                     </div>
-                                    <h3 className="text-xl font-black text-white uppercase mb-2">Cabeçalho de Apostila</h3>
-                                    <p className="text-gray-500 text-sm mb-6">Modelo otimizado para materiais didáticos e atividades.</p>
-                                    <div className="mt-auto flex items-center gap-2 text-blue-500 font-black text-xs uppercase tracking-widest bg-blue-500/10 px-4 py-3 rounded-xl w-fit">
-                                        <Download size={18}/> Download Imediato
+                                    <div className="p-8 flex-1 flex flex-col">
+                                        <h3 className="text-2xl font-black text-white uppercase mb-2">Cabeçalho de Apostila</h3>
+                                        <p className="text-gray-500 text-sm mb-8 leading-relaxed">Modelo otimizado para materiais didáticos e atividades.</p>
+                                        <div className="mt-auto flex items-center gap-3 text-blue-500 font-black text-xs uppercase tracking-[0.15em] bg-blue-600/10 px-6 py-4 rounded-2xl w-full border border-blue-600/20 group-hover:bg-blue-600/20 transition-all">
+                                            <Download size={20}/> Download Imediato
+                                        </div>
                                     </div>
                                 </button>
                             </div>
