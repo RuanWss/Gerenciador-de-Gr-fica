@@ -226,8 +226,11 @@ export const getUserProfile = async (uid: string): Promise<User | null> => {
     return null;
 };
 
-export const getAllPEIs = async (): Promise<PEIDocument[]> => {
-    const snapshot = await getDocs(collection(db, PEI_COLLECTION));
+export const getAllPEIs = async (teacherId?: string): Promise<PEIDocument[]> => {
+    const q = teacherId 
+        ? query(collection(db, PEI_COLLECTION), where("teacherId", "==", teacherId))
+        : collection(db, PEI_COLLECTION);
+    const snapshot = await getDocs(q);
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PEIDocument));
 };
 
@@ -256,6 +259,18 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
     const { id, ...data } = exam;
     if (id) await setDoc(doc(db, EXAMS_COLLECTION, id), sanitizeForFirestore(data));
     else await addDoc(collection(db, EXAMS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const saveLessonPlan = async (plan: LessonPlan): Promise<void> => {
+    const { id, ...data } = plan;
+    if (id) await setDoc(doc(db, LESSON_PLANS_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, LESSON_PLANS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const savePEIDocument = async (pei: PEIDocument): Promise<void> => {
+    const { id, ...data } = pei;
+    if (id) await setDoc(doc(db, PEI_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, PEI_COLLECTION), sanitizeForFirestore(data));
 };
 
 export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {

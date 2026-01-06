@@ -6,26 +6,35 @@ import {
     saveExam, 
     uploadExamFile,
     getClassMaterials,
+    getLessonPlans,
+    saveLessonPlan,
+    getAllPEIs,
+    savePEIDocument,
+    listenToStudents
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, ClassMaterial } from '../types';
+import { ExamRequest, ExamStatus, ClassMaterial, LessonPlan, PEIDocument, Student } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, List, PlusCircle, Layout, X, 
-  Wand2, Folder, File as FileIcon, Trash2, CheckCircle, FileUp, FileDown, ExternalLink, Search
+  Wand2, Folder, File as FileIcon, Trash2, CheckCircle, FileUp, FileDown, ExternalLink, Search,
+  BookOpen, Heart, FileText, Calendar, Save, Eye, ChevronRight
 } from 'lucide-react';
-import { CLASSES } from '../constants';
+import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials' | 'planning' | 'pei'>('requests');
   const [creationMode, setCreationMode] = useState<'none' | 'upload' | 'create'>('none');
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [materials, setMaterials] = useState<ClassMaterial[]>([]);
+  const [plans, setPlans] = useState<LessonPlan[]>([]);
+  const [peis, setPeis] = useState<PEIDocument[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // --- FORM STATES ---
+  // --- FORM STATES (EXAM) ---
   const [examTitle, setExamTitle] = useState('');
   const [examGrade, setExamGrade] = useState('');
   const [examSubject, setExamSubject] = useState(user?.subject || '');
@@ -33,9 +42,39 @@ export const TeacherDashboard: React.FC = () => {
   const [printQty, setPrintQty] = useState(30);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
+  // --- FORM STATES (PLANNING) ---
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [newPlan, setNewPlan] = useState<Partial<LessonPlan>>({
+      type: 'daily',
+      subject: user?.subject || '',
+      className: '',
+      date: new Date().toISOString().split('T')[0],
+      topic: '',
+      content: '',
+      methodology: ''
+  });
+
+  // --- FORM STATES (PEI) ---
+  const [showPeiModal, setShowPeiModal] = useState(false);
+  const [newPei, setNewPei] = useState<Partial<PEIDocument>>({
+      studentId: '',
+      studentName: '',
+      subject: user?.subject || '',
+      period: '1º BIMESTRE',
+      essentialCompetencies: '',
+      selectedContents: '',
+      didacticResources: '',
+      evaluation: ''
+  });
+
   useEffect(() => {
     fetchData();
   }, [user, activeTab]);
+
+  useEffect(() => {
+      const unsub = listenToStudents(setStudents);
+      return () => unsub();
+  }, []);
 
   const fetchData = async () => {
     if (!user) return;
@@ -47,6 +86,12 @@ export const TeacherDashboard: React.FC = () => {
         } else if (activeTab === 'materials') {
             const allMats = await getClassMaterials(user.id);
             setMaterials(allMats.sort((a,b) => b.createdAt - a.createdAt));
+        } else if (activeTab === 'planning') {
+            const allPlans = await getLessonPlans(user.id);
+            setPlans(allPlans.sort((a,b) => b.createdAt - a.createdAt));
+        } else if (activeTab === 'pei') {
+            const allPeis = await getAllPEIs(user.id);
+            setPeis(allPeis.sort((a,b) => b.updatedAt - a.updatedAt));
         }
     } catch (e) { console.error(e); }
     setIsLoading(false);
@@ -116,6 +161,42 @@ export const TeacherDashboard: React.FC = () => {
       finally { setIsSaving(false); }
   };
 
+  const handleSavePlan = async () => {
+      if (!newPlan.className || !newPlan.topic) return alert("Preencha turma e tema.");
+      setIsSaving(true);
+      try {
+          await saveLessonPlan({
+              ...newPlan as LessonPlan,
+              teacherId: user?.id || '',
+              teacherName: user?.name || '',
+              createdAt: Date.now()
+          });
+          setShowPlanModal(false);
+          fetchData();
+          alert("Planejamento salvo!");
+      } catch (e) { alert("Erro ao salvar planejamento."); }
+      finally { setIsSaving(false); }
+  };
+
+  const handleSavePei = async () => {
+      if (!newPei.studentId) return alert("Selecione um aluno.");
+      setIsSaving(true);
+      try {
+          const student = students.find(s => s.id === newPei.studentId);
+          await savePEIDocument({
+              ...newPei as PEIDocument,
+              studentName: student?.name || '',
+              teacherId: user?.id || '',
+              teacherName: user?.name || '',
+              updatedAt: Date.now()
+          });
+          setShowPeiModal(false);
+          fetchData();
+          alert("Documento PEI atualizado!");
+      } catch (e) { alert("Erro ao salvar PEI."); }
+      finally { setIsSaving(false); }
+  };
+
   const resetForm = () => {
       setExamTitle('');
       setExamGrade('');
@@ -128,6 +209,9 @@ export const TeacherDashboard: React.FC = () => {
     e.gradeLevel.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const aeeStudents = students.filter(s => s.isAEE);
+  const subjects = [...EFAF_SUBJECTS, ...EM_SUBJECTS];
+
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
         <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
@@ -136,6 +220,12 @@ export const TeacherDashboard: React.FC = () => {
                 <button onClick={() => setActiveTab('requests')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'requests' ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-300 hover:bg-white/10'}`}><List size={18} /> Minha Fila</button>
                 <button onClick={() => { setCreationMode('none'); setActiveTab('create'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'create' ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-300 hover:bg-white/10'}`}><PlusCircle size={18} /> Enviar Prova</button>
                 <button onClick={() => setActiveTab('materials')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'materials' ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-300 hover:bg-white/10'}`}><Folder size={18} /> Materiais Aula</button>
+            </div>
+            
+            <div className="mb-6">
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-2">Pedagógico</p>
+                <button onClick={() => setActiveTab('planning')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'planning' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-300 hover:bg-white/10'}`}><BookOpen size={18} /> Planejamentos</button>
+                <button onClick={() => setActiveTab('pei')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-medium transition-all ${activeTab === 'pei' ? 'bg-pink-600 text-white shadow-lg shadow-pink-900/40' : 'text-gray-300 hover:bg-white/10'}`}><Heart size={18} /> Plano PEI (AEE)</button>
             </div>
         </div>
         
@@ -216,6 +306,162 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
+            {activeTab === 'planning' && (
+                <div className="animate-in fade-in slide-in-from-right-4">
+                    <header className="mb-8 flex justify-between items-end">
+                        <div>
+                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Planejamento de Aula</h1>
+                            <p className="text-gray-400">Gerencie seus planos de aula diários e semestrais.</p>
+                        </div>
+                        <Button onClick={() => setShowPlanModal(true)} className="bg-blue-600 hover:bg-blue-700">
+                            <Plus size={18} className="mr-2"/> Novo Planejamento
+                        </Button>
+                    </header>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {plans.map(plan => (
+                            <div key={plan.id} className="bg-[#18181b] border border-white/5 p-6 rounded-[2rem] hover:border-blue-500/40 transition-all shadow-xl">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase ${plan.type === 'daily' ? 'bg-blue-900/20 text-blue-500' : 'bg-green-900/20 text-green-500'}`}>{plan.type === 'daily' ? 'Diário' : 'Semestral'}</span>
+                                    <span className="text-[10px] text-gray-500 font-bold">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                </div>
+                                <h3 className="text-lg font-bold text-white mb-1">{plan.topic || 'Plano Sem Título'}</h3>
+                                <p className="text-xs text-gray-400 mb-4">{plan.className} • {plan.subject}</p>
+                                <button className="w-full py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+                                    <Eye size={14}/> Detalhes
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'pei' && (
+                <div className="animate-in fade-in slide-in-from-right-4">
+                    <header className="mb-8 flex justify-between items-end">
+                        <div>
+                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Plano PEI (AEE)</h1>
+                            <p className="text-gray-400">Documentação pedagógica para alunos com necessidades especiais.</p>
+                        </div>
+                        <Button onClick={() => setShowPeiModal(true)} className="bg-pink-600 hover:bg-pink-700">
+                            <Plus size={18} className="mr-2"/> Novo Documento PEI
+                        </Button>
+                    </header>
+                    <div className="bg-[#18181b] rounded-3xl border border-white/5 overflow-hidden shadow-2xl">
+                        <table className="w-full text-left">
+                            <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5">
+                                <tr>
+                                    <th className="p-6">Aluno</th>
+                                    <th className="p-6">Disciplina / Período</th>
+                                    <th className="p-6">Última Atualização</th>
+                                    <th className="p-6 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {peis.map(pei => (
+                                    <tr key={pei.id} className="hover:bg-white/5 transition-colors">
+                                        <td className="p-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-8 w-8 rounded-full bg-pink-900/20 text-pink-500 flex items-center justify-center"><Heart size={14}/></div>
+                                                <span className="font-bold text-white uppercase">{pei.studentName}</span>
+                                            </div>
+                                        </td>
+                                        <td className="p-6">
+                                            <p className="text-xs text-white font-bold">{pei.subject}</p>
+                                            <p className="text-[10px] text-gray-500 uppercase">{pei.period}</p>
+                                        </td>
+                                        <td className="p-6 text-xs text-gray-400 font-medium">{new Date(pei.updatedAt).toLocaleDateString()}</td>
+                                        <td className="p-6 text-center">
+                                            <button className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white"><Eye size={18}/></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL PLANEJAMENTO */}
+            {showPlanModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl max-h-[90vh] rounded-[2.5rem] p-10 shadow-2xl overflow-y-auto custom-scrollbar">
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-2xl font-black text-white uppercase tracking-tight">Novo Planejamento</h2>
+                            <button onClick={() => setShowPlanModal(false)} className="text-gray-500 hover:text-white"><X size={32}/></button>
+                        </div>
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Tipo de Plano</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-blue-600" value={newPlan.type} onChange={e => setNewPlan({...newPlan, type: e.target.value as any})}>
+                                        <option value="daily">Diário</option>
+                                        <option value="semester">Semestral</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Turma</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-blue-600" value={newPlan.className} onChange={e => setNewPlan({...newPlan, className: e.target.value})}>
+                                        <option value="">Selecione...</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Conteúdo / Tema</label>
+                                <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-blue-600" value={newPlan.topic} onChange={e => setNewPlan({...newPlan, topic: e.target.value})} placeholder="Título da aula ou unidade" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Metodologia / Procedimentos</label>
+                                <textarea rows={4} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-blue-600" value={newPlan.methodology} onChange={e => setNewPlan({...newPlan, methodology: e.target.value})} placeholder="Como a aula será conduzida..."></textarea>
+                            </div>
+                            <Button onClick={handleSavePlan} isLoading={isSaving} className="w-full h-14 bg-blue-600 font-black uppercase tracking-widest">Salvar Planejamento</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL PEI */}
+            {showPeiModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-3xl max-h-[90vh] rounded-[2.5rem] p-10 shadow-2xl overflow-y-auto custom-scrollbar">
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-2xl font-black text-white uppercase tracking-tight">Relatório PEI (Adaptação)</h2>
+                            <button onClick={() => setShowPeiModal(false)} className="text-gray-500 hover:text-white"><X size={32}/></button>
+                        </div>
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Selecionar Aluno AEE</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-pink-600" value={newPei.studentId} onChange={e => setNewPei({...newPei, studentId: e.target.value})}>
+                                        <option value="">Selecione o Aluno...</option>
+                                        {aeeStudents.map(s => <option key={s.id} value={s.id}>{s.name} ({s.className})</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Período</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-pink-600" value={newPei.period} onChange={e => setNewPei({...newPei, period: e.target.value})}>
+                                        <option value="1º BIMESTRE">1º Bimestre</option>
+                                        <option value="2º BIMESTRE">2º Bimestre</option>
+                                        <option value="3º BIMESTRE">3º Bimestre</option>
+                                        <option value="4º BIMESTRE">4º Bimestre</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Competências Essenciais</label>
+                                <textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-pink-600" value={newPei.essentialCompetencies} onChange={e => setNewPei({...newPei, essentialCompetencies: e.target.value})} placeholder="Quais habilidades serão trabalhadas?"></textarea>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Conteúdos Adaptados</label>
+                                <textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-pink-600" value={newPei.selectedContents} onChange={e => setNewPei({...newPei, selectedContents: e.target.value})} placeholder="Quais conteúdos serão priorizados?"></textarea>
+                            </div>
+                            <Button onClick={handleSavePei} isLoading={isSaving} className="w-full h-14 bg-pink-600 font-black uppercase tracking-widest">Salvar Documento PEI</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ABAS ORIGINAIS (CREATE/MATERIALS) */}
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
                     {creationMode === 'none' ? (

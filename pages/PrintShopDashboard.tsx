@@ -57,9 +57,10 @@ import {
     UserCircle,
     BookOpen,
     Users2,
-    Eye
+    Eye,
+    Filter
 } from 'lucide-react';
-import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
+import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES } from '../constants';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -107,6 +108,11 @@ export const PrintShopDashboard: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDay, setSelectedDay] = useState(1); 
     const [selectedStudentClass, setSelectedStudentClass] = useState<string>('6efaf');
+
+    // Planning Filter States
+    const [planSearch, setPlanSearch] = useState('');
+    const [planFilterClass, setPlanFilterClass] = useState('');
+    const [planFilterType, setPlanFilterType] = useState<'ALL' | 'daily' | 'semester'>('ALL');
 
     // Calendar State
     const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -270,6 +276,14 @@ export const PrintShopDashboard: React.FC = () => {
     const filteredStudentsByClass = students.filter(s => s.classId === selectedStudentClass || s.className === GRID_CLASSES.find(c => c.id === selectedStudentClass)?.name);
     const presentInClass = filteredStudentsByClass.filter(s => attendanceLogs.some(l => l.studentId === s.id)).length;
 
+    // Filtration Logic for Plans
+    const filteredPlans = plans.filter(p => {
+        const matchesSearch = p.teacherName.toLowerCase().includes(planSearch.toLowerCase()) || (p.topic && p.topic.toLowerCase().includes(planSearch.toLowerCase()));
+        const matchesClass = planFilterClass ? p.className === planFilterClass : true;
+        const matchesType = planFilterType === 'ALL' ? true : p.type === planFilterType;
+        return matchesSearch && matchesClass && matchesType;
+    });
+
     const renderCalendar = () => {
         const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth();
@@ -350,7 +364,6 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </header>
                         <div className="space-y-12">
-                            {/* TABELAS DE HORÁRIO MATUTINO/VESPERTINO IGUAIS ÀS ANTERIORES */}
                             <div className="space-y-6">
                                 <h3 className="text-xs font-black text-red-500 uppercase tracking-[0.4em] flex items-center gap-4"><Clock size={16}/> TURNO MATUTINO (EFAF)</h3>
                                 <div className="overflow-x-auto custom-scrollbar pb-4">
@@ -424,15 +437,102 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'plans' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl">
-                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos Pedagógicos</h1><p className="text-gray-400 text-lg mt-1 italic">Visualize as aulas planejadas pelo corpo docente.</p></header>
+                        <header className="mb-12">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos Pedagógicos</h1>
+                            <p className="text-gray-400 text-lg mt-1 italic">Visualize e filtre as aulas planejadas pelo corpo docente.</p>
+                        </header>
+
+                        {/* FILTERS AREA */}
+                        <div className="bg-[#18181b] p-8 rounded-[2.5rem] border border-white/5 shadow-xl mb-10 space-y-6">
+                            <div className="flex items-center gap-3 text-red-500 mb-2">
+                                <Filter size={20} />
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em]">Filtros de Pesquisa</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Professor ou Tema</label>
+                                    <div className="relative">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
+                                        <input 
+                                            className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm"
+                                            placeholder="Buscar..."
+                                            value={planSearch}
+                                            onChange={e => setPlanSearch(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Filtrar por Turma</label>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-3 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none"
+                                        value={planFilterClass}
+                                        onChange={e => setPlanFilterClass(e.target.value)}
+                                    >
+                                        <option value="">Todas as Turmas</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Tipo de Plano</label>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-3 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none"
+                                        value={planFilterType}
+                                        onChange={e => setPlanFilterType(e.target.value as any)}
+                                    >
+                                        <option value="ALL">Todos os Tipos</option>
+                                        <option value="daily">Diário</option>
+                                        <option value="semester">Semestral</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex justify-between items-center pt-2">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase">{filteredPlans.length} resultados encontrados</span>
+                                {(planSearch || planFilterClass || planFilterType !== 'ALL') && (
+                                    <button 
+                                        onClick={() => { setPlanSearch(''); setPlanFilterClass(''); setPlanFilterType('ALL'); }}
+                                        className="text-red-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors flex items-center gap-2"
+                                    >
+                                        <X size={14}/> Limpar Filtros
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {plans.map(pl => (
-                                <div key={pl.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-blue-600/30 transition-all flex flex-col h-full">
-                                    <div className="flex justify-between items-start mb-6"><div><span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase ${pl.type === 'semester' ? 'bg-blue-600/10 text-blue-500' : 'bg-gray-800 text-gray-400'}`}>{pl.type === 'semester' ? 'Semestral' : 'Diário'}</span><h3 className="text-lg font-bold text-white mt-3 leading-tight">{pl.subject}</h3><p className="text-[10px] font-black text-gray-500 uppercase mt-1">{pl.className}</p></div><div className="h-10 w-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500"><BookOpenCheck size={20}/></div></div>
-                                    <p className="text-xs text-gray-400 mb-6 flex-1 line-clamp-4 leading-relaxed">{pl.topic || pl.justification || 'Sem descrição.'}</p>
-                                    <div className="pt-6 border-t border-white/5 flex justify-between items-center"><div className="flex items-center gap-2"><UserCircle size={14} className="text-gray-600"/><span className="text-[9px] font-bold text-gray-500 uppercase">{pl.teacherName}</span></div><button className="p-2 text-white hover:bg-white/10 rounded-lg"><Eye size={18}/></button></div>
+                            {filteredPlans.map(pl => (
+                                <div key={pl.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-blue-600/30 transition-all flex flex-col h-full group">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div>
+                                            <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase ${pl.type === 'semester' ? 'bg-blue-600/10 text-blue-500' : 'bg-gray-800 text-gray-400'}`}>
+                                                {pl.type === 'semester' ? 'Semestral' : 'Diário'}
+                                            </span>
+                                            <h3 className="text-lg font-bold text-white mt-3 leading-tight">{pl.subject}</h3>
+                                            <p className="text-[10px] font-black text-gray-500 uppercase mt-1">{pl.className}</p>
+                                        </div>
+                                        <div className="h-10 w-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 group-hover:text-blue-500 transition-colors">
+                                            <BookOpenCheck size={20}/>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mb-6 flex-1 line-clamp-4 leading-relaxed italic">
+                                        {pl.topic || pl.justification || 'Sem descrição detalhada.'}
+                                    </p>
+                                    <div className="pt-6 border-t border-white/5 flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <UserCircle size={14} className="text-gray-600"/>
+                                            <span className="text-[9px] font-bold text-gray-500 uppercase">{pl.teacherName}</span>
+                                        </div>
+                                        <button className="p-2 text-white hover:bg-blue-600/20 rounded-lg transition-colors">
+                                            <Eye size={18} className="text-blue-500"/>
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
+                            {filteredPlans.length === 0 && (
+                                <div className="col-span-full py-20 text-center bg-white/[0.02] rounded-[3rem] border border-dashed border-white/5">
+                                    <AlertTriangle size={48} className="mx-auto text-gray-700 mb-4" />
+                                    <p className="text-gray-500 font-bold uppercase tracking-widest">Nenhum planejamento corresponde aos filtros.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
