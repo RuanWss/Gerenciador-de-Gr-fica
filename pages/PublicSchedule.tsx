@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-// Add missing 'List' icon to the lucide-react imports
 import { Clock, X, Maximize2, Maximize, Minimize, Volume2, Megaphone, ArrowRight, School, Timer, User, BookOpen, List } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
@@ -202,6 +201,7 @@ export const PublicSchedule: React.FC = () => {
     const dateString = currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
     const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
+    const bannerVisible = isBannerVisible();
 
     return (
         <div className="h-screen w-full bg-black text-white overflow-hidden flex flex-col relative font-sans">
@@ -221,28 +221,49 @@ export const PublicSchedule: React.FC = () => {
             )}
 
             {/* HEADER AREA */}
-            <header className="shrink-0 w-full flex flex-col items-center pt-10 pb-6 z-10 relative">
-                <div className="mb-6 flex items-center gap-4">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-[5vh] w-auto object-contain" alt="Logo CEMAL" />
-                    <div className="h-10 w-px bg-white/20"></div>
+            <header className="shrink-0 w-full flex flex-col items-center pt-8 pb-4 z-10 relative">
+                {/* LOGO AND SUBTITLE */}
+                <div className="mb-4 flex items-center gap-4">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-[4vh] w-auto object-contain" alt="Logo CEMAL" />
+                    <div className="h-8 w-px bg-white/20"></div>
                     <div className="flex flex-col">
-                        <span className="text-[1.8vh] font-black text-red-600 tracking-widest uppercase">Quadro de Horários</span>
-                        <span className="text-[1.4vh] text-gray-500 font-bold uppercase">{currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Sessão Encerrada'}</span>
+                        <span className="text-[1.6vh] font-black text-red-600 tracking-widest uppercase leading-none">Quadro de Horários</span>
+                        <span className="text-[1.2vh] text-gray-500 font-bold uppercase">{currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Sessão Encerrada'}</span>
                     </div>
                 </div>
 
-                <div className="flex flex-col items-center">
-                    <h1 className="text-[clamp(6rem,18vh,22vh)] leading-none font-clock font-black text-white tracking-tighter tabular-nums drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
-                        {timeString}
-                    </h1>
-                    <div className="mt-4 bg-white/5 border border-white/10 px-8 py-2 rounded-full backdrop-blur-md">
-                        <p className="text-[2.2vh] text-gray-300 font-bold tracking-widest uppercase">{dateString}</p>
+                {/* CLOCK & ANNOUNCEMENT ROW */}
+                <div className={`flex items-center justify-center gap-12 w-full max-w-[1700px] px-10 transition-all duration-700 ease-in-out`}>
+                    
+                    {/* ANNOUNCEMENT BOX (LEFT) */}
+                    {bannerVisible && (
+                        <div className="flex-1 max-w-2xl bg-white/[0.03] border-l-8 border-red-600 p-8 rounded-[2rem] backdrop-blur-3xl shadow-2xl animate-in slide-in-from-left duration-700 ease-out border border-white/5">
+                            <div className="flex items-center gap-4 mb-4 text-red-500">
+                                <div className="p-3 bg-red-600/10 rounded-2xl">
+                                    <Megaphone size={32} className="animate-bounce" />
+                                </div>
+                                <span className="font-black uppercase tracking-[0.2em] text-xl">Comunicado</span>
+                            </div>
+                            <p className="text-[clamp(1.5rem,3vh,3.5vh)] font-bold leading-tight text-white/90 italic">
+                                "{sysConfig?.bannerMessage}"
+                            </p>
+                        </div>
+                    )}
+
+                    {/* CLOCK CONTAINER (MOVES RIGHT IF BANNER IS ACTIVE) */}
+                    <div className={`flex flex-col items-center transition-all duration-700 ${bannerVisible ? 'items-end flex-initial' : 'flex-initial'}`}>
+                        <h1 className="text-[clamp(6rem,18vh,22vh)] leading-none font-clock font-black text-white tracking-tighter tabular-nums drop-shadow-[0_15px_30px_rgba(0,0,0,0.6)] select-none">
+                            {timeString}
+                        </h1>
+                        <div className="mt-2 bg-white/5 border border-white/10 px-8 py-2 rounded-full backdrop-blur-md">
+                            <p className="text-[2.2vh] text-gray-300 font-bold tracking-widest uppercase">{dateString}</p>
+                        </div>
                     </div>
                 </div>
 
                 {/* PROGRESS BAR FOR CURRENT CLASS */}
                 {currentSlot && (
-                    <div className="w-full max-w-3xl mt-8 px-6">
+                    <div className="w-full max-w-4xl mt-8 px-6">
                         <div className="flex justify-between items-end mb-2">
                              <span className="text-xs font-black text-red-500 uppercase tracking-widest flex items-center gap-2">
                                 <Timer size={14}/> {currentSlot.label} ({currentSlot.start} - {currentSlot.end})
@@ -258,18 +279,6 @@ export const PublicSchedule: React.FC = () => {
                     </div>
                 )}
             </header>
-
-            {/* SYSTEM BANNER (SCROLLING IF ACTIVE) */}
-            {isBannerVisible() && (
-                <div className={`absolute top-0 left-0 w-full z-50 p-4 flex items-center justify-center gap-4 ${
-                    sysConfig?.bannerType === 'error' ? 'bg-red-600' : 
-                    sysConfig?.bannerType === 'warning' ? 'bg-yellow-500 text-black' : 
-                    'bg-blue-600'
-                }`}>
-                    <Megaphone size={24} className="animate-bounce" />
-                    <p className="text-2xl font-black uppercase tracking-tight">{sysConfig?.bannerMessage}</p>
-                </div>
-            )}
 
             {/* MAIN GRID */}
             <main className="flex-1 w-full max-w-[1600px] mx-auto px-8 pb-12 overflow-hidden flex items-center justify-center z-10">
