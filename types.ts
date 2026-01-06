@@ -70,6 +70,19 @@ export interface Student {
   coordinationOpinion?: string;
 }
 
+export interface StudentOccurrence {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentClass: string;
+  category: 'indisciplina' | 'atraso' | 'desempenho' | 'uniforme' | 'elogio' | 'outros';
+  severity: 'low' | 'medium' | 'high';
+  description: string;
+  date: string;
+  timestamp: number;
+  reportedBy: string;
+}
+
 export interface StaffMember {
   id: string;
   name: string;

@@ -16,14 +16,14 @@ const CLASSES_LIST = [
 ];
 
 const EFAF_SUBJECTS = [
-    "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
+    "COORDENAÇÃO", "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
     "MATEMÁTICA", "MATEMÁTICA II", "BIOLOGIA", "LÍNGUA ESTRANGEIRA MODERNA - INGLÊS", 
     "REDAÇÃO", "FILOSOFIA", "QUÍMICA", "PROJETO DE VIDA", "EDUCAÇÃO FINANCEIRA", 
     "PENSAMENTO COMPUTACIONAL", "FÍSICA", "DINÂMICAS DE LEITURA"
 ];
 
 const EM_SUBJECTS = [
-    "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
+    "COORDENAÇÃO", "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
     "SOCIOLOGIA", "FILOSOFIA", "BIOLOGIA", "FÍSICA", "QUÍMICA", "MATEMÁTICA", 
     "LITERATURA", "PRODUÇÃO TEXTUAL", "LÍNGUA ESTRANGEIRA MODERNA - INGLÊS", 
     "MATEMÁTICA II", "BIOLOGIA II", "QUÍMICA II", 
@@ -265,13 +265,13 @@ export const ClassroomFiles: React.FC = () => {
                                                 className="bg-[#18181b] p-6 rounded-2xl border border-gray-800 hover:border-brand-600 hover:bg-[#202024] transition-all group text-left flex flex-col justify-between min-h-[160px]"
                                             >
                                                 <div className="flex justify-between items-start w-full">
-                                                    <Folder size={40} className="text-yellow-500 group-hover:scale-110 transition-transform" />
+                                                    <Folder size={40} className={`text-yellow-500 group-hover:scale-110 transition-transform ${subject === 'COORDENAÇÃO' ? 'text-blue-500' : ''}`} />
                                                     {count > 0 && (
                                                         <span className="bg-brand-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">{count}</span>
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <h3 className="text-sm font-bold text-white mt-4 line-clamp-2 uppercase leading-tight group-hover:text-brand-500 transition-colors">
+                                                    <h3 className={`text-sm font-bold text-white mt-4 line-clamp-2 uppercase leading-tight group-hover:text-brand-500 transition-colors ${subject === 'COORDENAÇÃO' ? 'text-blue-400' : ''}`}>
                                                         {subject}
                                                     </h3>
                                                     <p className="text-[10px] text-gray-500 mt-1 font-mono">{count} arquivos</p>
@@ -286,7 +286,7 @@ export const ClassroomFiles: React.FC = () => {
                             {selectedSubject && (
                                 <div className="animate-in fade-in slide-in-from-right-4">
                                     <h2 className="text-xl font-bold text-brand-500 mb-6 flex items-center gap-2 uppercase">
-                                        <Folder className="text-yellow-500" /> {selectedSubject}
+                                        <Folder className={selectedSubject === 'COORDENAÇÃO' ? 'text-blue-500' : 'text-yellow-500'} /> {selectedSubject}
                                     </h2>
 
                                     {filteredMaterials.length === 0 ? (
@@ -320,8 +320,8 @@ export const ClassroomFiles: React.FC = () => {
                                                         {file.title}
                                                     </h3>
                                                     <p className="text-xs text-gray-400 mb-6 flex items-center gap-1">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
-                                                        Prof. {file.teacherName}
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${file.teacherName === 'Coordenação' ? 'bg-blue-500' : 'bg-brand-500'}`}></span>
+                                                        {file.teacherName === 'Coordenação' ? 'Setor Coordenação' : `Prof. ${file.teacherName}`}
                                                     </p>
 
                                                     <a 

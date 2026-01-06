@@ -18,7 +18,7 @@ import {
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
     StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
-    AnswerKey, StudentCorrection, PEIDocument
+    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence
 } from '../types';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
@@ -38,6 +38,7 @@ const LIBRARY_LOANS_COLLECTION = 'library_loans';
 const ANSWER_KEYS_COLLECTION = 'answer_keys';
 const CORRECTIONS_COLLECTION = 'corrections';
 const PEI_COLLECTION = 'pei';
+const OCCURRENCES_COLLECTION = 'occurrences';
 
 // --- HELPERS ---
 const sanitizeForFirestore = (obj: any) => {
@@ -125,6 +126,15 @@ export const listenToStudents = (callback: (students: Student[]) => void) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
     }, (error) => {
         if (error.code !== 'permission-denied') console.error("Erro Students:", error);
+    });
+};
+
+export const listenToOccurrences = (callback: (occurrences: StudentOccurrence[]) => void) => {
+    const q = query(collection(db, OCCURRENCES_COLLECTION), orderBy('timestamp', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StudentOccurrence)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro Occurrences:", error);
     });
 };
 
@@ -245,6 +255,16 @@ export const saveExam = async (exam: ExamRequest): Promise<void> => {
     const { id, ...data } = exam;
     if (id) await setDoc(doc(db, EXAMS_COLLECTION, id), sanitizeForFirestore(data));
     else await addDoc(collection(db, EXAMS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const saveOccurrence = async (occurrence: StudentOccurrence): Promise<void> => {
+    const { id, ...data } = occurrence;
+    if (id) await setDoc(doc(db, OCCURRENCES_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, OCCURRENCES_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const deleteOccurrence = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, OCCURRENCES_COLLECTION, id));
 };
 
 export const saveLessonPlan = async (plan: LessonPlan): Promise<void> => {

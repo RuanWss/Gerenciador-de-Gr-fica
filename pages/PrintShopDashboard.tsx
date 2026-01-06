@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { 
     listenToExams, 
     updateExamStatus, 
@@ -18,7 +19,13 @@ import {
     listenToStaffMembers,
     listenToAllMaterials,
     saveStudent,
-    uploadStudentPhoto
+    uploadStudentPhoto,
+    uploadExamFile,
+    saveClassMaterial,
+    deleteClassMaterial,
+    listenToOccurrences,
+    saveOccurrence,
+    deleteOccurrence
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -32,7 +39,8 @@ import {
     ScheduleEntry,
     TimeSlot,
     StaffMember,
-    ClassMaterial
+    ClassMaterial,
+    StudentOccurrence
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -67,7 +75,10 @@ import {
     UserPlus,
     Camera,
     Upload,
-    Zap
+    Zap,
+    ShieldCheck,
+    AlertCircle,
+    MessageSquare
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES } from '../constants';
 
@@ -90,7 +101,8 @@ const MORNING_SLOTS: TimeSlot[] = [
 ];
 
 export const PrintShopDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'pei' | 'calendar' | 'plans' | 'schedule' | 'config' | 'materials'>('exams');
+    const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'pei' | 'calendar' | 'plans' | 'schedule' | 'config' | 'materials' | 'occurrences'>('exams');
     const [exams, setExams] = useState<ExamRequest[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
@@ -100,12 +112,13 @@ export const PrintShopDashboard: React.FC = () => {
     const [peis, setPeis] = useState<PEIDocument[]>([]);
     const [plans, setPlans] = useState<LessonPlan[]>([]);
     const [materials, setMaterials] = useState<ClassMaterial[]>([]);
+    const [occurrences, setOccurrences] = useState<StudentOccurrence[]>([]);
     
     const [examSearch, setExamSearch] = useState('');
     const [selectedDay, setSelectedDay] = useState(1); 
     const [selectedStudentClass, setSelectedStudentClass] = useState<string>('6efaf');
+    const [occurrenceSearch, setOccurrenceSearch] = useState('');
 
-    // FIX: Added missing currentMonth and setCurrentMonth state variables for calendar rendering
     const [currentMonth, setCurrentMonth] = useState(new Date());
 
     // Student Registration State
@@ -117,6 +130,24 @@ export const PrintShopDashboard: React.FC = () => {
     const [studentPhotoPreview, setStudentPhotoPreview] = useState<string | null>(null);
     const [batchList, setBatchList] = useState('');
 
+    // Coordination Material State
+    const [showCoordModal, setShowCoordModal] = useState(false);
+    const [isSavingCoord, setIsSavingCoord] = useState(false);
+    const [coordFile, setCoordFile] = useState<File | null>(null);
+    const [coordTitle, setCoordTitle] = useState('');
+    const [coordClass, setCoordClass] = useState('');
+
+    // Occurrence State
+    const [showOccurrenceModal, setShowOccurrenceModal] = useState(false);
+    const [isSavingOccurrence, setIsSavingOccurrence] = useState(false);
+    const [newOccurrence, setNewOccurrence] = useState<Partial<StudentOccurrence>>({
+        studentId: '',
+        category: 'indisciplina',
+        severity: 'low',
+        description: '',
+        date: new Date().toISOString().split('T')[0]
+    });
+
     useEffect(() => {
         const todayStr = new Date().toISOString().split('T')[0];
         const unsubExams = listenToExams(setExams);
@@ -126,6 +157,7 @@ export const PrintShopDashboard: React.FC = () => {
         const unsubAttendance = listenToAttendanceLogs(todayStr, setAttendanceLogs);
         const unsubEvents = listenToEvents(setEvents);
         const unsubMaterials = listenToAllMaterials(setMaterials);
+        const unsubOccurrences = listenToOccurrences(setOccurrences);
         
         const fetchData = async () => {
             const [peiData, plansData] = await Promise.all([ getAllPEIs(), getLessonPlans() ]);
@@ -141,7 +173,7 @@ export const PrintShopDashboard: React.FC = () => {
         });
 
         return () => {
-            unsubExams(); unsubStudents(); unsubAttendance(); unsubConfig(); unsubSchedule(); unsubStaff(); unsubEvents(); unsubMaterials();
+            unsubExams(); unsubStudents(); unsubAttendance(); unsubConfig(); unsubSchedule(); unsubStaff(); unsubEvents(); unsubMaterials(); unsubOccurrences();
         };
     }, []);
 
@@ -181,6 +213,34 @@ export const PrintShopDashboard: React.FC = () => {
         finally { setIsSavingStudent(false); }
     };
 
+    const handleSaveOccurrence = async () => {
+        if (!newOccurrence.studentId || !newOccurrence.description) return alert("Selecione o aluno e descreva o ocorrido.");
+        setIsSavingOccurrence(true);
+        try {
+            const student = students.find(s => s.id === newOccurrence.studentId);
+            await saveOccurrence({
+                id: '',
+                studentId: student?.id || '',
+                studentName: student?.name || '',
+                studentClass: student?.className || '',
+                category: newOccurrence.category || 'outros',
+                severity: newOccurrence.severity || 'low',
+                description: newOccurrence.description || '',
+                date: newOccurrence.date || new Date().toISOString().split('T')[0],
+                timestamp: Date.now(),
+                reportedBy: user?.name || 'Coordenação'
+            });
+            setShowOccurrenceModal(false);
+            setNewOccurrence({ studentId: '', category: 'indisciplina', severity: 'low', description: '', date: new Date().toISOString().split('T')[0] });
+            alert("Ocorrência registrada!");
+        } catch (e) { alert("Erro ao salvar ocorrência."); }
+        finally { setIsSavingOccurrence(false); }
+    };
+
+    const handleDeleteOccurrence = async (id: string) => {
+        if (confirm("Deseja realmente excluir este registro?")) await deleteOccurrence(id);
+    };
+
     const handleSaveBatch = async () => {
         if (!newStudent.classId || !batchList) return alert("Selecione a turma e insira a lista de nomes.");
         const names = batchList.split('\n').filter(n => n.trim() !== '');
@@ -203,6 +263,41 @@ export const PrintShopDashboard: React.FC = () => {
             alert(`${names.length} alunos matriculados com sucesso!`);
         } catch (e) { alert("Erro no processamento em lote."); }
         finally { setIsSavingStudent(false); }
+    };
+
+    const handleSaveCoordMaterial = async () => {
+        if (!coordFile || !coordTitle || !coordClass) return alert("Preencha o título, selecione a turma e anexe um arquivo.");
+        setIsSavingCoord(true);
+        try {
+            const fileUrl = await uploadExamFile(coordFile, "COORDENACAO");
+            const materialData: ClassMaterial = {
+                id: '',
+                teacherId: 'coord_admin',
+                teacherName: 'Coordenação',
+                className: coordClass,
+                title: coordTitle,
+                subject: 'COORDENAÇÃO',
+                fileUrl: fileUrl,
+                fileName: coordFile.name,
+                fileType: coordFile.type,
+                createdAt: Date.now()
+            };
+            await saveClassMaterial(materialData);
+            setShowCoordModal(false);
+            setCoordFile(null);
+            setCoordTitle('');
+            alert("Arquivo enviado para a turma com sucesso!");
+        } catch (e) {
+            alert("Erro ao enviar arquivo.");
+        } finally {
+            setIsSavingCoord(false);
+        }
+    };
+
+    const handleDeleteMaterial = async (id: string) => {
+        if (confirm("Deseja realmente excluir este arquivo? Alunos perderão o acesso imediatamente.")) {
+            await deleteClassMaterial(id);
+        }
     };
 
     const [bannerMsg, setBannerMsg] = useState('');
@@ -366,6 +461,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="exams" label="Central de Cópias" icon={Printer} />
                     <SidebarItem id="schedule" label="Quadro de Horários" icon={Clock} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
+                    <SidebarItem id="occurrences" label="Ocorrências" icon={AlertCircle} />
                     <SidebarItem id="materials" label="Materiais Aula" icon={Folder} />
                     <SidebarItem id="pei" label="Documentos AEE" icon={Heart} />
                     <SidebarItem id="calendar" label="Agenda Escolar" icon={Calendar} />
@@ -400,6 +496,68 @@ export const PrintShopDashboard: React.FC = () => {
                                     {exams.filter(e => e.status === ExamStatus.COMPLETED).slice(0, 5).map(exam => <ExamCard key={exam.id} exam={exam} />)}
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'occurrences' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl">
+                         <header className="mb-12 flex flex-col md:flex-row justify-between items-center gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Ocorrências Diárias</h1>
+                                <p className="text-gray-400 text-lg mt-1 font-medium italic">Registro de eventos disciplinares e elogios.</p>
+                            </div>
+                            <Button onClick={() => setShowOccurrenceModal(true)} className="bg-red-600 h-16 px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl">
+                                <Plus size={18} className="mr-2"/> Nova Ocorrência
+                            </Button>
+                        </header>
+                        
+                        <div className="mb-10 relative">
+                             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                             <input 
+                                className="w-full bg-[#18181b] border border-white/5 rounded-[2rem] py-6 pl-16 pr-8 text-white font-bold outline-none focus:border-red-600 transition-all text-lg" 
+                                placeholder="Filtrar por nome do aluno, turma ou descrição..." 
+                                value={occurrenceSearch}
+                                onChange={e => setOccurrenceSearch(e.target.value)}
+                             />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                            {occurrences.filter(o => 
+                                o.studentName.toLowerCase().includes(occurrenceSearch.toLowerCase()) || 
+                                o.studentClass.toLowerCase().includes(occurrenceSearch.toLowerCase()) ||
+                                o.description.toLowerCase().includes(occurrenceSearch.toLowerCase())
+                            ).map(occ => (
+                                <div key={occ.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                                                {occ.category === 'elogio' ? <CheckCircle size={28}/> : <AlertCircle size={28}/>}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-bold text-white uppercase">{occ.studentName}</h3>
+                                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{occ.studentClass} • {new Date(occ.timestamp).toLocaleDateString()} • {new Date(occ.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase border ${occ.severity === 'high' ? 'bg-red-900/20 text-red-500 border-red-500/20' : occ.severity === 'medium' ? 'bg-orange-900/20 text-orange-500 border-orange-500/20' : 'bg-blue-900/20 text-blue-500 border-blue-500/20'}`}>
+                                                {occ.severity === 'high' ? 'Grave' : occ.severity === 'medium' ? 'Média' : 'Leve'}
+                                            </span>
+                                            <button onClick={() => handleDeleteOccurrence(occ.id)} className="text-gray-600 hover:text-red-500 transition-colors p-1"><Trash2 size={18}/></button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/20 p-6 rounded-2xl border border-white/5 mb-4">
+                                        <p className="text-gray-300 text-sm leading-relaxed">{occ.description}</p>
+                                    </div>
+                                    <div className="flex justify-between items-center text-[9px] font-bold text-gray-600 uppercase tracking-widest">
+                                        <span className="flex items-center gap-2"><UserCircle size={14}/> Relatado por: {occ.reportedBy}</span>
+                                        <span className="bg-white/5 px-3 py-1 rounded-full">{occ.category}</span>
+                                    </div>
+                                </div>
+                            ))}
+                            {occurrences.length === 0 && (
+                                <div className="py-20 text-center text-gray-600 uppercase font-black tracking-widest opacity-40">Nenhuma ocorrência registrada.</div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -472,19 +630,32 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'materials' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl">
-                         <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Materiais de Aula</h1><p className="text-gray-400 text-lg mt-1 italic">Todos os arquivos enviados para as salas de aula.</p></header>
+                         <header className="mb-12 flex justify-between items-center">
+                             <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Materiais de Aula</h1>
+                                <p className="text-gray-400 text-lg mt-1 italic">Todos os arquivos enviados para as salas de aula.</p>
+                             </div>
+                             <Button onClick={() => setShowCoordModal(true)} className="bg-blue-600 h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-900/20 hover:bg-blue-700">
+                                <ShieldCheck size={18} className="mr-2"/> Enviar p/ Coordenação
+                             </Button>
+                         </header>
                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {materials.sort((a,b) => b.createdAt - a.createdAt).map(mat => (
                                 <div key={mat.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all flex flex-col group">
                                     <div className="flex justify-between items-start mb-6">
-                                        <div className="h-12 w-12 rounded-xl bg-red-600/10 text-red-500 flex items-center justify-center"><FileText size={24}/></div>
-                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{new Date(mat.createdAt).toLocaleDateString()}</span>
+                                        <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${mat.subject === 'COORDENAÇÃO' ? 'bg-blue-600/10 text-blue-500' : 'bg-red-600/10 text-red-500'}`}>
+                                            <FileText size={24}/>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{new Date(mat.createdAt).toLocaleDateString()}</span>
+                                            <button onClick={() => handleDeleteMaterial(mat.id)} className="text-gray-600 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                                        </div>
                                     </div>
                                     <h3 className="text-lg font-bold text-white mb-2 leading-tight uppercase truncate">{mat.title}</h3>
-                                    <p className="text-[10px] font-black text-red-500 uppercase mb-6">{mat.className} • {mat.subject}</p>
+                                    <p className={`text-[10px] font-black uppercase mb-6 ${mat.subject === 'COORDENAÇÃO' ? 'text-blue-500' : 'text-red-500'}`}>{mat.className} • {mat.subject}</p>
                                     <div className="mt-auto pt-6 border-t border-white/5 flex justify-between items-center">
                                         <div className="flex items-center gap-2"><UserCircle size={14} className="text-gray-600"/><span className="text-[9px] font-bold text-gray-400 uppercase">{mat.teacherName}</span></div>
-                                        <a href={mat.fileUrl} target="_blank" rel="noreferrer" className="p-2 text-white hover:bg-red-600/20 rounded-lg transition-colors"><Download size={18} className="text-red-500"/></a>
+                                        <a href={mat.fileUrl} target="_blank" rel="noreferrer" className="p-2 text-white hover:bg-red-600/20 rounded-lg transition-colors"><Download size={18} className={mat.subject === 'COORDENAÇÃO' ? 'text-blue-500' : 'text-red-500'}/></a>
                                     </div>
                                 </div>
                             ))}
@@ -551,6 +722,63 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
             </div>
 
+            {/* MODAL OCORRÊNCIA */}
+            {showOccurrenceModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
+                            <div>
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                    <AlertCircle className="text-red-600" size={28}/> Registrar Ocorrência
+                                </h3>
+                                <p className="text-gray-500 font-bold text-[9px] uppercase tracking-widest mt-1">Controle disciplinar e acadêmico</p>
+                            </div>
+                            <button onClick={() => setShowOccurrenceModal(false)} className="text-gray-500 hover:text-white p-2 transition-colors"><X size={24}/></button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Selecionar Aluno</label>
+                                <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={newOccurrence.studentId} onChange={e => setNewOccurrence({...newOccurrence, studentId: e.target.value})}>
+                                    <option value="">-- Escolher Aluno --</option>
+                                    {students.sort((a,b) => a.name.localeCompare(b.name)).map(s => <option key={s.id} value={s.id}>{s.name} ({s.className})</option>)}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Categoria</label>
+                                    <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={newOccurrence.category} onChange={e => setNewOccurrence({...newOccurrence, category: e.target.value as any})}>
+                                        <option value="indisciplina">Indisciplina</option>
+                                        <option value="atraso">Atraso</option>
+                                        <option value="desempenho">Desempenho</option>
+                                        <option value="uniforme">Uniforme</option>
+                                        <option value="elogio">Elogio</option>
+                                        <option value="outros">Outros</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Gravidade</label>
+                                    <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={newOccurrence.severity} onChange={e => setNewOccurrence({...newOccurrence, severity: e.target.value as any})}>
+                                        <option value="low">Leve</option>
+                                        <option value="medium">Média</option>
+                                        <option value="high">Grave</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Relato Detalhado</label>
+                                <textarea className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" rows={4} value={newOccurrence.description} onChange={e => setNewOccurrence({...newOccurrence, description: e.target.value})} placeholder="Descreva o que aconteceu..." />
+                            </div>
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setShowOccurrenceModal(false)} className="flex-1 h-14 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-white/5 text-gray-400 hover:bg-white/10 transition-all">Cancelar</button>
+                                <Button onClick={handleSaveOccurrence} isLoading={isSavingOccurrence} className="flex-[2] h-14 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] bg-red-600 shadow-xl shadow-red-900/20">Salvar Registro</Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ... rest of the modals ... */}
+            
             {/* MODAL MATRÍCULA DE ALUNOS */}
             {showStudentModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
@@ -625,6 +853,57 @@ export const PrintShopDashboard: React.FC = () => {
                                     <div className="flex gap-4 pt-6"><button onClick={() => setShowStudentModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-white/5 text-gray-400 hover:bg-white/10 transition-all">Cancelar</button><Button onClick={handleSaveBatch} isLoading={isSavingStudent} className="flex-[2] h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.3em] bg-red-600 shadow-2xl shadow-red-900/40">Importar Todos</Button></div>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL ENVIO COORDENAÇÃO */}
+            {showCoordModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
+                            <div>
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                    <ShieldCheck className="text-blue-500" size={28}/> Envio da Coordenação
+                                </h3>
+                                <p className="text-gray-500 font-bold text-[9px] uppercase tracking-widest mt-1">Material para exibição na sala</p>
+                            </div>
+                            <button onClick={() => setShowCoordModal(false)} className="text-gray-500 hover:text-white p-2 transition-colors"><X size={24}/></button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Título do Material</label>
+                                <input className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-blue-600 transition-all" value={coordTitle} onChange={e => setCoordTitle(e.target.value)} placeholder="Ex: Cronograma de Provas Bimestrais" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma de Destino</label>
+                                <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-blue-600 transition-all appearance-none" value={coordClass} onChange={e => setCoordClass(e.target.value)}>
+                                    <option value="">-- Selecione a Turma --</option>
+                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Anexar Arquivo</label>
+                                <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center hover:border-blue-500 transition-all relative">
+                                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setCoordFile(e.target.files?.[0] || null)} />
+                                    {coordFile ? (
+                                        <div className="flex flex-col items-center gap-2 text-green-500">
+                                            <CheckCircle size={32}/>
+                                            <span className="text-xs font-bold truncate max-w-full">{coordFile.name}</span>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center gap-2 text-gray-600">
+                                            <Upload size={32}/>
+                                            <span className="text-[10px] font-black uppercase">Clique para selecionar</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setShowCoordModal(false)} className="flex-1 h-14 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-white/5 text-gray-400 hover:bg-white/10 transition-all">Cancelar</button>
+                                <Button onClick={handleSaveCoordMaterial} isLoading={isSavingCoord} className="flex-[2] h-14 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] bg-blue-600 shadow-xl shadow-blue-900/20">Enviar Arquivo</Button>
+                            </div>
                         </div>
                     </div>
                 </div>
