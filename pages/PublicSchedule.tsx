@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Clock, X, Maximize2, Maximize, Minimize, Volume2, Megaphone, ArrowRight, School, Timer, User, BookOpen, List } from 'lucide-react';
+import { Clock, X, Maximize2, Maximize, Minimize, Volume2, Megaphone, ArrowRight, School, Timer, User, BookOpen, List, Lock, ShieldCheck, Delete } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -39,8 +39,17 @@ const AFTERNOON_CLASSES = [
 ];
 
 const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+const DEFAULT_PIN = "2016";
 
 export const PublicSchedule: React.FC = () => {
+    // --- AUTH STATE ---
+    const [isAuthorized, setIsAuthorized] = useState(() => {
+        return sessionStorage.getItem('monitor_auth') === 'true';
+    });
+    const [pin, setPin] = useState('');
+    const [pinError, setPinError] = useState(false);
+
+    // --- MAIN STATE ---
     const [currentTime, setCurrentTime] = useState(new Date());
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
@@ -55,6 +64,8 @@ export const PublicSchedule: React.FC = () => {
     const lastSlotId = useRef<string>('');
 
     useEffect(() => {
+        if (!isAuthorized) return;
+
         const unsubscribeSchedule = listenToSchedule(setSchedule);
         const unsubscribeConfig = listenToSystemConfig(setSysConfig);
         
@@ -68,16 +79,41 @@ export const PublicSchedule: React.FC = () => {
             unsubscribeConfig();
             document.removeEventListener('fullscreenchange', handleFullscreenChange);
         };
-    }, []);
+    }, [isAuthorized]);
 
     useEffect(() => {
+        if (!isAuthorized) return;
+
         const timer = setInterval(() => {
             const now = new Date();
             setCurrentTime(now);
             checkCurrentStatus(now);
         }, 1000);
         return () => clearInterval(timer);
-    }, []);
+    }, [isAuthorized]);
+
+    // PIN Handling
+    const handlePinPress = (num: string) => {
+        if (pin.length >= 4) return;
+        setPinError(false);
+        const newPin = pin + num;
+        setPin(newPin);
+        
+        if (newPin.length === 4) {
+            if (newPin === DEFAULT_PIN) {
+                setIsAuthorized(true);
+                sessionStorage.setItem('monitor_auth', 'true');
+            } else {
+                setPinError(true);
+                setTimeout(() => setPin(''), 500);
+            }
+        }
+    };
+
+    const handleClearPin = () => {
+        setPin('');
+        setPinError(false);
+    };
 
     const toggleFullScreen = () => {
         if (!document.fullscreenElement) {
@@ -197,6 +233,63 @@ export const PublicSchedule: React.FC = () => {
     const getFullEntry = (classId: string, slotId: string, day: number) => {
         return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === slotId);
     };
+
+    if (!isAuthorized) {
+        return (
+            <div className="h-screen w-full bg-[#0a0a0c] flex flex-col items-center justify-center font-sans">
+                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-transparent to-transparent"></div>
+                 
+                 <div className="z-10 text-center mb-12">
+                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 w-auto mx-auto mb-8 drop-shadow-2xl" alt="CEMAL" />
+                     <h2 className="text-3xl font-black text-white uppercase tracking-[0.2em] mb-2 flex items-center justify-center gap-3">
+                         <Lock className="text-red-600" size={28}/> Acesso Restrito
+                     </h2>
+                     <p className="text-gray-500 font-bold uppercase text-xs tracking-widest">Digite o código PIN para acessar o monitor</p>
+                 </div>
+
+                 <div className="z-10 w-full max-w-sm px-6">
+                     <div className="flex justify-center gap-4 mb-10">
+                         {[0,1,2,3].map(i => (
+                             <div key={i} className={`h-16 w-16 rounded-2xl border-2 flex items-center justify-center transition-all duration-300 ${
+                                 pin.length > i 
+                                 ? 'bg-red-600 border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.4)]' 
+                                 : pinError ? 'bg-red-900/20 border-red-500 animate-shake' : 'bg-white/5 border-white/10'
+                             }`}>
+                                {pin.length > i && <div className="h-4 w-4 bg-white rounded-full"></div>}
+                             </div>
+                         ))}
+                     </div>
+
+                     <div className="grid grid-cols-3 gap-4">
+                         {['1','2','3','4','5','6','7','8','9','C','0','X'].map(key => {
+                             if (key === 'C') return <button key={key} onClick={handleClearPin} className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-400 font-bold transition-all flex items-center justify-center"><Delete size={24}/></button>;
+                             if (key === 'X') return <div key={key} className="h-16"></div>;
+                             return (
+                                <button 
+                                    key={key} 
+                                    onClick={() => handlePinPress(key)} 
+                                    className="h-16 rounded-2xl bg-white/5 hover:bg-red-600 hover:text-white text-white text-2xl font-black transition-all border border-white/5 active:scale-95"
+                                >
+                                    {key}
+                                </button>
+                             );
+                         })}
+                     </div>
+                 </div>
+
+                 <div className="mt-16 text-[10px] text-gray-700 font-bold uppercase tracking-[0.4em] z-10">CEMAL EQUIPE • SISTEMA MONITOR V2</div>
+
+                 <style>{`
+                    @keyframes shake {
+                        0%, 100% { transform: translateX(0); }
+                        25% { transform: translateX(-10px); }
+                        75% { transform: translateX(10px); }
+                    }
+                    .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
+                 `}</style>
+            </div>
+        );
+    }
 
     const dateString = currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
     const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -374,6 +467,13 @@ export const PublicSchedule: React.FC = () => {
                 >
                     <Maximize2 size={24} />
                 </button>
+                <button 
+                    onClick={() => { sessionStorage.removeItem('monitor_auth'); window.location.reload(); }} 
+                    className="p-5 bg-black/40 hover:bg-red-600/20 border border-white/10 rounded-full text-red-500 transition-all backdrop-blur-xl shadow-2xl active:scale-95"
+                    title="Bloquear Painel"
+                >
+                    <Lock size={24} />
+                </button>
             </div>
 
              {/* FULL SCHEDULE MODAL (OVERLAY) */}
@@ -405,7 +505,7 @@ export const PublicSchedule: React.FC = () => {
                                             <thead className="bg-black/60 text-gray-400 border-b border-white/10 text-[10px] font-black uppercase tracking-widest">
                                                 <tr>
                                                     <th className="p-4 text-center w-24">Hora</th>
-                                                    {MORNING_CLASSES.map(c => <th key={c.id} className="p-4 text-center border-l border-white/5">{c.name}</th>)}
+                                                    {MORNING_CLASSES.map(c => <th className="p-4 text-center border-l border-white/5" key={c.id}>{c.name}</th>)}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/5">
@@ -447,7 +547,7 @@ export const PublicSchedule: React.FC = () => {
                                             <thead className="bg-black/60 text-gray-400 border-b border-white/10 text-[10px] font-black uppercase tracking-widest">
                                                 <tr>
                                                     <th className="p-4 text-center w-24">Hora</th>
-                                                    {AFTERNOON_CLASSES.map(c => <th key={c.id} className="p-4 text-center border-l border-white/5">{c.name}</th>)}
+                                                    {AFTERNOON_CLASSES.map(c => <th className="p-4 text-center border-l border-white/5" key={c.id}>{c.name}</th>)}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/5">
