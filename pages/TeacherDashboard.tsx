@@ -23,11 +23,10 @@ import {
   Plus, UploadCloud, List, PlusCircle, Layout, X, 
   Wand2, Folder, File as FileIcon, Trash2, Edit3, CheckCircle, FileUp, FileDown, ExternalLink, Search,
   BookOpen, Heart, FileText, Calendar, Save, Eye, ChevronRight, Download, Info, Target, LayoutPanelLeft, Compass,
-  LayoutPanelTop, Image as ImageIcon, ArrowLeft
+  LayoutPanelTop, Image as ImageIcon, ArrowLeft, FileType
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
-// Fixed FormSection by moving it outside the main component and making children optional to resolve property missing errors in JSX
 const FormSection = ({ title, icon: Icon, children }: { title: string, icon: any, children?: React.ReactNode }) => (
     <div className="space-y-4 pt-4">
         <div className="flex items-center gap-2 border-b border-white/10 pb-2">
@@ -184,7 +183,6 @@ export const TeacherDashboard: React.FC = () => {
       finally { setIsSaving(false); }
   };
 
-  // --- MATERIAL ACTIONS ---
   const handleSaveMaterial = async () => {
       if (!newMaterial.title || !newMaterial.className || !matFile) return alert("Preencha todos os campos e selecione um arquivo.");
       setIsSaving(true);
@@ -219,7 +217,6 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
-  // --- PLANNING ACTIONS ---
   const handleSavePlan = async () => {
       if (!newPlan.className) return alert("Preencha a turma.");
       if (newPlan.type === 'daily' && !newPlan.topic) return alert("Preencha o tema.");
@@ -255,7 +252,6 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
-  // --- PEI ACTIONS ---
   const handleSavePei = async () => {
       if (!newPei.studentId) return alert("Selecione um aluno.");
       setIsSaving(true);
@@ -478,7 +474,6 @@ export const TeacherDashboard: React.FC = () => {
                         ))}
                     </div>
 
-                    {/* MODAL MATERIAL */}
                     {showMaterialModal && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
                             <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl">
@@ -622,7 +617,6 @@ export const TeacherDashboard: React.FC = () => {
                         </div>
                         
                         <div className="space-y-8">
-                            {/* SELEÇÃO DE TIPO E DADOS BÁSICOS */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1 ml-1">Tipo</label>
@@ -649,7 +643,6 @@ export const TeacherDashboard: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* FORMULÁRIO DIÁRIO */}
                             {newPlan.type === 'daily' && (
                                 <div className="space-y-6 animate-in fade-in duration-300">
                                     <div>
@@ -663,7 +656,6 @@ export const TeacherDashboard: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* FORMULÁRIO SEMESTRAL (GUIA DE APRENDIZAGEM - CONFORME IMAGEM) */}
                             {newPlan.type === 'semester' && (
                                 <div className="space-y-6 animate-in fade-in duration-300 border-t border-white/5 pt-6">
                                     
@@ -757,7 +749,6 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* MODAL PEI */}
             {showPeiModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
                     <div className="bg-[#18181b] border border-white/10 w-full max-w-3xl max-h-[90vh] rounded-[2.5rem] p-10 shadow-2xl overflow-y-auto custom-scrollbar">
@@ -798,7 +789,6 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* ABAS ORIGINAIS (CREATE) */}
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
                     {creationMode === 'none' ? (
@@ -814,9 +804,9 @@ export const TeacherDashboard: React.FC = () => {
                                     <p className="text-gray-500">Envie PDF, Word ou imagens prontas.</p>
                                 </button>
                                 <button onClick={() => setCreationMode('header')} className="bg-[#18181b] border-4 border-white/5 p-12 rounded-[3rem] text-center hover:scale-105 hover:border-blue-600 transition-all group shadow-2xl">
-                                    <div className="h-24 w-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><LayoutPanelTop size={48}/></div>
+                                    <div className="h-24 w-24 bg-blue-600 text-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl group-hover:animate-bounce"><FileType size={48}/></div>
                                     <h3 className="text-2xl font-black text-white uppercase mb-4">Cabeçalho</h3>
-                                    <p className="text-gray-500">Baixe o cabeçalho oficial da escola.</p>
+                                    <p className="text-gray-500">Baixe os modelos oficiais para sua prova.</p>
                                 </button>
                              </div>
                         </div>
@@ -827,37 +817,44 @@ export const TeacherDashboard: React.FC = () => {
                                     <ArrowLeft size={24} />
                                 </button>
                                 <div>
-                                    <h1 className="text-3xl font-black text-white uppercase tracking-tight">Cabeçalhos Oficiais</h1>
-                                    <p className="text-gray-400">Selecione o modelo para baixar o cabeçalho oficial.</p>
+                                    <h1 className="text-3xl font-black text-white uppercase tracking-tight">Baixar Cabeçalho</h1>
+                                    <p className="text-gray-400">Selecione o modelo desejado para download imediato.</p>
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col group hover:border-red-600/30 transition-all">
-                                    <div className="h-48 bg-black/40 rounded-2xl mb-6 flex items-center justify-center overflow-hidden border border-white/5 group-hover:border-red-600/20 transition-all">
-                                        <ImageIcon size={64} className="text-gray-700 group-hover:text-red-600/40 transition-all" />
+                                <button 
+                                    onClick={() => handleDownloadHeader('https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png', 'CABECALHO_PROVA_CEMAL.png')}
+                                    className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col text-left group hover:border-red-600 transition-all shadow-2xl active:scale-95"
+                                >
+                                    <div className="h-48 w-full bg-black/40 rounded-2xl mb-6 flex items-center justify-center border border-white/5 group-hover:border-red-600/20 transition-all">
+                                        <div className="flex flex-col items-center text-red-500 gap-3 group-hover:animate-pulse">
+                                            <ImageIcon size={64} className="opacity-40" />
+                                            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Modelo Prova</span>
+                                        </div>
                                     </div>
                                     <h3 className="text-xl font-black text-white uppercase mb-2">Cabeçalho de Prova</h3>
-                                    <p className="text-gray-500 text-sm mb-8">Modelo padrão para avaliações e testes bimestrais.</p>
-                                    <button 
-                                        onClick={() => handleDownloadHeader('https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png', 'CABECALHO_PROVA_CEMAL.png')}
-                                        className="mt-auto w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl flex items-center justify-center gap-2 uppercase tracking-widest text-xs transition-all shadow-xl shadow-red-900/20"
-                                    >
-                                        <Download size={18}/> Baixar Agora
-                                    </button>
-                                </div>
-                                <div className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col group hover:border-blue-600/30 transition-all">
-                                    <div className="h-48 bg-black/40 rounded-2xl mb-6 flex items-center justify-center overflow-hidden border border-white/5 group-hover:border-blue-600/20 transition-all">
-                                        <ImageIcon size={64} className="text-gray-700 group-hover:text-blue-600/40 transition-all" />
+                                    <p className="text-gray-500 text-sm mb-6">Padrão oficial para avaliações e testes bimestrais.</p>
+                                    <div className="mt-auto flex items-center gap-2 text-red-500 font-black text-xs uppercase tracking-widest bg-red-500/10 px-4 py-3 rounded-xl w-fit">
+                                        <Download size={18}/> Download Imediato
+                                    </div>
+                                </button>
+
+                                <button 
+                                    onClick={() => handleDownloadHeader('https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png', 'CABECALHO_APOSTILA_CEMAL.png')}
+                                    className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[2.5rem] flex flex-col text-left group hover:border-blue-600 transition-all shadow-2xl active:scale-95"
+                                >
+                                    <div className="h-48 w-full bg-black/40 rounded-2xl mb-6 flex items-center justify-center border border-white/5 group-hover:border-blue-600/20 transition-all">
+                                        <div className="flex flex-col items-center text-blue-500 gap-3 group-hover:animate-pulse">
+                                            <ImageIcon size={64} className="opacity-40" />
+                                            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Modelo Apostila</span>
+                                        </div>
                                     </div>
                                     <h3 className="text-xl font-black text-white uppercase mb-2">Cabeçalho de Apostila</h3>
-                                    <p className="text-gray-500 text-sm mb-8">Modelo otimizado para materiais e apostilas de aula.</p>
-                                    <button 
-                                        onClick={() => handleDownloadHeader('https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png', 'CABECALHO_APOSTILA_CEMAL.png')}
-                                        className="mt-auto w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl flex items-center justify-center gap-2 uppercase tracking-widest text-xs transition-all shadow-xl shadow-blue-900/20"
-                                    >
-                                        <Download size={18}/> Baixar Agora
-                                    </button>
-                                </div>
+                                    <p className="text-gray-500 text-sm mb-6">Modelo otimizado para materiais didáticos e atividades.</p>
+                                    <div className="mt-auto flex items-center gap-2 text-blue-500 font-black text-xs uppercase tracking-widest bg-blue-500/10 px-4 py-3 rounded-xl w-fit">
+                                        <Download size={18}/> Download Imediato
+                                    </div>
+                                </button>
                             </div>
                         </div>
                     ) : (
