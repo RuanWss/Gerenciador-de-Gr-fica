@@ -42,14 +42,14 @@ const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-p
 const DEFAULT_PIN = "2016";
 
 export const PublicSchedule: React.FC = () => {
-    // --- ESTADO DE AUTORIZAÇÃO ---
+    // --- AUTH STATE ---
     const [isAuthorized, setIsAuthorized] = useState(() => {
         return sessionStorage.getItem('monitor_auth') === 'true';
     });
     const [pin, setPin] = useState('');
     const [pinError, setPinError] = useState(false);
 
-    // --- ESTADOS PRINCIPAIS ---
+    // --- MAIN STATE ---
     const [currentTime, setCurrentTime] = useState(new Date());
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
@@ -62,14 +62,14 @@ export const PublicSchedule: React.FC = () => {
     const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSlotId = useRef<string>('');
 
-    // --- LÓGICA DE INATIVIDADE (OCULTAR BOTÕES) ---
+    // --- INACTIVITY LOGIC (AUTO-HIDE BUTTONS) ---
     useEffect(() => {
         const resetTimer = () => {
             setShowControls(true);
             if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
             inactivityTimerRef.current = setTimeout(() => {
                 setShowControls(false);
-            }, 5000); // 5 segundos de inatividade
+            }, 5000);
         };
 
         window.addEventListener('mousemove', resetTimer);
@@ -83,7 +83,7 @@ export const PublicSchedule: React.FC = () => {
         };
     }, []);
 
-    // --- LISTENERS FIREBASE (TEMPO REAL) ---
+    // --- FIREBASE REALTIME LISTENERS ---
     useEffect(() => {
         if (!isAuthorized) return;
 
@@ -102,7 +102,7 @@ export const PublicSchedule: React.FC = () => {
         };
     }, [isAuthorized]);
 
-    // --- RELÓGIO E RASTREADOR DE HORÁRIOS ---
+    // --- CLOCK AND SLOT TRACKER ---
     useEffect(() => {
         if (!isAuthorized) return;
 
@@ -146,10 +146,9 @@ export const PublicSchedule: React.FC = () => {
         if (slot) {
             // ALERTA SONORO DE TROCA DE HORÁRIO
             if (lastSlotId.current !== slot.id) {
-                // Só toca se não for a primeira carga e se o áudio estiver ativo
                 if (lastSlotId.current !== '' && audioEnabled) {
                     const audio = new Audio(ALERT_SOUND_URL);
-                    audio.play().catch(e => console.log("Áudio bloqueado pelo navegador", e));
+                    audio.play().catch(e => console.log("Áudio bloqueado", e));
                 }
                 lastSlotId.current = slot.id;
             }
@@ -190,7 +189,7 @@ export const PublicSchedule: React.FC = () => {
                 <div className="max-w-xs w-full text-center space-y-8">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 mx-auto" alt="CEMAL" />
                     <div>
-                        <h2 className="text-white font-black text-xl uppercase tracking-widest mb-2">Painel da TV</h2>
+                        <h2 className="text-white font-black text-xl uppercase tracking-widest mb-2">Painel TV</h2>
                         <p className="text-gray-500 text-xs font-bold uppercase tracking-tight">Digite o PIN para ativar o monitor</p>
                     </div>
                     
@@ -221,14 +220,14 @@ export const PublicSchedule: React.FC = () => {
             {/* BG GRADIENT */}
             <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,_#220000_0%,_transparent_60%)] opacity-30 pointer-events-none"></div>
 
-            {/* HEADER COM RELÓGIO (O RELÓGIO PERMANECE) */}
+            {/* HEADER - O RELÓGIO PERMANECE */}
             <header className="relative z-10 flex items-center justify-between px-12 py-10 border-b border-white/5 bg-black/40 backdrop-blur-3xl">
                 <div className="flex items-center gap-10">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 w-auto" alt="Logo" />
                     <div className="h-14 w-px bg-white/10"></div>
                     <div>
                         <h1 className="text-4xl font-black uppercase tracking-tighter leading-none">Matriz de Horários</h1>
-                        <p className="text-red-600 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">Atualização Automática</p>
+                        <p className="text-red-600 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">Atualização em Tempo Real</p>
                     </div>
                 </div>
 
@@ -238,9 +237,9 @@ export const PublicSchedule: React.FC = () => {
                         <p className="text-2xl font-black text-white uppercase tracking-tight">{formattedDate}</p>
                     </div>
                     <div className="h-16 w-px bg-white/10"></div>
-                    {/* RELÓGIO DIGITAL PRINCIPAL */}
+                    {/* RELÓGIO DIGITAL PRINCIPAL - MANTIDO E DESTACADO */}
                     <div className="text-center bg-white/5 px-10 py-4 rounded-[2rem] border border-white/10 shadow-2xl min-w-[240px]">
-                        <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.3em] mb-1">Hora Atual</p>
+                        <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.3em] mb-1">Hora Certa</p>
                         <p className="text-6xl font-clock font-black tracking-tighter leading-none text-white">
                             {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </p>
@@ -248,7 +247,7 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </header>
 
-            {/* CONTEÚDO PRINCIPAL */}
+            {/* MAIN CONTENT */}
             <main className="flex-1 relative z-10 p-12 flex flex-col gap-12">
                 
                 {/* INFO STRIP */}
@@ -271,7 +270,7 @@ export const PublicSchedule: React.FC = () => {
                     )}
                 </div>
 
-                {/* TURMAS GRID (SEM CRONÔMETROS DE FINALIZAÇÃO) */}
+                {/* TURMAS GRID - REMOVIDO CRONÔMETRO DE FINALIZAÇÃO */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 flex-1">
                     {currentClasses.map(cls => {
                         const nowLesson = currentSlot ? schedule.find(s => s.classId === cls.id && s.slotId === currentSlot.id && s.dayOfWeek === (currentTime.getDay() || 1)) : null;
@@ -298,7 +297,7 @@ export const PublicSchedule: React.FC = () => {
                                                 <p className="text-red-500 font-bold uppercase text-sm mt-2 tracking-widest">{nowLesson.professor}</p>
                                             </div>
                                         ) : (
-                                            <p className="text-2xl font-black text-gray-700 uppercase tracking-widest italic">Livre / Sem Aula</p>
+                                            <p className="text-2xl font-black text-gray-700 uppercase tracking-widest italic">Livre</p>
                                         )}
                                     </div>
 
