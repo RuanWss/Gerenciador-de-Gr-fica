@@ -122,12 +122,10 @@ export const PublicSchedule: React.FC = () => {
         let shift: 'morning' | 'afternoon' | 'off' = 'off';
         let slots: TimeSlot[] = [];
 
-        // Manhã: 07:00 às 12:30
         if (totalMinutes >= 420 && totalMinutes <= 750) {
             shift = 'morning';
             slots = MORNING_SLOTS;
         } 
-        // Tarde: 13:00 às 21:00
         else if (totalMinutes >= 780 && totalMinutes <= 1260) {
             shift = 'afternoon';
             slots = AFTERNOON_SLOTS;
@@ -144,7 +142,6 @@ export const PublicSchedule: React.FC = () => {
         });
 
         if (slot) {
-            // ALERTA SONORO DE TROCA DE HORÁRIO
             if (lastSlotId.current !== slot.id) {
                 if (lastSlotId.current !== '' && audioEnabled) {
                     const audio = new Audio(ALERT_SOUND_URL);
@@ -217,10 +214,8 @@ export const PublicSchedule: React.FC = () => {
 
     return (
         <div className="fixed inset-0 bg-[#050505] text-white flex flex-col overflow-hidden font-sans select-none" onMouseMove={() => setShowControls(true)}>
-            {/* BG GRADIENT */}
             <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,_#220000_0%,_transparent_60%)] opacity-30 pointer-events-none"></div>
 
-            {/* HEADER - O RELÓGIO PERMANECE */}
             <header className="relative z-10 flex items-center justify-between px-12 py-10 border-b border-white/5 bg-black/40 backdrop-blur-3xl">
                 <div className="flex items-center gap-10">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 w-auto" alt="Logo" />
@@ -237,7 +232,6 @@ export const PublicSchedule: React.FC = () => {
                         <p className="text-2xl font-black text-white uppercase tracking-tight">{formattedDate}</p>
                     </div>
                     <div className="h-16 w-px bg-white/10"></div>
-                    {/* RELÓGIO DIGITAL PRINCIPAL - MANTIDO E DESTACADO */}
                     <div className="text-center bg-white/5 px-10 py-4 rounded-[2rem] border border-white/10 shadow-2xl min-w-[240px]">
                         <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.3em] mb-1">Hora Certa</p>
                         <p className="text-6xl font-clock font-black tracking-tighter leading-none text-white">
@@ -247,10 +241,8 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </header>
 
-            {/* MAIN CONTENT */}
-            <main className="flex-1 relative z-10 p-12 flex flex-col gap-12">
+            <main className="flex-1 relative z-10 p-12 flex flex-col gap-8">
                 
-                {/* INFO STRIP */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-6">
                         <div className={`px-6 py-2.5 rounded-full font-black text-[10px] uppercase tracking-[0.3em] border ${currentShift === 'off' ? 'bg-gray-900 text-gray-500 border-gray-800' : 'bg-green-600/10 text-green-500 border-green-600/30'}`}>
@@ -270,49 +262,46 @@ export const PublicSchedule: React.FC = () => {
                     )}
                 </div>
 
-                {/* TURMAS GRID - REMOVIDO CRONÔMETRO DE FINALIZAÇÃO */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 flex-1">
+                {/* TURMAS GRID - FORÇADO LADO A LADO */}
+                <div className={`grid ${currentShift === 'afternoon' ? 'grid-cols-3' : 'grid-cols-4'} gap-8 flex-1 items-stretch`}>
                     {currentClasses.map(cls => {
                         const nowLesson = currentSlot ? schedule.find(s => s.classId === cls.id && s.slotId === currentSlot.id && s.dayOfWeek === (currentTime.getDay() || 1)) : null;
                         
-                        // Encontrar Próxima Aula
                         const currentIdx = (currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS).findIndex(s => s.id === currentSlot?.id);
                         const nextSlot = (currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS)[currentIdx + 1];
                         const nextLesson = nextSlot ? schedule.find(s => s.classId === cls.id && s.slotId === nextSlot.id && s.dayOfWeek === (currentTime.getDay() || 1)) : null;
 
                         return (
-                            <div key={cls.id} className="bg-[#121214] rounded-[3rem] border border-white/5 flex flex-col overflow-hidden shadow-2xl relative group transition-all duration-500 hover:border-red-600/30">
-                                <div className="p-8 bg-black/40 border-b border-white/5 flex justify-between items-center">
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">{cls.name}</h3>
-                                    <div className="h-3 w-3 rounded-full bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)]"></div>
+                            <div key={cls.id} className="bg-[#121214] rounded-[2.5rem] border border-white/5 flex flex-col overflow-hidden shadow-2xl relative group transition-all duration-500 hover:border-red-600/30">
+                                <div className="p-6 bg-black/40 border-b border-white/5 flex justify-between items-center">
+                                    <h3 className="text-lg font-black text-white uppercase tracking-tighter">{cls.name}</h3>
+                                    <div className="h-2.5 w-2.5 rounded-full bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)]"></div>
                                 </div>
 
-                                <div className="p-10 flex-1 flex flex-col justify-center gap-10">
-                                    {/* AULA ATUAL */}
-                                    <div className="space-y-4">
-                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">Agora</p>
+                                <div className="p-8 flex-1 flex flex-col justify-center gap-8">
+                                    <div className="space-y-3">
+                                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.4em]">Agora</p>
                                         {nowLesson ? (
                                             <div className="animate-in fade-in slide-in-from-bottom-2">
-                                                <h4 className="text-4xl font-black text-white uppercase tracking-tight leading-tight">{nowLesson.subject}</h4>
-                                                <p className="text-red-500 font-bold uppercase text-sm mt-2 tracking-widest">{nowLesson.professor}</p>
+                                                <h4 className="text-2xl font-black text-white uppercase tracking-tight leading-tight">{nowLesson.subject}</h4>
+                                                <p className="text-red-500 font-bold uppercase text-xs mt-2 tracking-widest">{nowLesson.professor}</p>
                                             </div>
                                         ) : (
-                                            <p className="text-2xl font-black text-gray-700 uppercase tracking-widest italic">Livre</p>
+                                            <p className="text-xl font-black text-gray-700 uppercase tracking-widest italic">Livre</p>
                                         )}
                                     </div>
 
                                     <div className="h-px bg-white/5"></div>
 
-                                    {/* PRÓXIMA AULA */}
-                                    <div className="space-y-4 opacity-50">
-                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">A Seguir</p>
+                                    <div className="space-y-3 opacity-40">
+                                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-[0.4em]">A Seguir</p>
                                         {nextLesson ? (
                                             <div>
-                                                <h4 className="text-xl font-black text-white uppercase tracking-tight">{nextLesson.subject}</h4>
-                                                <p className="text-gray-500 font-bold uppercase text-[10px] mt-1 tracking-widest">{nextLesson.professor}</p>
+                                                <h4 className="text-lg font-black text-white uppercase tracking-tight">{nextLesson.subject}</h4>
+                                                <p className="text-gray-400 font-bold uppercase text-[9px] mt-1 tracking-widest">{nextLesson.professor}</p>
                                             </div>
                                         ) : (
-                                            <p className="text-sm font-black text-gray-700 uppercase tracking-widest">Fim do Período</p>
+                                            <p className="text-xs font-black text-gray-700 uppercase tracking-widest">Fim do Período</p>
                                         )}
                                     </div>
                                 </div>
@@ -322,7 +311,6 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </main>
 
-            {/* SYSTEM BANNER */}
             {sysConfig?.isBannerActive && sysConfig.bannerMessage && (
                 <div className="relative z-20 w-full bg-red-600 py-6 px-12 flex items-center justify-center gap-6 shadow-[0_-20px_50px_rgba(0,0,0,0.5)] border-t border-white/10">
                     <Bell className="text-white animate-bounce" size={28} />
@@ -332,7 +320,6 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             )}
 
-            {/* FLOATING CONTROLS - AUTO HIDE (OCULTA EM 5s DE INATIVIDADE) */}
             <div className={`fixed right-8 bottom-8 z-50 flex flex-col gap-4 transition-all duration-700 ${showControls ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12 pointer-events-none'}`}>
                 <button onClick={() => setAudioEnabled(!audioEnabled)} className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl transition-all border ${audioEnabled ? 'bg-red-600 text-white border-red-500' : 'bg-black/80 text-gray-500 border-white/10'}`}>
                     {audioEnabled ? <Volume2 size={24}/> : <VolumeX size={24}/>}
