@@ -24,11 +24,20 @@ export interface User {
 
 export enum ExamStatus {
   PENDING = 'PENDING',
+  RECEIVED = 'RECEIVED',
   IN_PROGRESS = 'IN_PROGRESS',
+  READY = 'READY',
   COMPLETED = 'COMPLETED'
 }
 
 export type MaterialType = 'exam' | 'handout';
+
+export interface PrintingOptions {
+  duplex: boolean;
+  stapled: boolean;
+  colored: boolean;
+  paperSize: 'A4' | 'A3' | 'Ofício';
+}
 
 export interface ExamRequest {
   id: string;
@@ -46,6 +55,7 @@ export interface ExamRequest {
   dueDate: string;
   materialType?: MaterialType;
   columns?: 1 | 2;
+  printingOptions?: PrintingOptions;
   headerData?: {
     schoolName: string;
     showStudentName: boolean;

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Clock, X, Maximize2, Maximize, Minimize, Volume2, Megaphone, ArrowRight, School, Timer, User, BookOpen, List, Lock, ShieldCheck, Delete } from 'lucide-react';
+import { Clock, Maximize2, Minimize, Volume2, VolumeX, ShieldCheck, Monitor, Bell } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -42,27 +42,48 @@ const ALERT_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-p
 const DEFAULT_PIN = "2016";
 
 export const PublicSchedule: React.FC = () => {
-    // --- AUTH STATE ---
+    // --- ESTADO DE AUTORIZAÇÃO ---
     const [isAuthorized, setIsAuthorized] = useState(() => {
         return sessionStorage.getItem('monitor_auth') === 'true';
     });
     const [pin, setPin] = useState('');
     const [pinError, setPinError] = useState(false);
 
-    // --- MAIN STATE ---
+    // --- ESTADOS PRINCIPAIS ---
     const [currentTime, setCurrentTime] = useState(new Date());
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [currentSlot, setCurrentSlot] = useState<TimeSlot | null>(null);
-    const [progress, setProgress] = useState(0);
-    const [showModal, setShowModal] = useState(false);
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [audioEnabled, setAudioEnabled] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [showControls, setShowControls] = useState(true);
     
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastSlotId = useRef<string>('');
 
+    // --- LÓGICA DE INATIVIDADE (OCULTAR BOTÕES) ---
+    useEffect(() => {
+        const resetTimer = () => {
+            setShowControls(true);
+            if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+            inactivityTimerRef.current = setTimeout(() => {
+                setShowControls(false);
+            }, 5000); // 5 segundos de inatividade
+        };
+
+        window.addEventListener('mousemove', resetTimer);
+        window.addEventListener('keydown', resetTimer);
+        resetTimer();
+
+        return () => {
+            window.removeEventListener('mousemove', resetTimer);
+            window.removeEventListener('keydown', resetTimer);
+            if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+        };
+    }, []);
+
+    // --- LISTENERS FIREBASE (TEMPO REAL) ---
     useEffect(() => {
         if (!isAuthorized) return;
 
@@ -81,6 +102,7 @@ export const PublicSchedule: React.FC = () => {
         };
     }, [isAuthorized]);
 
+    // --- RELÓGIO E RASTREADOR DE HORÁRIOS ---
     useEffect(() => {
         if (!isAuthorized) return;
 
@@ -91,6 +113,59 @@ export const PublicSchedule: React.FC = () => {
         }, 1000);
         return () => clearInterval(timer);
     }, [isAuthorized]);
+
+    const checkCurrentStatus = (now: Date) => {
+        const currentHour = now.getHours();
+        const currentMinutes = now.getMinutes();
+        const totalMinutes = currentHour * 60 + currentMinutes;
+
+        let shift: 'morning' | 'afternoon' | 'off' = 'off';
+        let slots: TimeSlot[] = [];
+
+        // Manhã: 07:00 às 12:30
+        if (totalMinutes >= 420 && totalMinutes <= 750) {
+            shift = 'morning';
+            slots = MORNING_SLOTS;
+        } 
+        // Tarde: 13:00 às 21:00
+        else if (totalMinutes >= 780 && totalMinutes <= 1260) {
+            shift = 'afternoon';
+            slots = AFTERNOON_SLOTS;
+        }
+
+        setCurrentShift(shift);
+
+        const slot = slots.find(s => {
+            const [hS, mS] = s.start.split(':').map(Number);
+            const [hE, mE] = s.end.split(':').map(Number);
+            const startTotal = hS * 60 + mS;
+            const endTotal = hE * 60 + mE;
+            return totalMinutes >= startTotal && totalMinutes < endTotal;
+        });
+
+        if (slot) {
+            // ALERTA SONORO DE TROCA DE HORÁRIO
+            if (lastSlotId.current !== slot.id) {
+                // Só toca se não for a primeira carga e se o áudio estiver ativo
+                if (lastSlotId.current !== '' && audioEnabled) {
+                    const audio = new Audio(ALERT_SOUND_URL);
+                    audio.play().catch(e => console.log("Áudio bloqueado pelo navegador", e));
+                }
+                lastSlotId.current = slot.id;
+            }
+            setCurrentSlot(slot);
+        } else {
+            setCurrentSlot(null);
+        }
+    };
+
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    };
 
     const handlePinPress = (num: string) => {
         if (pin.length >= 4) return;
@@ -109,326 +184,167 @@ export const PublicSchedule: React.FC = () => {
         }
     };
 
-    const handleClearPin = () => {
-        setPin('');
-        setPinError(false);
-    };
-
-    const toggleFullScreen = () => {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.error(`Erro ao tentar entrar no modo tela cheia: ${err.message}`);
-            });
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            }
-        }
-    };
-
-    const checkCurrentStatus = (now: Date) => {
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-        const seconds = now.getSeconds();
-        const timeVal = hours * 60 + minutes;
-        const exactTimeVal = timeVal + seconds / 60;
-
-        let shift: 'morning' | 'afternoon' | 'off' = 'off';
-
-        if (timeVal >= 420 && timeVal < 750) {
-            shift = 'morning';
-        } else if (timeVal >= 750 && timeVal < 1260) {
-            shift = 'afternoon';
-        }
-
-        setCurrentShift(shift);
-
-        if (shift !== 'off') {
-            const slots = shift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
-            const foundSlot = slots.find(s => {
-                const [startH, startM] = s.start.split(':').map(Number);
-                const [endH, endM] = s.end.split(':').map(Number);
-                const startVal = startH * 60 + startM;
-                const endVal = endH * 60 + endM;
-                return exactTimeVal >= startVal && exactTimeVal < endVal;
-            });
-
-            if (foundSlot) {
-                const [startH, startM] = foundSlot.start.split(':').map(Number);
-                const [endH, endM] = foundSlot.end.split(':').map(Number);
-                const startVal = startH * 60 + startM;
-                const endVal = endH * 60 + endM;
-                const totalDuration = endVal - startVal;
-                const elapsed = exactTimeVal - startVal;
-                setProgress((elapsed / totalDuration) * 100);
-
-                if (foundSlot.id !== lastSlotId.current) {
-                    lastSlotId.current = foundSlot.id;
-                    setCurrentSlot(foundSlot);
-                    playAlert();
-                }
-            } else {
-                lastSlotId.current = '';
-                setCurrentSlot(null);
-                setProgress(0);
-            }
-        } else {
-            setCurrentSlot(null);
-        }
-    };
-
-    const isBannerVisible = () => {
-        if (!sysConfig?.isBannerActive || !sysConfig.bannerMessage) return false;
-        const now = currentTime.getTime();
-        if (sysConfig.tvStart && now < new Date(sysConfig.tvStart).getTime()) return false;
-        if (sysConfig.tvEnd && now > new Date(sysConfig.tvEnd).getTime()) return false;
-        return true;
-    };
-
-    const enableAudio = () => {
-        if (audioRef.current) {
-            audioRef.current.play().then(() => {
-                audioRef.current?.pause();
-                audioRef.current!.currentTime = 0;
-                setAudioEnabled(true);
-            }).catch(() => {});
-        }
-    };
-
-    const playAlert = () => {
-        if (audioRef.current && audioEnabled) {
-            audioRef.current.play().catch(() => {});
-            setTimeout(() => {
-                if (audioRef.current) {
-                    audioRef.current.pause();
-                    audioRef.current.currentTime = 0;
-                }
-            }, 6000);
-        }
-    };
-
-    const getEntry = (classId: string) => {
-        if (!currentSlot) return null;
-        const day = currentTime.getDay();
-        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === currentSlot.id);
-    };
-
-    const getNextEntry = (classId: string) => {
-        if (!currentSlot) return null;
-        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
-        const currentIndex = slots.findIndex(s => s.id === currentSlot.id);
-        if (currentIndex === -1 || currentIndex === slots.length - 1) return null;
-        let nextSlotIndex = currentIndex + 1;
-        let nextSlot = slots[nextSlotIndex];
-        if (nextSlot.type === 'break') {
-            nextSlotIndex++;
-            nextSlot = slots[nextSlotIndex];
-        }
-        if (!nextSlot) return null;
-        const day = currentTime.getDay();
-        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === nextSlot.id);
-    };
-
-    const getFullEntry = (classId: string, slotId: string, day: number) => {
-        return schedule.find(s => s.classId === classId && s.dayOfWeek === day && s.slotId === slotId);
-    };
-
     if (!isAuthorized) {
         return (
-            <div className="h-screen w-full bg-[#0a0a0c] flex flex-col items-center justify-center font-sans">
-                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-transparent to-transparent"></div>
-                 <div className="z-10 text-center mb-12">
-                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 w-auto mx-auto mb-8 drop-shadow-2xl" alt="CEMAL" />
-                     <h2 className="text-3xl font-black text-white uppercase tracking-[0.2em] mb-2 flex items-center justify-center gap-3">
-                         <Lock className="text-red-600" size={28}/> Acesso Restrito
-                     </h2>
-                     <p className="text-gray-500 font-bold uppercase text-xs tracking-widest">Digite o código PIN para acessar o monitor</p>
-                 </div>
-                 <div className="z-10 w-full max-w-sm px-6">
-                     <div className="flex justify-center gap-4 mb-10">
-                         {[0,1,2,3].map(i => (
-                             <div key={i} className={`h-16 w-16 rounded-2xl border-2 flex items-center justify-center transition-all duration-300 ${
-                                 pin.length > i 
-                                 ? 'bg-red-600 border-red-600 shadow-[0_0_20px_rgba(220,38,38,0.4)]' 
-                                 : pinError ? 'bg-red-900/20 border-red-500 animate-shake' : 'bg-white/5 border-white/10'
-                             }`}>
-                                {pin.length > i && <div className="h-4 w-4 bg-white rounded-full"></div>}
-                             </div>
-                         ))}
-                     </div>
-                     <div className="grid grid-cols-3 gap-4">
-                         {['1','2','3','4','5','6','7','8','9','C','0','X'].map(key => {
-                             if (key === 'C') return <button key={key} onClick={handleClearPin} className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-400 font-bold transition-all flex items-center justify-center"><Delete size={24}/></button>;
-                             if (key === 'X') return <div key={key} className="h-16"></div>;
-                             return (
-                                <button key={key} onClick={() => handlePinPress(key)} className="h-16 rounded-2xl bg-white/5 hover:bg-red-600 hover:text-white text-white text-2xl font-black transition-all border border-white/5 active:scale-95">{key}</button>
-                             );
-                         })}
-                     </div>
-                 </div>
-                 <div className="mt-16 text-[10px] text-gray-700 font-bold uppercase tracking-[0.4em] z-10">CEMAL EQUIPE • SISTEMA MONITOR V2</div>
-                 <style>{`@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } } .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }`}</style>
+            <div className="fixed inset-0 bg-[#0a0a0b] flex flex-col items-center justify-center p-6 z-[1000]">
+                <div className="max-w-xs w-full text-center space-y-8">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 mx-auto" alt="CEMAL" />
+                    <div>
+                        <h2 className="text-white font-black text-xl uppercase tracking-widest mb-2">Painel da TV</h2>
+                        <p className="text-gray-500 text-xs font-bold uppercase tracking-tight">Digite o PIN para ativar o monitor</p>
+                    </div>
+                    
+                    <div className="flex justify-center gap-4 mb-8">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all ${pin.length >= i ? 'bg-red-600 border-red-600 scale-125' : 'border-gray-800'}`}></div>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((n) => (
+                            <button key={n} onClick={() => handlePinPress(n.toString())} className="h-16 bg-white/5 hover:bg-white/10 text-white text-2xl font-black rounded-2xl border border-white/5 transition-all active:scale-95">{n}</button>
+                        ))}
+                        <button onClick={() => setPin('')} className="h-16 bg-red-600/10 text-red-500 font-black rounded-2xl border border-red-600/20 col-span-2 uppercase text-xs tracking-widest">Limpar</button>
+                    </div>
+                    {pinError && <p className="text-red-500 font-black uppercase text-[10px] tracking-widest animate-bounce">PIN Incorreto</p>}
+                </div>
             </div>
         );
     }
 
-    const dateString = currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
-    const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : (currentShift === 'afternoon' ? AFTERNOON_CLASSES : []);
-    const bannerVisible = isBannerVisible();
+    const currentClasses = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
+    const dayName = currentTime.toLocaleDateString('pt-BR', { weekday: 'long' });
+    const formattedDate = currentTime.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
 
     return (
-        <div className="h-screen w-full bg-black text-white overflow-hidden flex flex-col relative font-sans">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black"></div>
-            <audio ref={audioRef} src={ALERT_SOUND_URL} preload="auto" />
+        <div className="fixed inset-0 bg-[#050505] text-white flex flex-col overflow-hidden font-sans select-none" onMouseMove={() => setShowControls(true)}>
+            {/* BG GRADIENT */}
+            <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_0%,_#220000_0%,_transparent_60%)] opacity-30 pointer-events-none"></div>
 
-            {!audioEnabled && (
-                <div onClick={enableAudio} className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center cursor-pointer p-4 text-center">
-                    <div className="bg-red-600 p-8 rounded-full mb-6 animate-pulse shadow-[0_0_50px_rgba(220,38,38,0.5)]"><Volume2 size={48} /></div>
-                    <h1 className="text-3xl font-black text-white uppercase tracking-widest mb-2">Monitor CEMAL</h1>
-                    <p className="text-lg font-medium text-gray-500">Clique em qualquer lugar para sincronizar o áudio</p>
+            {/* HEADER COM RELÓGIO (O RELÓGIO PERMANECE) */}
+            <header className="relative z-10 flex items-center justify-between px-12 py-10 border-b border-white/5 bg-black/40 backdrop-blur-3xl">
+                <div className="flex items-center gap-10">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 w-auto" alt="Logo" />
+                    <div className="h-14 w-px bg-white/10"></div>
+                    <div>
+                        <h1 className="text-4xl font-black uppercase tracking-tighter leading-none">Matriz de Horários</h1>
+                        <p className="text-red-600 font-bold uppercase text-[10px] tracking-[0.3em] mt-2">Atualização Automática</p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-12">
+                    <div className="text-right">
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] mb-1">{dayName}</p>
+                        <p className="text-2xl font-black text-white uppercase tracking-tight">{formattedDate}</p>
+                    </div>
+                    <div className="h-16 w-px bg-white/10"></div>
+                    {/* RELÓGIO DIGITAL PRINCIPAL */}
+                    <div className="text-center bg-white/5 px-10 py-4 rounded-[2rem] border border-white/10 shadow-2xl min-w-[240px]">
+                        <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.3em] mb-1">Hora Atual</p>
+                        <p className="text-6xl font-clock font-black tracking-tighter leading-none text-white">
+                            {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </p>
+                    </div>
+                </div>
+            </header>
+
+            {/* CONTEÚDO PRINCIPAL */}
+            <main className="flex-1 relative z-10 p-12 flex flex-col gap-12">
+                
+                {/* INFO STRIP */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div className={`px-6 py-2.5 rounded-full font-black text-[10px] uppercase tracking-[0.3em] border ${currentShift === 'off' ? 'bg-gray-900 text-gray-500 border-gray-800' : 'bg-green-600/10 text-green-500 border-green-600/30'}`}>
+                            {currentShift === 'morning' ? 'TURNO MATUTINO' : currentShift === 'afternoon' ? 'TURNO VESPERTINO' : 'SISTEMA EM ESPERA'}
+                        </div>
+                        {currentSlot && (
+                            <div className="flex items-center gap-4 bg-red-600/10 px-6 py-2.5 rounded-full border border-red-600/30 animate-in fade-in zoom-in duration-500">
+                                <Clock size={16} className="text-red-500" />
+                                <span className="text-xs font-black text-white uppercase tracking-[0.2em]">{currentSlot.label} ({currentSlot.start} - {currentSlot.end})</span>
+                            </div>
+                        )}
+                    </div>
+                    {currentSlot?.type === 'break' && (
+                        <div className="bg-yellow-500 text-black px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest animate-pulse">
+                            Intervalo em andamento
+                        </div>
+                    )}
+                </div>
+
+                {/* TURMAS GRID (SEM CRONÔMETROS DE FINALIZAÇÃO) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 flex-1">
+                    {currentClasses.map(cls => {
+                        const nowLesson = currentSlot ? schedule.find(s => s.classId === cls.id && s.slotId === currentSlot.id && s.dayOfWeek === (currentTime.getDay() || 1)) : null;
+                        
+                        // Encontrar Próxima Aula
+                        const currentIdx = (currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS).findIndex(s => s.id === currentSlot?.id);
+                        const nextSlot = (currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS)[currentIdx + 1];
+                        const nextLesson = nextSlot ? schedule.find(s => s.classId === cls.id && s.slotId === nextSlot.id && s.dayOfWeek === (currentTime.getDay() || 1)) : null;
+
+                        return (
+                            <div key={cls.id} className="bg-[#121214] rounded-[3rem] border border-white/5 flex flex-col overflow-hidden shadow-2xl relative group transition-all duration-500 hover:border-red-600/30">
+                                <div className="p-8 bg-black/40 border-b border-white/5 flex justify-between items-center">
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">{cls.name}</h3>
+                                    <div className="h-3 w-3 rounded-full bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.5)]"></div>
+                                </div>
+
+                                <div className="p-10 flex-1 flex flex-col justify-center gap-10">
+                                    {/* AULA ATUAL */}
+                                    <div className="space-y-4">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">Agora</p>
+                                        {nowLesson ? (
+                                            <div className="animate-in fade-in slide-in-from-bottom-2">
+                                                <h4 className="text-4xl font-black text-white uppercase tracking-tight leading-tight">{nowLesson.subject}</h4>
+                                                <p className="text-red-500 font-bold uppercase text-sm mt-2 tracking-widest">{nowLesson.professor}</p>
+                                            </div>
+                                        ) : (
+                                            <p className="text-2xl font-black text-gray-700 uppercase tracking-widest italic">Livre / Sem Aula</p>
+                                        )}
+                                    </div>
+
+                                    <div className="h-px bg-white/5"></div>
+
+                                    {/* PRÓXIMA AULA */}
+                                    <div className="space-y-4 opacity-50">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">A Seguir</p>
+                                        {nextLesson ? (
+                                            <div>
+                                                <h4 className="text-xl font-black text-white uppercase tracking-tight">{nextLesson.subject}</h4>
+                                                <p className="text-gray-500 font-bold uppercase text-[10px] mt-1 tracking-widest">{nextLesson.professor}</p>
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm font-black text-gray-700 uppercase tracking-widest">Fim do Período</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </main>
+
+            {/* SYSTEM BANNER */}
+            {sysConfig?.isBannerActive && sysConfig.bannerMessage && (
+                <div className="relative z-20 w-full bg-red-600 py-6 px-12 flex items-center justify-center gap-6 shadow-[0_-20px_50px_rgba(0,0,0,0.5)] border-t border-white/10">
+                    <Bell className="text-white animate-bounce" size={28} />
+                    <p className="text-2xl font-black text-white uppercase tracking-tighter whitespace-nowrap overflow-hidden">
+                        Aviso: {sysConfig.bannerMessage}
+                    </p>
                 </div>
             )}
 
-            <header className="shrink-0 w-full flex flex-col items-center pt-8 pb-4 z-10 relative">
-                <div className="mb-4 flex items-center gap-4">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-[4vh] w-auto object-contain" alt="Logo CEMAL" />
-                    <div className="h-8 w-px bg-white/20"></div>
-                    <div className="flex flex-col">
-                        <span className="text-[1.6vh] font-black text-red-600 tracking-widest uppercase leading-none">Quadro de Horários</span>
-                        <span className="text-[1.2vh] text-gray-500 font-bold uppercase">{currentShift === 'morning' ? 'Turno Matutino' : currentShift === 'afternoon' ? 'Turno Vespertino' : 'Sessão Encerrada'}</span>
-                    </div>
-                </div>
-
-                <div className={`flex items-center justify-center gap-12 w-full max-w-[1700px] px-10 transition-all duration-700 ease-in-out`}>
-                    {bannerVisible && (
-                        <div className="flex-1 max-w-2xl bg-white/[0.03] border-l-8 border-red-600 p-8 rounded-[2rem] backdrop-blur-3xl shadow-2xl animate-in slide-in-from-left duration-700 ease-out border border-white/5">
-                            <div className="flex items-center gap-4 mb-4 text-red-500">
-                                <div className="p-3 bg-red-600/10 rounded-2xl"><Megaphone size={32} className="animate-bounce" /></div>
-                                <span className="font-black uppercase tracking-[0.2em] text-xl">Comunicado</span>
-                            </div>
-                            <p className="text-[clamp(1.5rem,3vh,3.5vh)] font-bold leading-tight text-white/90 italic">"{sysConfig?.bannerMessage}"</p>
-                        </div>
-                    )}
-                    <div className={`flex flex-col items-center transition-all duration-700 ${bannerVisible ? 'items-end flex-initial' : 'flex-initial'}`}>
-                        <h1 className="text-[clamp(6rem,18vh,22vh)] leading-none font-clock font-black text-white tracking-tighter tabular-nums drop-shadow-[0_15px_30px_rgba(0,0,0,0.6)] select-none">{timeString}</h1>
-                        <div className="mt-2 bg-white/5 border border-white/10 px-8 py-2 rounded-full backdrop-blur-md">
-                            <p className="text-[2.2vh] text-gray-300 font-bold tracking-widest uppercase">{dateString}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {currentSlot && (
-                    <div className="w-full max-w-4xl mt-8 px-6">
-                        <div className="flex justify-between items-end mb-2">
-                             <span className="text-xs font-black text-red-500 uppercase tracking-widest flex items-center gap-2">
-                                <Timer size={14}/> {currentSlot.label} ({currentSlot.start} - {currentSlot.end})
-                             </span>
-                             <span className="text-xs font-black text-gray-500 uppercase">{Math.round(progress)}% Concluído</span>
-                        </div>
-                        <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 backdrop-blur-sm">
-                            <div className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-1000 ease-linear shadow-[0_0_15px_rgba(220,38,38,0.5)]" style={{ width: `${progress}%` }} />
-                        </div>
-                    </div>
-                )}
-            </header>
-
-            <main className="flex-1 w-full max-w-[1800px] mx-auto px-8 pb-12 overflow-hidden flex items-center justify-center z-10">
-                {currentShift === 'off' ? (
-                     <div className="flex flex-col items-center justify-center p-16 text-center bg-white/[0.03] rounded-[3rem] border border-white/10 backdrop-blur-2xl">
-                        <School size={120} className="text-red-600/30 mb-8"/>
-                        <h2 className="text-5xl font-black text-white uppercase tracking-tighter mb-4">C.E. Prof. Manoel Leite</h2>
-                        <p className="text-2xl text-red-500 font-bold uppercase tracking-[0.4em] animate-pulse">Aguardando próximo turno</p>
-                     </div>
-                ) : (
-                    <div 
-                        className="grid gap-6 w-full h-full py-4"
-                        style={{ 
-                            gridTemplateColumns: `repeat(${activeClasses.length}, minmax(0, 1fr))` 
-                        }}
-                    >
-                        {activeClasses.map(cls => {
-                            const entry = getEntry(cls.id);
-                            const nextEntry = getNextEntry(cls.id);
-
-                            return (
-                                <article key={cls.id} className="flex flex-col bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl transition-all relative group hover:bg-white/5 hover:border-red-600/30">
-                                    <div className="bg-black/40 flex items-center justify-center p-6 border-b border-white/5">
-                                        <h2 className="text-[clamp(1.2rem,3.2vh,4vh)] font-black text-white uppercase tracking-tight truncate w-full text-center">{cls.name}</h2>
-                                    </div>
-                                    
-                                    <div className="flex-1 flex flex-col p-8 space-y-8">
-                                        {currentSlot?.type === 'break' ? (
-                                             <div className="flex-1 flex flex-col items-center justify-center gap-6 animate-pulse">
-                                                <div className="h-24 w-24 bg-yellow-500/10 rounded-full flex items-center justify-center text-yellow-500 border border-yellow-500/20"><Clock size={48}/></div>
-                                                <span className="text-3xl font-black text-yellow-500 uppercase tracking-[0.2em]">INTERVALO</span>
-                                             </div>
-                                        ) : entry ? (
-                                            <>
-                                                <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                                    <span className="inline-block px-3 py-1 bg-red-600/10 text-red-500 rounded-full text-[1.4vh] font-black uppercase tracking-widest mb-4 border border-red-500/20">Aula Agora</span>
-                                                    <h3 className="text-[clamp(1.5rem,4.5vh,6vh)] leading-[1.1] font-black text-white uppercase line-clamp-3 drop-shadow-lg mb-4">{entry.subject}</h3>
-                                                    <div className="flex items-center gap-3 text-gray-400 font-bold uppercase text-[2.2vh] tracking-tight">
-                                                        <User size={20} className="text-red-600"/>
-                                                        <span>{entry.professor}</span>
-                                                    </div>
-                                                </div>
-                                                <div className="shrink-0 bg-black/60 p-6 rounded-3xl border border-white/5 relative">
-                                                    <div className="absolute -top-3 left-8 px-4 py-0.5 bg-gray-800 rounded-full border border-white/10">
-                                                        <span className="text-[1.2vh] font-black text-gray-500 uppercase tracking-widest">A Seguir</span>
-                                                    </div>
-                                                    {nextEntry ? (
-                                                        <div className="flex flex-col gap-1">
-                                                            <p className="text-[2.2vh] font-black text-gray-300 uppercase truncate tracking-tight">{nextEntry.subject}</p>
-                                                            <p className="text-[1.6vh] text-gray-500 font-bold uppercase truncate opacity-80">{nextEntry.professor}</p>
-                                                        </div>
-                                                    ) : <p className="text-[1.8vh] font-black text-gray-700 uppercase tracking-widest text-center py-2">Fim do Turno</p>}
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="flex-1 flex flex-col items-center justify-center opacity-20 group-hover:opacity-40 transition-opacity">
-                                                <BookOpen size={100} className="mb-6" />
-                                                <span className="text-[4vh] font-black tracking-[0.5em] uppercase text-gray-600">LIVRE</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className={`absolute bottom-0 left-0 h-1.5 w-full bg-gradient-to-r from-transparent via-red-600 to-transparent transition-all ${entry ? 'opacity-100' : 'opacity-0'}`}></div>
-                                </article>
-                            )
-                        })}
-                    </div>
-                )}
-            </main>
-
-            <div className="fixed bottom-8 right-8 flex flex-col gap-4 z-50">
-                <button onClick={toggleFullScreen} className="p-5 bg-black/40 hover:bg-white/10 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl active:scale-95">{isFullscreen ? <Minimize size={24} /> : <Maximize size={24} />}</button>
-                <button onClick={() => setShowModal(true)} className="p-5 bg-black/40 hover:bg-white/10 border border-white/10 rounded-full text-white transition-all backdrop-blur-xl shadow-2xl active:scale-95"><Maximize2 size={24} /></button>
-                <button onClick={() => { sessionStorage.removeItem('monitor_auth'); window.location.reload(); }} className="p-5 bg-black/40 hover:bg-red-600/20 border border-white/10 rounded-full text-red-500 transition-all backdrop-blur-xl shadow-2xl active:scale-95"><Lock size={24} /></button>
+            {/* FLOATING CONTROLS - AUTO HIDE (OCULTA EM 5s DE INATIVIDADE) */}
+            <div className={`fixed right-8 bottom-8 z-50 flex flex-col gap-4 transition-all duration-700 ${showControls ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12 pointer-events-none'}`}>
+                <button onClick={() => setAudioEnabled(!audioEnabled)} className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl transition-all border ${audioEnabled ? 'bg-red-600 text-white border-red-500' : 'bg-black/80 text-gray-500 border-white/10'}`}>
+                    {audioEnabled ? <Volume2 size={24}/> : <VolumeX size={24}/>}
+                </button>
+                <button onClick={toggleFullscreen} className="w-14 h-14 bg-black/80 backdrop-blur-xl border border-white/10 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:bg-white/10 transition-all">
+                    {isFullscreen ? <Minimize size={24}/> : <Maximize2 size={24}/>}
+                </button>
+                <button onClick={() => { sessionStorage.removeItem('monitor_auth'); window.location.reload(); }} className="w-14 h-14 bg-black/80 backdrop-blur-xl border border-white/10 text-gray-500 rounded-2xl flex items-center justify-center shadow-2xl hover:text-red-500 transition-all">
+                    <Monitor size={24}/>
+                </button>
             </div>
-
-            {showModal && (
-                 <div className="fixed inset-0 z-[200] bg-black/98 backdrop-blur-3xl flex items-center justify-center p-8 animate-in fade-in duration-300">
-                    <div className="w-full h-full max-w-7xl bg-[#0c0c0e] rounded-[3rem] border border-white/10 flex flex-col overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)]">
-                        <header className="p-8 border-b border-white/10 flex justify-between items-center bg-[#141417]">
-                            <div><h2 className="text-3xl font-black text-white flex items-center gap-4 uppercase tracking-tighter"><List className="text-red-600"/> Grade Geral de Horários</h2><p className="text-gray-500 font-bold text-sm uppercase tracking-widest mt-1">Sincronizado com a base de dados central</p></div>
-                            <button onClick={() => setShowModal(false)} className="bg-red-600 text-white p-4 rounded-2xl hover:bg-red-700 transition-all shadow-lg shadow-red-900/20"><X size={32} /></button>
-                        </header>
-                        <div className="flex-1 overflow-auto p-8 custom-scrollbar bg-[radial-gradient(circle_at_bottom_left,_var(--tw-gradient-stops))] from-white/[0.02] via-transparent to-transparent">
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-                                <section className="space-y-6">
-                                    <div className="flex items-center gap-3 px-4 py-2 bg-blue-600/10 border border-blue-600/20 rounded-xl w-fit"><div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div><h3 className="text-sm font-black text-blue-400 uppercase tracking-widest">Matutino (EFAF)</h3></div>
-                                    <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden"><table className="w-full text-left"><thead className="bg-black/60 text-gray-400 border-b border-white/10 text-[10px] font-black uppercase tracking-widest"><tr><th className="p-4 text-center w-24">Hora</th>{MORNING_CLASSES.map(c => <th className="p-4 text-center border-l border-white/5" key={c.id}>{c.name}</th>)}</tr></thead><tbody className="divide-y divide-white/5">{MORNING_SLOTS.map(slot => (<tr key={slot.id} className={`hover:bg-white/[0.02] ${slot.type === 'break' ? 'bg-yellow-500/5' : ''}`}><td className="p-4 text-center border-r border-white/5"><span className="text-xs font-black text-red-600 font-mono">{slot.start}</span></td>{MORNING_CLASSES.map(cls => { const entry = getFullEntry(cls.id, slot.id, currentTime.getDay()); return (<td key={cls.id + slot.id} className="p-4 text-center border-l border-white/5">{slot.type === 'break' ? (<span className="text-[10px] font-black text-yellow-600 uppercase tracking-tighter">INTERVALO</span>) : entry ? (<div className="flex flex-col"><span className="font-bold text-white text-[11px] uppercase truncate max-w-[120px]">{entry.subject}</span><span className="text-[9px] text-gray-500 font-medium uppercase truncate max-w-[120px]">{entry.professor}</span></div>) : <span className="text-gray-800 text-xs">—</span>}</td>)})}</tr>))}</tbody></table></div>
-                                </section>
-                                <section className="space-y-6">
-                                    <div className="flex items-center gap-3 px-4 py-2 bg-red-600/10 border border-red-600/20 rounded-xl w-fit"><div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div><h3 className="text-sm font-black text-red-400 uppercase tracking-widest">Vespertino (E.M.)</h3></div>
-                                    <div className="bg-white/5 rounded-3xl border border-white/5 overflow-hidden"><table className="w-full text-left"><thead className="bg-black/60 text-gray-400 border-b border-white/10 text-[10px] font-black uppercase tracking-widest"><tr><th className="p-4 text-center w-24">Hora</th>{AFTERNOON_CLASSES.map(c => <th className="p-4 text-center border-l border-white/5" key={c.id}>{c.name}</th>)}</tr></thead><tbody className="divide-y divide-white/5">{AFTERNOON_SLOTS.map(slot => (<tr key={slot.id} className={`hover:bg-white/[0.02] ${slot.type === 'break' ? 'bg-yellow-500/5' : ''}`}><td className="p-4 text-center border-r border-white/5"><span className="text-xs font-black text-red-600 font-mono">{slot.start}</span></td>{AFTERNOON_CLASSES.map(cls => { const entry = getFullEntry(cls.id, slot.id, currentTime.getDay()); return (<td key={cls.id + slot.id} className="p-4 text-center border-l border-white/5">{slot.type === 'break' ? (<span className="text-[10px] font-black text-yellow-600 uppercase tracking-tighter">INTERVALO</span>) : entry ? (<div className="flex flex-col"><span className="font-bold text-white text-[11px] uppercase truncate max-w-[120px]">{entry.subject}</span><span className="text-[9px] text-gray-500 font-medium uppercase truncate max-w-[120px]">{entry.professor}</span></div>) : <span className="text-gray-800 text-xs">—</span>}</td>)})}</tr>))}</tbody></table></div>
-                                </section>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-             )}
-            <style>{`.custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }`}</style>
         </div>
     );
 };
