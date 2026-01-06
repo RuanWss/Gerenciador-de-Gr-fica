@@ -39,8 +39,8 @@ export interface ExamRequest {
   quantity: number;
   gradeLevel: string;
   instructions: string;
-  fileNames: string[]; // Alterado para array
-  fileUrls: string[];  // Alterado para array
+  fileNames: string[];
+  fileUrls: string[];
   status: ExamStatus;
   createdAt: number;
   dueDate: string;
@@ -128,19 +128,22 @@ export interface LessonPlan {
   className: string;
   subject: string;
   createdAt: number;
+  // Campos Gerais
   topic?: string;
-  period?: string;
+  period?: string; // Bimestre
   date?: string;
+  // Planejamento Diário
   content?: string;
   methodology?: string;
   resources?: string;
   evaluation?: string;
   homework?: string;
+  // Planejamento Semestral (Guia de Aprendizagem - Conforme Imagem)
   justification?: string;
   semesterContents?: string;
   cognitiveSkills?: string;
   socialEmotionalSkills?: string;
-  didacticStrategies?: string;
+  didacticStrategies?: string; // Situações Didáticas
   activitiesPre?: string;
   activitiesAuto?: string;
   activitiesCoop?: string;

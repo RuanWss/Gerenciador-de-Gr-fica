@@ -62,7 +62,7 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
         
         for (const cls of classes) {
             try {
-                if (onProgress) onProgress(`Buscando alunos: ${cls.name}`);
+                if (onProgress) onProgress("Buscando alunos: " + cls.name);
                 const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
                 
                 if (students.length > 0) {
@@ -85,29 +85,15 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
     }
 };
 
-// --- SEMESTER CLEANUP ---
-export const cleanupSemesterExams = async (semester: 1 | 2, year: number): Promise<number> => {
-    const startDate = semester === 1 ? new Date(year, 0, 1).getTime() : new Date(year, 6, 1).getTime();
-    const endDate = semester === 1 ? new Date(year, 5, 30, 23, 59, 59).getTime() : new Date(year, 11, 31, 23, 59, 59).getTime();
-
-    const q = query(collection(db, EXAMS_COLLECTION), where("createdAt", ">=", startDate), where("createdAt", "<=", endDate));
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) return 0;
-
-    const batch = writeBatch(db);
-    let count = 0;
-
-    for (const d of snapshot.docs) {
-        batch.delete(d.ref);
-        count++;
-    }
-
-    await batch.commit();
-    return count;
+// --- LISTENERS ---
+export const listenToAllMaterials = (callback: (materials: ClassMaterial[]) => void) => {
+    return onSnapshot(collection(db, CLASS_MATERIALS_COLLECTION), (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro All Materials:", error);
+    });
 };
 
-// --- LISTENERS ---
 export const listenToSchedule = (callback: (entries: ScheduleEntry[]) => void) => {
     return onSnapshot(collection(db, SCHEDULE_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
@@ -267,10 +253,18 @@ export const saveLessonPlan = async (plan: LessonPlan): Promise<void> => {
     else await addDoc(collection(db, LESSON_PLANS_COLLECTION), sanitizeForFirestore(data));
 };
 
+export const deleteLessonPlan = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
+};
+
 export const savePEIDocument = async (pei: PEIDocument): Promise<void> => {
     const { id, ...data } = pei;
     if (id) await setDoc(doc(db, PEI_COLLECTION, id), sanitizeForFirestore(data));
     else await addDoc(collection(db, PEI_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const deletePEIDocument = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, PEI_COLLECTION, id));
 };
 
 export const saveScheduleEntry = async (entry: ScheduleEntry): Promise<void> => {
@@ -293,6 +287,13 @@ export const uploadExamFile = async (file: File, teacherName: string): Promise<s
 export const uploadReportFile = async (file: File, studentName: string): Promise<string> => {
     const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
     const storageRef = ref(storage, `reports/${studentName.replace(/\s+/g, '_')}_${Date.now()}_${safeName}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+};
+
+export const uploadStudentPhoto = async (file: File, studentName: string): Promise<string> => {
+    const safeName = studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const storageRef = ref(storage, `students/biometry/${safeName}_${Date.now()}.jpg`);
     const snapshot = await uploadBytes(storageRef, file);
     return await getDownloadURL(snapshot.ref);
 };
@@ -400,6 +401,16 @@ export const returnLoan = async (loanId: string, bookId: string): Promise<void> 
 
 export const updateStudent = async (student: Student): Promise<void> => {
     await setDoc(doc(db, STUDENTS_COLLECTION, student.id), sanitizeForFirestore(student));
+};
+
+export const saveStudent = async (student: Student): Promise<void> => {
+    const { id, ...data } = student;
+    if (id) {
+        await setDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data));
+    } else {
+        const newRef = doc(collection(db, STUDENTS_COLLECTION));
+        await setDoc(newRef, sanitizeForFirestore({ ...data, id: newRef.id }));
+    }
 };
 
 export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {

@@ -11,12 +11,14 @@ import {
     listenToEvents, 
     saveSchoolEvent, 
     deleteSchoolEvent,
-    syncAllDataWithGennera,
     getAllPEIs,
     listenToSchedule,
     saveScheduleEntry,
     deleteScheduleEntry,
-    listenToStaffMembers
+    listenToStaffMembers,
+    listenToAllMaterials,
+    saveStudent,
+    uploadStudentPhoto
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -29,7 +31,8 @@ import {
     PEIDocument,
     ScheduleEntry,
     TimeSlot,
-    StaffMember
+    StaffMember,
+    ClassMaterial
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -42,11 +45,9 @@ import {
     Trash2, 
     BookOpenCheck, 
     Plus, 
-    Save,
     X,
     CheckCircle,
     Heart,
-    RefreshCw,
     FileDown,
     RotateCcw,
     ChevronRight as ChevronIcon,
@@ -58,9 +59,27 @@ import {
     BookOpen,
     Users2,
     Eye,
-    Filter
+    Filter,
+    Layers,
+    Folder,
+    FileText,
+    Download,
+    UserPlus,
+    Camera,
+    Upload,
+    Zap
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES } from '../constants';
+
+const GRID_CLASSES = [
+    { id: '6efaf', name: '6º ANO EFAF', type: 'efaf' },
+    { id: '7efaf', name: '7º ANO EFAF', type: 'efaf' },
+    { id: '8efaf', name: '8º ANO EFAF', type: 'efaf' },
+    { id: '9efaf', name: '9º ANO EFAF', type: 'efaf' },
+    { id: '1em', name: '1ª SÉRIE EM', type: 'em' },
+    { id: '2em', name: '2ª SÉRIE EM', type: 'em' },
+    { id: '3em', name: '3ª SÉRIE EM', type: 'em' },
+];
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -70,32 +89,8 @@ const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
 ];
 
-const AFTERNOON_SLOTS: TimeSlot[] = [
-    { id: 'a1', start: '13:00', end: '13:50', type: 'class', label: '1º Horário', shift: 'afternoon' },
-    { id: 'a2', start: '13:50', end: '14:40', type: 'class', label: '2º Horário', shift: 'afternoon' },
-    { id: 'a3', start: '14:40', end: '15:30', type: 'class', label: '3º Horário', shift: 'afternoon' },
-    { id: 'a4', start: '16:00', end: '16:50', type: 'class', label: '4º Horário', shift: 'afternoon' },
-    { id: 'a5', start: '16:50', end: '17:40', type: 'class', label: '5º Horário', shift: 'afternoon' },
-    { id: 'a6', start: '17:40', end: '18:30', type: 'class', label: '6º Horário', shift: 'afternoon' },
-    { id: 'a7', start: '18:30', end: '19:20', type: 'class', label: '7º Horário', shift: 'afternoon' },
-    { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
-];
-
-const GRID_CLASSES = [
-    { id: '6efaf', name: '6º EFAF', type: 'efaf' },
-    { id: '7efaf', name: '7º EFAF', type: 'efaf' },
-    { id: '8efaf', name: '8º EFAF', type: 'efaf' },
-    { id: '9efaf', name: '9º EFAF', type: 'efaf' },
-    { id: '1em', name: '1ª E.M.', type: 'em' },
-    { id: '2em', name: '2ª E.M.', type: 'em' },
-    { id: '3em', name: '3ª E.M.', type: 'em' },
-];
-
 export const PrintShopDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'pei' | 'calendar' | 'plans' | 'schedule' | 'config'>('exams');
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [syncMsg, setSyncMsg] = useState('');
-
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'pei' | 'calendar' | 'plans' | 'schedule' | 'config' | 'materials'>('exams');
     const [exams, setExams] = useState<ExamRequest[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
@@ -104,34 +99,23 @@ export const PrintShopDashboard: React.FC = () => {
     const [events, setEvents] = useState<SchoolEvent[]>([]);
     const [peis, setPeis] = useState<PEIDocument[]>([]);
     const [plans, setPlans] = useState<LessonPlan[]>([]);
+    const [materials, setMaterials] = useState<ClassMaterial[]>([]);
     
-    const [searchTerm, setSearchTerm] = useState('');
+    const [examSearch, setExamSearch] = useState('');
     const [selectedDay, setSelectedDay] = useState(1); 
     const [selectedStudentClass, setSelectedStudentClass] = useState<string>('6efaf');
 
-    // Planning Filter States
-    const [planSearch, setPlanSearch] = useState('');
-    const [planFilterClass, setPlanFilterClass] = useState('');
-    const [planFilterType, setPlanFilterType] = useState<'ALL' | 'daily' | 'semester'>('ALL');
-
-    // Calendar State
+    // FIX: Added missing currentMonth and setCurrentMonth state variables for calendar rendering
     const [currentMonth, setCurrentMonth] = useState(new Date());
-    const [showEventModal, setShowEventModal] = useState(false);
-    const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
-    const [newEventTitle, setNewEventTitle] = useState('');
-    const [newEventDate, setNewEventDate] = useState('');
-    const [newEventType, setNewEventType] = useState<'event' | 'holiday' | 'exam' | 'meeting'>('event');
 
-    // Schedule Modal
-    const [showScheduleModal, setShowScheduleModal] = useState(false);
-    const [editingCell, setEditingCell] = useState<{classId: string, slotId: string} | null>(null);
-    const [newSchedule, setNewSchedule] = useState<Partial<ScheduleEntry>>({
-        subject: '', professor: ''
-    });
-
-    const [bannerMsg, setBannerMsg] = useState('');
-    const [bannerType, setBannerType] = useState<'info' | 'warning' | 'error' | 'success'>('info');
-    const [isBannerActive, setIsBannerActive] = useState(false);
+    // Student Registration State
+    const [showStudentModal, setShowStudentModal] = useState(false);
+    const [regMode, setRegMode] = useState<'individual' | 'batch'>('individual');
+    const [isSavingStudent, setIsSavingStudent] = useState(false);
+    const [newStudent, setNewStudent] = useState<Partial<Student>>({ name: '', classId: '', className: '' });
+    const [studentPhoto, setStudentPhoto] = useState<File | null>(null);
+    const [studentPhotoPreview, setStudentPhotoPreview] = useState<string | null>(null);
+    const [batchList, setBatchList] = useState('');
 
     useEffect(() => {
         const todayStr = new Date().toISOString().split('T')[0];
@@ -141,12 +125,10 @@ export const PrintShopDashboard: React.FC = () => {
         const unsubStaff = listenToStaffMembers(setStaff);
         const unsubAttendance = listenToAttendanceLogs(todayStr, setAttendanceLogs);
         const unsubEvents = listenToEvents(setEvents);
+        const unsubMaterials = listenToAllMaterials(setMaterials);
         
         const fetchData = async () => {
-            const [peiData, plansData] = await Promise.all([
-                getAllPEIs(),
-                getLessonPlans()
-            ]);
+            const [peiData, plansData] = await Promise.all([ getAllPEIs(), getLessonPlans() ]);
             setPeis(peiData);
             setPlans(plansData);
         };
@@ -159,9 +141,73 @@ export const PrintShopDashboard: React.FC = () => {
         });
 
         return () => {
-            unsubExams(); unsubStudents(); unsubAttendance(); unsubConfig(); unsubSchedule(); unsubStaff(); unsubEvents();
+            unsubExams(); unsubStudents(); unsubAttendance(); unsubConfig(); unsubSchedule(); unsubStaff(); unsubEvents(); unsubMaterials();
         };
     }, []);
+
+    // Registration Handlers
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setStudentPhoto(file);
+            setStudentPhotoPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSaveIndividual = async () => {
+        if (!newStudent.name || !newStudent.classId) return alert("Preencha nome e turma.");
+        setIsSavingStudent(true);
+        try {
+            let photoUrl = '';
+            if (studentPhoto) {
+                photoUrl = await uploadStudentPhoto(studentPhoto, newStudent.name);
+            }
+            
+            const classInfo = GRID_CLASSES.find(c => c.id === newStudent.classId);
+            await saveStudent({
+                id: '',
+                name: newStudent.name.toUpperCase(),
+                classId: newStudent.classId,
+                className: classInfo?.name || '',
+                photoUrl: photoUrl
+            });
+            
+            setShowStudentModal(false);
+            setNewStudent({ name: '', classId: '', className: '' });
+            setStudentPhoto(null);
+            setStudentPhotoPreview(null);
+            alert("Aluno matriculado com sucesso!");
+        } catch (e) { alert("Erro ao salvar."); }
+        finally { setIsSavingStudent(false); }
+    };
+
+    const handleSaveBatch = async () => {
+        if (!newStudent.classId || !batchList) return alert("Selecione a turma e insira a lista de nomes.");
+        const names = batchList.split('\n').filter(n => n.trim() !== '');
+        if (names.length === 0) return alert("Lista vazia.");
+        
+        setIsSavingStudent(true);
+        try {
+            const classInfo = GRID_CLASSES.find(c => c.id === newStudent.classId);
+            for (const name of names) {
+                await saveStudent({
+                    id: '',
+                    name: name.trim().toUpperCase(),
+                    classId: newStudent.classId,
+                    className: classInfo?.name || '',
+                    photoUrl: ''
+                });
+            }
+            setShowStudentModal(false);
+            setBatchList('');
+            alert(`${names.length} alunos matriculados com sucesso!`);
+        } catch (e) { alert("Erro no processamento em lote."); }
+        finally { setIsSavingStudent(false); }
+    };
+
+    const [bannerMsg, setBannerMsg] = useState('');
+    const [bannerType, setBannerType] = useState<'info' | 'warning' | 'error' | 'success'>('info');
+    const [isBannerActive, setIsBannerActive] = useState(false);
 
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
@@ -195,18 +241,6 @@ export const PrintShopDashboard: React.FC = () => {
         setShowScheduleModal(true);
     };
 
-    const handleSaveEvent = async () => {
-        if (!newEventTitle || !newEventDate) return alert("Preencha título e data");
-        await saveSchoolEvent({
-            id: selectedEvent?.id || '',
-            title: newEventTitle,
-            date: newEventDate,
-            type: newEventType,
-            tasks: selectedEvent?.tasks || []
-        });
-        setShowEventModal(false);
-    };
-
     const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
         <button
             onClick={() => setActiveTab(id as any)}
@@ -220,7 +254,7 @@ export const PrintShopDashboard: React.FC = () => {
         </button>
     );
 
-    const ExamCard = ({ exam }: { exam: ExamRequest; key?: React.Key }) => (
+    const ExamCard: React.FC<{ exam: ExamRequest }> = ({ exam }) => (
         <div className={`bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 flex flex-col gap-6 group hover:border-red-600/40 transition-all shadow-2xl relative overflow-hidden ${exam.status === ExamStatus.COMPLETED ? 'opacity-70 grayscale-[0.5]' : ''}`}>
             <div className={`absolute top-0 left-0 w-1.5 h-full ${exam.status === ExamStatus.COMPLETED ? 'bg-green-600' : 'bg-red-600'}`}></div>
             <div className="flex items-center justify-between">
@@ -250,12 +284,16 @@ export const PrintShopDashboard: React.FC = () => {
                     )}
                 </div>
             </div>
-            {exam.fileUrls && exam.fileUrls.map((url, idx) => (
-                <a key={idx} href={url} target="_blank" rel="noreferrer" className="flex items-center justify-between bg-white/5 p-4 rounded-xl border border-white/5 hover:bg-white/10 transition-all group">
-                    <span className="text-[10px] font-bold text-gray-300 uppercase truncate">{exam.fileNames?.[idx] || 'Arquivo'}</span>
-                    <FileDown size={16} className="text-blue-500" />
-                </a>
-            ))}
+            {exam.fileUrls && exam.fileUrls.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {exam.fileUrls.map((url, idx) => (
+                        <a key={idx} href={url} target="_blank" rel="noreferrer" className="flex items-center justify-between bg-white/5 p-4 rounded-xl border border-white/5 hover:bg-white/10 transition-all group">
+                            <span className="text-[10px] font-bold text-gray-300 uppercase truncate">{exam.fileNames?.[idx] || 'Arquivo'}</span>
+                            <FileDown size={16} className="text-red-500" />
+                        </a>
+                    ))}
+                </div>
+            )}
         </div>
     );
 
@@ -271,18 +309,6 @@ export const PrintShopDashboard: React.FC = () => {
             </div>
         );
     };
-
-    const availableTeachers = staff.filter(s => s.isTeacher && s.active).sort((a,b) => a.name.localeCompare(b.name));
-    const filteredStudentsByClass = students.filter(s => s.classId === selectedStudentClass || s.className === GRID_CLASSES.find(c => c.id === selectedStudentClass)?.name);
-    const presentInClass = filteredStudentsByClass.filter(s => attendanceLogs.some(l => l.studentId === s.id)).length;
-
-    // Filtration Logic for Plans
-    const filteredPlans = plans.filter(p => {
-        const matchesSearch = p.teacherName.toLowerCase().includes(planSearch.toLowerCase()) || (p.topic && p.topic.toLowerCase().includes(planSearch.toLowerCase()));
-        const matchesClass = planFilterClass ? p.className === planFilterClass : true;
-        const matchesType = planFilterType === 'ALL' ? true : p.type === planFilterType;
-        return matchesSearch && matchesClass && matchesType;
-    });
 
     const renderCalendar = () => {
         const year = currentMonth.getFullYear();
@@ -300,10 +326,9 @@ export const PrintShopDashboard: React.FC = () => {
             days.push(
                 <div key={day} className="bg-white/5 border border-white/5 min-h-[120px] p-4 relative group hover:bg-white/10 transition-all">
                     <span className="text-xs font-black text-gray-500">{day}</span>
-                    <button onClick={() => { setNewEventDate(dateStr); setShowEventModal(true); }} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-white transition-all"><Plus size={14}/></button>
                     <div className="mt-2 space-y-1">
                         {dayEvents.map(ev => (
-                            <div key={ev.id} onClick={() => { setSelectedEvent(ev); setNewEventTitle(ev.title); setNewEventDate(ev.date); setNewEventType(ev.type); setShowEventModal(true); }} className={`text-[9px] font-black uppercase p-1.5 rounded-lg border-l-4 cursor-pointer truncate ${ev.type === 'holiday' ? 'bg-red-900/20 text-red-500 border-red-500' : ev.type === 'exam' ? 'bg-purple-900/20 text-purple-500 border-purple-500' : 'bg-blue-900/20 text-blue-500 border-blue-500'}`}>
+                            <div key={ev.id} className={`text-[9px] font-black uppercase p-1.5 rounded-lg border-l-4 truncate ${ev.type === 'holiday' ? 'bg-red-900/20 text-red-500 border-red-500' : ev.type === 'exam' ? 'bg-purple-900/20 text-purple-500 border-purple-500' : 'bg-blue-900/20 text-blue-500 border-blue-500'}`}>
                                 {ev.title}
                             </div>
                         ))}
@@ -328,6 +353,11 @@ export const PrintShopDashboard: React.FC = () => {
         );
     };
 
+    // --- RENDER ---
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [editingCell, setEditingCell] = useState<{classId: string, slotId: string} | null>(null);
+    const [newSchedule, setNewSchedule] = useState<Partial<ScheduleEntry>>({ subject: '', professor: '' });
+
     return (
         <div className="flex h-full bg-[#0f0f10]">
             <div className="w-72 bg-black/40 border-r border-white/5 p-8 flex flex-col h-full shrink-0 z-20 shadow-2xl">
@@ -336,6 +366,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="exams" label="Central de Cópias" icon={Printer} />
                     <SidebarItem id="schedule" label="Quadro de Horários" icon={Clock} />
                     <SidebarItem id="students" label="Gestão de Alunos" icon={Users} />
+                    <SidebarItem id="materials" label="Materiais Aula" icon={Folder} />
                     <SidebarItem id="pei" label="Documentos AEE" icon={Heart} />
                     <SidebarItem id="calendar" label="Agenda Escolar" icon={Calendar} />
                     <SidebarItem id="plans" label="Planejamentos" icon={BookOpenCheck} />
@@ -347,14 +378,34 @@ export const PrintShopDashboard: React.FC = () => {
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl">
                          <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-                            <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Pedidos de Impressão</h1><p className="text-gray-400 text-lg mt-1 font-medium italic">Gerencie o fluxo de trabalho da gráfica.</p></div>
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Central de Cópias</h1>
+                                <p className="text-gray-400 text-lg mt-1 font-medium italic">Gerencie o fluxo de trabalho da gráfica.</p>
+                            </div>
+                            <div className="relative w-full md:w-80">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                                <input className="w-full bg-[#18181b] border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" placeholder="Buscar professor ou título..." value={examSearch} onChange={e => setExamSearch(e.target.value)} />
+                            </div>
                         </header>
-                        <div className="grid grid-cols-1 gap-8">{exams.filter(e => e.status !== ExamStatus.COMPLETED).map(exam => <ExamCard key={exam.id} exam={exam} />)}</div>
+                        <div className="space-y-10">
+                            <div className="space-y-6">
+                                <div className="flex items-center gap-3 text-red-500 ml-4"><Layers size={18} /><span className="text-[10px] font-black uppercase tracking-[0.3em]">Pedidos Pendentes</span></div>
+                                <div className="grid grid-cols-1 gap-8">
+                                    {exams.filter(e => e.status !== ExamStatus.COMPLETED && (e.title.toLowerCase().includes(examSearch.toLowerCase()) || e.teacherName.toLowerCase().includes(examSearch.toLowerCase()))).map(exam => <ExamCard key={exam.id} exam={exam} />)}
+                                </div>
+                            </div>
+                            <div className="space-y-6 pt-10">
+                                <div className="flex items-center gap-3 text-green-500 ml-4"><CheckCircle size={18} /><span className="text-[10px] font-black uppercase tracking-[0.3em]">Concluídos Recentemente</span></div>
+                                <div className="grid grid-cols-1 gap-8">
+                                    {exams.filter(e => e.status === ExamStatus.COMPLETED).slice(0, 5).map(exam => <ExamCard key={exam.id} exam={exam} />)}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
 
                 {activeTab === 'schedule' && (
-                    <div className="animate-in fade-in slide-in-from-right-4 max-w-[1600px] mx-auto">
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-[1600px]">
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-center gap-6">
                             <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Matriz de Horários</h1><p className="text-gray-400 text-lg mt-1 font-medium italic">Clique nas células para editar ou adicionar aulas.</p></div>
                             <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10">
@@ -363,35 +414,81 @@ export const PrintShopDashboard: React.FC = () => {
                                 ))}
                             </div>
                         </header>
-                        <div className="space-y-12">
-                            <div className="space-y-6">
-                                <h3 className="text-xs font-black text-red-500 uppercase tracking-[0.4em] flex items-center gap-4"><Clock size={16}/> TURNO MATUTINO (EFAF)</h3>
-                                <div className="overflow-x-auto custom-scrollbar pb-4">
-                                    <table className="w-full border-separate border-spacing-2">
-                                        <thead><tr><th className="min-w-[100px] p-4 text-[10px] font-black text-gray-600 uppercase">Hora</th>{GRID_CLASSES.filter(c => c.type === 'efaf').map(c => <th key={c.id} className="min-w-[170px] p-4 bg-white/5 rounded-2xl text-[10px] font-black text-white uppercase border border-white/5">{c.name}</th>)}</tr></thead>
-                                        <tbody>{MORNING_SLOTS.map(slot => (<tr key={slot.id}><td className="p-2 text-center"><span className="text-[10px] font-black text-red-600 font-mono">{slot.start}</span></td>{GRID_CLASSES.filter(c => c.type === 'efaf').map(c => (<td key={c.id + slot.id} className="p-0"><GridCell classId={c.id} slotId={slot.id} /></td>))}</tr>))}</tbody>
-                                    </table>
-                                </div>
-                            </div>
+                        <div className="overflow-x-auto custom-scrollbar pb-4">
+                            <table className="w-full border-separate border-spacing-2">
+                                <thead><tr><th className="min-w-[100px] p-4 text-[10px] font-black text-gray-600 uppercase">Hora</th>{GRID_CLASSES.map(c => <th key={c.id} className="min-w-[170px] p-4 bg-white/5 rounded-2xl text-[10px] font-black text-white uppercase border border-white/5">{c.name}</th>)}</tr></thead>
+                                <tbody>{MORNING_SLOTS.map(slot => (<tr key={slot.id}><td className="p-2 text-center"><span className="text-[10px] font-black text-red-600 font-mono">{slot.start}</span></td>{GRID_CLASSES.map(c => (<td key={c.id + slot.id} className="p-0"><GridCell classId={c.id} slotId={slot.id} /></td>))}</tr>))}</tbody>
+                            </table>
                         </div>
                     </div>
                 )}
 
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6"><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Gestão de Alunos</h1><p className="text-gray-400 text-lg mt-1 font-medium italic">Selecione a turma para visualizar a frequência.</p></div></header>
+                        <header className="mb-12 flex flex-col md:flex-row justify-between items-center gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Gestão de Alunos</h1>
+                                <p className="text-gray-400 text-lg mt-1 font-medium italic">Selecione a turma para visualizar a frequência.</p>
+                            </div>
+                            <div className="flex gap-4">
+                                <Button onClick={() => { setRegMode('individual'); setShowStudentModal(true); }} className="bg-red-600 h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl">
+                                    <UserPlus size={18} className="mr-2"/> Matrícula Individual
+                                </Button>
+                                <button onClick={() => { setRegMode('batch'); setShowStudentModal(true); }} className="bg-white/5 border border-white/10 hover:bg-white/10 h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest text-gray-300 transition-all flex items-center gap-2">
+                                    <Zap size={18} className="text-red-500"/> Cadastro em Lote
+                                </button>
+                            </div>
+                        </header>
                         <div className="flex flex-wrap gap-3 mb-10">{GRID_CLASSES.map(cls => <button key={cls.id} onClick={() => setSelectedStudentClass(cls.id)} className={`px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border ${selectedStudentClass === cls.id ? 'bg-white text-black' : 'bg-white/5 text-gray-400'}`}>{cls.name}</button>)}</div>
                         <div className="bg-[#18181b] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
                             <table className="w-full text-left">
-                                <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5"><tr><th className="p-10">Aluno</th><th className="p-10">Status</th><th className="p-10 text-center">Entrada</th></tr></thead>
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5"><tr><th className="p-10">Aluno</th><th className="p-10">Biometria</th><th className="p-10">Status Hoje</th><th className="p-10 text-center">Entrada</th></tr></thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {filteredStudentsByClass.map(s => {
+                                    {students.filter(s => s.classId === selectedStudentClass).map(s => {
                                         const att = attendanceLogs.find(l => l.studentId === s.id);
-                                        return (<tr key={s.id} className="hover:bg-white/[0.03] transition-colors"><td className="p-10"><div className="flex items-center gap-6"><p className="font-bold text-white uppercase text-sm">{s.name}</p></div></td><td className="p-10">{att ? <span className="px-4 py-1.5 bg-green-500/10 text-green-500 rounded-full font-black text-[9px] uppercase">Presente</span> : <span className="px-4 py-1.5 bg-gray-800 text-gray-500 rounded-full font-black text-[9px] uppercase">Ausente</span>}</td><td className="p-10 text-center">{att ? <span className="text-xs font-mono font-bold text-gray-400">{new Date(att.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span> : <span className="text-gray-800">—</span>}</td></tr>);
+                                        return (
+                                            <tr key={s.id} className="hover:bg-white/[0.03] transition-colors">
+                                                <td className="p-10">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="h-10 w-10 rounded-full bg-gray-900 border border-white/5 overflow-hidden">
+                                                            {s.photoUrl ? <img src={s.photoUrl} className="w-full h-full object-cover" /> : <UserCircle size={40} className="text-gray-800"/>}
+                                                        </div>
+                                                        <p className="font-bold text-white uppercase text-sm">{s.name}</p>
+                                                    </div>
+                                                </td>
+                                                <td className="p-10">
+                                                    {s.photoUrl ? <span className="text-green-500 font-black text-[9px] uppercase tracking-widest flex items-center gap-1"><CheckCircle size={10}/> Ativa</span> : <span className="text-gray-600 font-black text-[9px] uppercase tracking-widest">Pendente</span>}
+                                                </td>
+                                                <td className="p-10">{att ? <span className="px-4 py-1.5 bg-green-500/10 text-green-500 rounded-full font-black text-[9px] uppercase">Presente</span> : <span className="px-4 py-1.5 bg-gray-800 text-gray-500 rounded-full font-black text-[9px] uppercase">Ausente</span>}</td>
+                                                <td className="p-10 text-center">{att ? <span className="text-xs font-mono font-bold text-gray-400">{new Date(att.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span> : <span className="text-gray-800">—</span>}</td>
+                                            </tr>
+                                        );
                                     })}
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'materials' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl">
+                         <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Materiais de Aula</h1><p className="text-gray-400 text-lg mt-1 italic">Todos os arquivos enviados para as salas de aula.</p></header>
+                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {materials.sort((a,b) => b.createdAt - a.createdAt).map(mat => (
+                                <div key={mat.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all flex flex-col group">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="h-12 w-12 rounded-xl bg-red-600/10 text-red-500 flex items-center justify-center"><FileText size={24}/></div>
+                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{new Date(mat.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-white mb-2 leading-tight uppercase truncate">{mat.title}</h3>
+                                    <p className="text-[10px] font-black text-red-500 uppercase mb-6">{mat.className} • {mat.subject}</p>
+                                    <div className="mt-auto pt-6 border-t border-white/5 flex justify-between items-center">
+                                        <div className="flex items-center gap-2"><UserCircle size={14} className="text-gray-600"/><span className="text-[9px] font-bold text-gray-400 uppercase">{mat.teacherName}</span></div>
+                                        <a href={mat.fileUrl} target="_blank" rel="noreferrer" className="p-2 text-white hover:bg-red-600/20 rounded-lg transition-colors"><Download size={18} className="text-red-500"/></a>
+                                    </div>
+                                </div>
+                            ))}
+                         </div>
                     </div>
                 )}
 
@@ -406,7 +503,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         <div className="h-12 w-12 rounded-xl bg-red-600/10 text-red-500 flex items-center justify-center"><Heart size={24}/></div>
                                     </div>
                                     <p className="text-sm text-gray-400 mb-4 line-clamp-3 leading-relaxed">{p.selectedContents}</p>
-                                    <div className="pt-4 border-t border-white/5 flex justify-between items-center"><span className="text-[9px] font-bold text-gray-600 uppercase">Prof. {p.teacherName}</span><button className="text-red-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">Visualizar PEI Integral</button></div>
+                                    <div className="pt-4 border-t border-white/5 flex justify-between items-center"><span className="text-[9px] font-bold text-gray-600 uppercase">Prof. {p.teacherName}</span><button className="text-red-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">Visualizar PEI</button></div>
                                 </div>
                             ))}
                         </div>
@@ -417,122 +514,23 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-12 flex justify-between items-end"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Agenda Escolar</h1></header>
                         {renderCalendar()}
-                        {showEventModal && (
-                            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-6 backdrop-blur-md animate-in fade-in">
-                                <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl overflow-hidden animate-in zoom-in-95">
-                                    <div className="flex justify-between items-center mb-8"><h3 className="text-xl font-black text-white uppercase tracking-tight">Evento na Data</h3><button onClick={() => setShowEventModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button></div>
-                                    <div className="space-y-6">
-                                        <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" placeholder="Título" value={newEventTitle} onChange={e => setNewEventTitle(e.target.value)} />
-                                        <input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" value={newEventDate} onChange={e => setNewEventDate(e.target.value)} />
-                                        <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" value={newEventType} onChange={e => setNewEventType(e.target.value as any)}>
-                                            <option value="event">Evento</option><option value="holiday">Feriado</option><option value="exam">Avaliação</option><option value="meeting">Reunião</option>
-                                        </select>
-                                        <Button onClick={handleSaveEvent} className="w-full h-14 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-red-600">Salvar Evento</Button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
 
                 {activeTab === 'plans' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl">
-                        <header className="mb-12">
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos Pedagógicos</h1>
-                            <p className="text-gray-400 text-lg mt-1 italic">Visualize e filtre as aulas planejadas pelo corpo docente.</p>
-                        </header>
-
-                        {/* FILTERS AREA */}
-                        <div className="bg-[#18181b] p-8 rounded-[2.5rem] border border-white/5 shadow-xl mb-10 space-y-6">
-                            <div className="flex items-center gap-3 text-red-500 mb-2">
-                                <Filter size={20} />
-                                <span className="text-[10px] font-black uppercase tracking-[0.3em]">Filtros de Pesquisa</span>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="space-y-2">
-                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Professor ou Tema</label>
-                                    <div className="relative">
-                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
-                                        <input 
-                                            className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm"
-                                            placeholder="Buscar..."
-                                            value={planSearch}
-                                            onChange={e => setPlanSearch(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Filtrar por Turma</label>
-                                    <select 
-                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-3 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none"
-                                        value={planFilterClass}
-                                        onChange={e => setPlanFilterClass(e.target.value)}
-                                    >
-                                        <option value="">Todas as Turmas</option>
-                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Tipo de Plano</label>
-                                    <select 
-                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-3 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none"
-                                        value={planFilterType}
-                                        onChange={e => setPlanFilterType(e.target.value as any)}
-                                    >
-                                        <option value="ALL">Todos os Tipos</option>
-                                        <option value="daily">Diário</option>
-                                        <option value="semester">Semestral</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="flex justify-between items-center pt-2">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase">{filteredPlans.length} resultados encontrados</span>
-                                {(planSearch || planFilterClass || planFilterType !== 'ALL') && (
-                                    <button 
-                                        onClick={() => { setPlanSearch(''); setPlanFilterClass(''); setPlanFilterType('ALL'); }}
-                                        className="text-red-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors flex items-center gap-2"
-                                    >
-                                        <X size={14}/> Limpar Filtros
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
+                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1><p className="text-gray-400 text-lg mt-1 italic">Visualize as aulas planejadas pelo corpo docente.</p></header>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {filteredPlans.map(pl => (
+                            {plans.map(pl => (
                                 <div key={pl.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-blue-600/30 transition-all flex flex-col h-full group">
                                     <div className="flex justify-between items-start mb-6">
-                                        <div>
-                                            <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase ${pl.type === 'semester' ? 'bg-blue-600/10 text-blue-500' : 'bg-gray-800 text-gray-400'}`}>
-                                                {pl.type === 'semester' ? 'Semestral' : 'Diário'}
-                                            </span>
-                                            <h3 className="text-lg font-bold text-white mt-3 leading-tight">{pl.subject}</h3>
-                                            <p className="text-[10px] font-black text-gray-500 uppercase mt-1">{pl.className}</p>
-                                        </div>
-                                        <div className="h-10 w-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 group-hover:text-blue-500 transition-colors">
-                                            <BookOpenCheck size={20}/>
-                                        </div>
+                                        <div><span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase ${pl.type === 'semester' ? 'bg-blue-600/10 text-blue-500' : 'bg-gray-800 text-gray-400'}`}>{pl.type === 'semester' ? 'Semestral' : 'Diário'}</span><h3 className="text-lg font-bold text-white mt-3 leading-tight">{pl.subject}</h3><p className="text-[10px] font-black text-gray-500 uppercase mt-1">{pl.className}</p></div>
+                                        <div className="h-10 w-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 group-hover:text-blue-500 transition-colors"><BookOpenCheck size={20}/></div>
                                     </div>
-                                    <p className="text-xs text-gray-400 mb-6 flex-1 line-clamp-4 leading-relaxed italic">
-                                        {pl.topic || pl.justification || 'Sem descrição detalhada.'}
-                                    </p>
-                                    <div className="pt-6 border-t border-white/5 flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <UserCircle size={14} className="text-gray-600"/>
-                                            <span className="text-[9px] font-bold text-gray-500 uppercase">{pl.teacherName}</span>
-                                        </div>
-                                        <button className="p-2 text-white hover:bg-blue-600/20 rounded-lg transition-colors">
-                                            <Eye size={18} className="text-blue-500"/>
-                                        </button>
-                                    </div>
+                                    <p className="text-xs text-gray-400 mb-6 flex-1 line-clamp-4 leading-relaxed italic">{pl.topic || 'Sem descrição.'}</p>
+                                    <div className="pt-6 border-t border-white/5 flex justify-between items-center"><div className="flex items-center gap-2"><UserCircle size={14} className="text-gray-600"/><span className="text-[9px] font-bold text-gray-500 uppercase">{pl.teacherName}</span></div><button className="p-2 text-white hover:bg-blue-600/20 rounded-lg transition-colors"><Eye size={18} className="text-blue-500"/></button></div>
                                 </div>
                             ))}
-                            {filteredPlans.length === 0 && (
-                                <div className="col-span-full py-20 text-center bg-white/[0.02] rounded-[3rem] border border-dashed border-white/5">
-                                    <AlertTriangle size={48} className="mx-auto text-gray-700 mb-4" />
-                                    <p className="text-gray-500 font-bold uppercase tracking-widest">Nenhum planejamento corresponde aos filtros.</p>
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}
@@ -545,47 +543,124 @@ export const PrintShopDashboard: React.FC = () => {
                             <div className="space-y-4">
                                 <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] ml-4">Mensagem</label>
                                 <textarea className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white font-bold outline-none focus:border-red-600 transition-all text-lg" rows={4} value={bannerMsg} onChange={e => setBannerMsg(e.target.value)} />
+                                <div className="flex items-center gap-4"><input type="checkbox" checked={isBannerActive} onChange={e => setIsBannerActive(e.target.checked)} className="w-6 h-6 text-red-600 rounded bg-black/40 border-white/10" /><span className="text-white font-bold">Banner Ativado</span></div>
                             </div>
-                            <Button onClick={async () => {
-                                await updateSystemConfig({ bannerMessage: bannerMsg, bannerType, isBannerActive });
-                                alert("Salvo!");
-                            }} className="w-full h-20 rounded-[2rem] font-black uppercase tracking-[0.3em] bg-red-600">Salvar Alterações</Button>
-                        </div>
-                    </div>
-                )}
-
-                {/* MODAL DE EDIÇÃO RÁPIDA DE HORÁRIO */}
-                {showScheduleModal && editingCell && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
-                        <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
-                            <div className="p-8 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
-                                <div><h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3"><BookOpen className="text-red-600"/> Registrar Aula</h3><p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-1">{GRID_CLASSES.find(c => c.id === editingCell.classId)?.name} • {['', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'][selectedDay]}</p></div>
-                                <button onClick={() => setShowScheduleModal(false)} className="text-gray-500 hover:text-white p-2 transition-colors"><X size={24}/></button>
-                            </div>
-                            <div className="p-8 space-y-8">
-                                <div className="space-y-3">
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Selecione a Disciplina</label>
-                                    <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none" value={newSchedule.subject} onChange={e => setNewSchedule({...newSchedule, subject: e.target.value, professor: ''})}>
-                                        <option value="">-- Escolher Matéria --</option>
-                                        {(GRID_CLASSES.find(c => c.id === editingCell.classId)?.type === 'efaf' ? EFAF_SUBJECTS : EM_SUBJECTS).sort().map(sub => (<option key={sub} value={sub}>{sub}</option>))}
-                                    </select>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Professor(a)</label>
-                                    <div className="relative"><Users2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={20}/>
-                                        <select className="w-full bg-black/60 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none" value={newSchedule.professor} onChange={e => setNewSchedule({...newSchedule, professor: e.target.value})} disabled={!newSchedule.subject}>
-                                            <option value="">{newSchedule.subject ? '-- Selecione o Professor --' : 'Selecione a disciplina primeiro'}</option>
-                                            {availableTeachers.map(t => (<option key={t.id} value={t.name}>{t.name}</option>))}
-                                            {newSchedule.subject && <option value="Outro">Outro (Não listado)</option>}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4 pt-4"><button onClick={() => setShowScheduleModal(false)} className="flex-1 h-14 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-white/5 text-gray-400 hover:bg-white/10 transition-all">Cancelar</button><Button onClick={handleSaveSchedule} className="flex-[2] h-14 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] bg-green-600 shadow-xl shadow-green-900/20">Salvar Registro</Button></div>
-                            </div>
+                            <Button onClick={async () => { await updateSystemConfig({ bannerMessage: bannerMsg, bannerType, isBannerActive }); alert("Salvo!"); }} className="w-full h-20 rounded-[2rem] font-black uppercase tracking-[0.3em] bg-red-600">Salvar Alterações</Button>
                         </div>
                     </div>
                 )}
             </div>
+
+            {/* MODAL MATRÍCULA DE ALUNOS */}
+            {showStudentModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-10 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-4">
+                                    <UserPlus className="text-red-600" size={32}/> Central de Matrículas
+                                </h3>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">Gestão de biometria facial</p>
+                            </div>
+                            <button onClick={() => setShowStudentModal(false)} className="text-gray-500 hover:text-white p-2 transition-colors"><X size={32}/></button>
+                        </div>
+                        
+                        <div className="p-10">
+                            <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5 mb-10">
+                                <button onClick={() => setRegMode('individual')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${regMode === 'individual' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-500'}`}>Matrícula Individual</button>
+                                <button onClick={() => setRegMode('batch')} className={`flex-1 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${regMode === 'batch' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-500'}`}>Importação em Lote</button>
+                            </div>
+
+                            {regMode === 'individual' ? (
+                                <div className="space-y-8 animate-in slide-in-from-bottom-2">
+                                    <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
+                                        <div className="shrink-0">
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 text-center">Foto Biometria</label>
+                                            <div className="relative group">
+                                                <div className="w-44 h-44 rounded-full border-4 border-dashed border-white/10 flex items-center justify-center overflow-hidden bg-black/40 group-hover:border-red-600 transition-all cursor-pointer">
+                                                    {studentPhotoPreview ? (
+                                                        <img src={studentPhotoPreview} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <Camera size={48} className="text-gray-800 group-hover:text-red-600 transition-colors" />
+                                                    )}
+                                                    <input type="file" accept="image/*" onChange={handlePhotoChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                </div>
+                                                <div className="absolute -bottom-2 right-2 bg-red-600 text-white p-2 rounded-full shadow-lg pointer-events-none group-hover:scale-110 transition-transform">
+                                                    <Upload size={16}/>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 space-y-6 w-full">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome Completo</label>
+                                                <input className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} placeholder="EX: JOÃO DA SILVA OLIVEIRA" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma</label>
+                                                <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={newStudent.classId} onChange={e => setNewStudent({...newStudent, classId: e.target.value})}>
+                                                    <option value="">-- Selecione a Turma --</option>
+                                                    {GRID_CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 pt-6"><button onClick={() => setShowStudentModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-white/5 text-gray-400 hover:bg-white/10 transition-all">Cancelar</button><Button onClick={handleSaveIndividual} isLoading={isSavingStudent} className="flex-[2] h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.3em] bg-red-600 shadow-2xl shadow-red-900/40">Finalizar Matrícula</Button></div>
+                                </div>
+                            ) : (
+                                <div className="space-y-8 animate-in slide-in-from-bottom-2">
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma de Destino</label>
+                                            <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={newStudent.classId} onChange={e => setNewStudent({...newStudent, classId: e.target.value})}>
+                                                <option value="">-- Selecione a Turma --</option>
+                                                {GRID_CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Lista de Nomes (Um por linha)</label>
+                                            <textarea className="w-full bg-black/60 border border-white/10 rounded-3xl p-6 text-white font-bold outline-none focus:border-red-600 transition-all custom-scrollbar font-mono text-xs leading-relaxed" rows={10} value={batchList} onChange={e => setBatchList(e.target.value)} placeholder="JOÃO SILVA&#10;MARIA OLIVEIRA&#10;CARLOS SOUZA..." />
+                                            <p className="text-[9px] text-gray-600 font-bold uppercase tracking-widest mt-2 ml-1">Dica: Você pode copiar e colar uma coluna inteira do Excel aqui.</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 pt-6"><button onClick={() => setShowStudentModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-white/5 text-gray-400 hover:bg-white/10 transition-all">Cancelar</button><Button onClick={handleSaveBatch} isLoading={isSavingStudent} className="flex-[2] h-16 rounded-2xl font-black uppercase text-[10px] tracking-[0.3em] bg-red-600 shadow-2xl shadow-red-900/40">Importar Todos</Button></div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE EDIÇÃO RÁPIDA DE HORÁRIO */}
+            {showScheduleModal && editingCell && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
+                            <div><h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3"><BookOpen className="text-red-600"/> Registrar Aula</h3></div>
+                            <button onClick={() => setShowScheduleModal(false)} className="text-gray-500 hover:text-white p-2 transition-colors"><X size={24}/></button>
+                        </div>
+                        <div className="p-8 space-y-8">
+                            <div className="space-y-3">
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Selecione a Disciplina</label>
+                                <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none" value={newSchedule.subject} onChange={e => setNewSchedule({...newSchedule, subject: e.target.value, professor: ''})}>
+                                    <option value="">-- Escolher Matéria --</option>
+                                    {(GRID_CLASSES.find(c => c.id === editingCell.classId)?.type === 'efaf' ? EFAF_SUBJECTS : EM_SUBJECTS).sort().map(sub => (<option key={sub} value={sub}>{sub}</option>))}
+                                </select>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Professor(a)</label>
+                                <div className="relative">
+                                    <Users2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={20}/>
+                                    <select className="w-full bg-black/60 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm appearance-none" value={newSchedule.professor} onChange={e => setNewSchedule({...newSchedule, professor: e.target.value})} disabled={!newSchedule.subject}>
+                                        <option value="">{newSchedule.subject ? '-- Selecione o Professor --' : 'Selecione a disciplina primeiro'}</option>
+                                        {staff.filter(s => s.isTeacher).map(t => (<option key={t.id} value={t.name}>{t.name}</option>))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex gap-4 pt-4"><button onClick={() => setShowScheduleModal(false)} className="flex-1 h-14 rounded-2xl font-black uppercase text-[10px] tracking-widest bg-white/5 text-gray-400 hover:bg-white/10 transition-all">Cancelar</button><Button onClick={handleSaveSchedule} className="flex-[2] h-14 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] bg-green-600 shadow-xl shadow-green-900/20">Salvar Registro</Button></div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
