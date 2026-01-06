@@ -433,6 +433,10 @@ export const saveStudent = async (student: Student): Promise<void> => {
     }
 };
 
+export const deleteStudent = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, STUDENTS_COLLECTION, id));
+};
+
 export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
     const { id, ...data } = event;
     if (id) await setDoc(doc(db, EVENTS_COLLECTION, id), sanitizeForFirestore(data));
