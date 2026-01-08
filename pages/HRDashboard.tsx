@@ -159,7 +159,13 @@ export const HRDashboard: React.FC = () => {
             if (formData.email) {
                 const roles: UserRole[] = [];
                 if (formData.isAdmin) roles.push(UserRole.PRINTSHOP);
-                if (formData.isTeacher) roles.push(UserRole.TEACHER);
+                if (formData.isTeacher) {
+                    roles.push(UserRole.TEACHER);
+                    // Atribui automaticamente KINDERGARTEN se for Ed. Infantil
+                    if (formData.educationLevels?.includes('Ed. Infantil')) {
+                        roles.push(UserRole.KINDERGARTEN);
+                    }
+                }
                 if (roles.length === 0) roles.push(UserRole.HR); 
 
                 if (createLogin) {

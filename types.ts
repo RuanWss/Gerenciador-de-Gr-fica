@@ -7,7 +7,8 @@ export enum UserRole {
   HR = 'HR',
   CLASSROOM = 'CLASSROOM',
   LIBRARY = 'LIBRARY',
-  AEE = 'AEE'
+  AEE = 'AEE',
+  KINDERGARTEN = 'KINDERGARTEN'
 }
 
 export interface User {
@@ -20,6 +21,7 @@ export interface User {
   subject?: string;
   classes?: string[];
   phone?: string;
+  educationLevels?: string[];
 }
 
 export enum ExamStatus {

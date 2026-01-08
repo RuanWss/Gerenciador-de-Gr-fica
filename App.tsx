@@ -11,9 +11,10 @@ import { HRDashboard } from './pages/HRDashboard';
 import { ClassroomFiles } from './pages/ClassroomFiles';
 import { LibraryDashboard } from './pages/LibraryDashboard';
 import { AEEDashboard } from './pages/AEEDashboard';
+import { InfantilDashboard } from './pages/InfantilDashboard';
 import { UserRole, SystemConfig } from './types';
 import { listenToSystemConfig } from './services/firebaseService';
-import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone } from 'lucide-react';
+import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone, Baby } from 'lucide-react';
 import { Button } from './components/Button';
 
 const AppContent: React.FC = () => {
@@ -74,60 +75,73 @@ const AppContent: React.FC = () => {
   if (user?.role === UserRole.STAFF_TERMINAL) return <StaffAttendanceTerminal />;
   if (user?.role === UserRole.CLASSROOM) return <ClassroomFiles />;
   
+  // SELEÇÃO DE PERFIL (Para usuários com múltiplas funções)
   if (user?.roles && user.roles.length > 1 && !sessionRole) {
       return (
           <div className="fixed inset-0 z-50 bg-[#0f0f10] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/40 via-[#0f0f10] to-[#0f0f10] flex flex-col items-center justify-center p-4">
               <div className="max-w-5xl w-full">
-                  <div className="text-center mb-12">
-                      <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 w-auto mx-auto mb-6"/>
-                      <h2 className="text-4xl font-bold text-white mb-2 uppercase tracking-tight">Bem-vindo, {user.name.split(' ')[0]}</h2>
-                      <p className="text-gray-400">Selecione o painel que deseja acessar agora:</p>
+                  <div className="text-center mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
+                      <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 w-auto mx-auto mb-6 drop-shadow-2xl"/>
+                      <h2 className="text-4xl font-black text-white mb-2 uppercase tracking-tight">Bem-vindo, {user.name.split(' ')[0]}</h2>
+                      <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Ambiente Integrado de Gestão Escolar</p>
                   </div>
                   <div className="flex flex-wrap justify-center gap-8 max-w-6xl mx-auto mb-16">
+                      {/* ACESSO EXCLUSIVO PORTAL INFANTIL POR E-MAIL */}
+                      {user.email === 'jessicasouza465@gmail.com' && user.roles.includes(UserRole.KINDERGARTEN) && (
+                          <button onClick={() => setSessionRole(UserRole.KINDERGARTEN)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
+                              <div className="h-24 w-24 bg-orange-600/20 text-orange-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
+                                <Baby size={48} />
+                              </div>
+                              <span className="font-black text-white uppercase tracking-widest text-sm">Portal Infantil</span>
+                              <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Nível: Ed. Infantil</p>
+                          </button>
+                      )}
                       {user.roles.includes(UserRole.TEACHER) && (
-                          <button onClick={() => setSessionRole(UserRole.TEACHER)} className="bg-white min-w-[280px] p-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-4 border-transparent hover:border-red-600">
-                              <div className="h-24 w-24 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-red-600 group-hover:text-white transition-colors">
+                          <button onClick={() => setSessionRole(UserRole.TEACHER)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-red-500/20 hover:border-red-500 hover:bg-white/10">
+                              <div className="h-24 w-24 bg-red-600/20 text-red-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-red-600 group-hover:text-white transition-all shadow-2xl shadow-red-900/20">
                                 <GraduationCap size={48} />
                               </div>
-                              <span className="font-black text-gray-800 uppercase tracking-tight text-lg">Portal do Professor</span>
+                              <span className="font-black text-white uppercase tracking-widest text-sm">Portal Professor</span>
+                              <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Ensino Fundamental e Médio</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.PRINTSHOP) && (
-                          <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="bg-white min-w-[280px] p-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-4 border-transparent hover:border-blue-600">
-                              <div className="h-24 w-24 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-500/20 hover:border-blue-500 hover:bg-white/10">
+                              <div className="h-24 w-24 bg-blue-600/20 text-blue-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
                                 <School size={48} />
                               </div>
-                              <span className="font-black text-gray-800 uppercase tracking-tight text-lg">Painel da Escola</span>
+                              <span className="font-black text-white uppercase tracking-widest text-sm">Painel da Escola</span>
+                              <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Gestão Administrativa</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.AEE) && (
-                          <button onClick={() => setSessionRole(UserRole.AEE)} className="bg-white min-w-[280px] p-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-4 border-transparent hover:border-pink-600">
-                              <div className="h-24 w-24 bg-pink-50 text-pink-600 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-pink-600 group-hover:text-white transition-colors">
+                          <button onClick={() => setSessionRole(UserRole.AEE)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-pink-500/20 hover:border-pink-500 hover:bg-white/10">
+                              <div className="h-24 w-24 bg-pink-600/20 text-pink-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-pink-600 group-hover:text-white transition-all shadow-2xl shadow-pink-900/20">
                                 <Heart size={48} />
                               </div>
-                              <span className="font-black text-gray-800 uppercase tracking-tight text-lg">Portal AEE</span>
+                              <span className="font-black text-white uppercase tracking-widest text-sm">Portal AEE</span>
                           </button>
                       )}
                       {user.roles.includes(UserRole.HR) && (
-                          <button onClick={() => setSessionRole(UserRole.HR)} className="bg-white min-w-[280px] p-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-4 border-transparent hover:border-orange-600">
-                              <div className="h-24 w-24 bg-orange-50 text-orange-600 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                          <button onClick={() => setSessionRole(UserRole.HR)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
+                              <div className="h-24 w-24 bg-orange-600/20 text-orange-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
                                 <AlertCircle size={48} />
                               </div>
-                              <span className="font-black text-gray-800 uppercase tracking-tight text-lg">Gestão de RH</span>
+                              <span className="font-black text-white uppercase tracking-tight text-sm">Gestão de RH</span>
                           </button>
                       )}
                       {user.roles.includes(UserRole.LIBRARY) && (
-                          <button onClick={() => setSessionRole(UserRole.LIBRARY)} className="bg-white min-w-[280px] p-10 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-4 border-transparent hover:border-green-600">
-                              <div className="h-24 w-24 bg-green-50 text-green-600 rounded-3xl flex items-center justify-center mb-6 group-hover:bg-green-600 group-hover:text-white transition-colors">
+                          <button onClick={() => setSessionRole(UserRole.LIBRARY)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-green-500/20 hover:border-green-500 hover:bg-white/10">
+                              <div className="h-24 w-24 bg-green-600/20 text-green-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-green-600 group-hover:text-white transition-all shadow-2xl shadow-green-900/20">
                                 <Book size={48} />
                               </div>
-                              <span className="font-black text-gray-800 uppercase tracking-tight text-lg">Biblioteca</span>
+                              <span className="font-black text-white uppercase tracking-tight text-sm">Biblioteca</span>
                           </button>
                       )}
                   </div>
                   <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-                      <button onClick={logout} className="inline-flex items-center gap-3 px-8 py-3 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-full border border-white/10 transition-all font-bold uppercase tracking-widest text-xs">
-                        <UserCircle2 size={18}/> Trocar de Usuário / Sair
+                      <button onClick={logout} className="inline-flex items-center gap-3 px-10 py-4 bg-white/5 hover:bg-red-600/20 text-gray-400 hover:text-red-500 rounded-full border border-white/10 transition-all font-black uppercase tracking-widest text-[10px]">
+                        <UserCircle2 size={18}/> Sair do Sistema
                       </button>
                   </div>
               </div>
@@ -149,27 +163,28 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
-      <nav className={`bg-black/30 backdrop-blur-md shadow-lg border-b border-white/10 sticky z-50 transition-all duration-300 ${sysConfig?.isBannerActive && sysConfig.bannerMessage ? 'top-[48px]' : 'top-0'}`}>
-        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 flex justify-between h-20">
-            <div className="flex items-center gap-4">
-              <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-14 w-auto"/>
-              <span className="text-lg font-bold text-gray-200">
-                {activeRole === UserRole.TEACHER ? 'Portal do Professor' : activeRole === UserRole.HR ? 'Gestão de RH' : activeRole === UserRole.LIBRARY ? 'Painel da Biblioteca' : activeRole === UserRole.AEE ? 'Portal AEE' : 'Painel da Escola'}
+      <nav className={`bg-black/40 backdrop-blur-xl shadow-lg border-b border-white/5 sticky z-50 transition-all duration-300 ${sysConfig?.isBannerActive && sysConfig.bannerMessage ? 'top-[48px]' : 'top-0'}`}>
+        <div className="w-full mx-auto px-8 flex justify-between h-20 items-center">
+            <div className="flex items-center gap-6">
+              <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-12 w-auto drop-shadow-lg"/>
+              <div className="h-8 w-px bg-white/10"></div>
+              <span className="text-xs font-black text-white uppercase tracking-widest">
+                {activeRole === UserRole.KINDERGARTEN ? 'Portal Infantil' : activeRole === UserRole.TEACHER ? 'Portal do Professor' : activeRole === UserRole.HR ? 'Gestão de RH' : activeRole === UserRole.LIBRARY ? 'Painel da Biblioteca' : activeRole === UserRole.AEE ? 'Portal AEE' : 'Painel da Escola'}
               </span>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
                {user?.roles && user.roles.length > 1 && (
-                   <button onClick={() => setSessionRole(null)} className="p-2 text-gray-400 hover:text-brand-500 transition-colors" title="Alternar Perfil">
+                   <button onClick={() => setSessionRole(null)} className="p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-2xl transition-all" title="Trocar de Ambiente">
                        <LayoutGrid size={22}/>
                    </button>
                )}
-               <button onClick={() => setShowPasswordModal(true)} className="p-2 text-gray-400 hover:text-brand-500" title="Alterar Senha"><KeyRound size={20}/></button>
-               <button onClick={logout} className="p-2 text-gray-400 hover:text-red-400" title="Sair"><LogOut size={20}/></button>
+               <button onClick={() => setShowPasswordModal(true)} className="p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-2xl transition-all" title="Segurança"><KeyRound size={20}/></button>
+               <button onClick={logout} className="p-3 text-red-500/50 hover:text-red-500 hover:bg-red-500/5 rounded-2xl transition-all" title="Encerrar Sessão"><LogOut size={20}/></button>
             </div>
         </div>
       </nav>
-      {/* Ajustado de max-w-7xl para w-full para evitar esconder as abas laterais */}
-      <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
+      <main className="w-full px-8 py-10">
+        {activeRole === UserRole.KINDERGARTEN && user?.email === 'jessicasouza465@gmail.com' && <InfantilDashboard />}
         {activeRole === UserRole.TEACHER && <TeacherDashboard />}
         {activeRole === UserRole.PRINTSHOP && <PrintShopDashboard />}
         {activeRole === UserRole.HR && <HRDashboard />}
@@ -178,13 +193,14 @@ const AppContent: React.FC = () => {
       </main>
 
       {showPasswordModal && (
-          <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-[#18181b] border border-gray-800 w-full max-w-md rounded-2xl p-6 shadow-2xl">
-                  <h3 className="text-xl font-bold text-white mb-6">Alterar Senha</h3>
-                  <form onSubmit={handleChangePassword} className="space-y-4">
-                      <input type="password" placeholder="Nova Senha" className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white outline-none focus:border-red-500" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-                      <input type="password" placeholder="Confirmar" className="w-full bg-black/30 border border-gray-700 rounded-lg p-2.5 text-white outline-none focus:border-red-500" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
-                      <div className="flex justify-end gap-3 pt-2"><Button type="submit">Salvar Nova Senha</Button></div>
+          <div className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+              <div className="bg-[#18181b] border border-white/5 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95">
+                  <h3 className="text-xl font-black text-white mb-8 uppercase tracking-widest">Segurança da Conta</h3>
+                  <form onSubmit={handleChangePassword} className="space-y-6">
+                      <input type="password" placeholder="Nova Senha" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                      <input type="password" placeholder="Confirmar" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+                      {passwordError && <p className="text-red-500 text-[10px] font-black uppercase text-center">{passwordError}</p>}
+                      <div className="flex justify-end gap-3 pt-4"><Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">Salvar Nova Senha</Button></div>
                   </form>
               </div>
           </div>
