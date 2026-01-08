@@ -93,6 +93,15 @@ export interface StudentOccurrence {
   reportedBy: string;
 }
 
+export interface DailySchoolLog {
+  id: string;
+  date: string;
+  adminAttendance: Record<string, { present: boolean; shifts: string[] }>;
+  teacherAttendance: Record<string, { present: boolean; substitute?: string }>;
+  generalObservations: string;
+  updatedAt: number;
+}
+
 export interface StaffMember {
   id: string;
   name: string;
@@ -151,22 +160,19 @@ export interface LessonPlan {
   className: string;
   subject: string;
   createdAt: number;
-  // Campos Gerais
   topic?: string;
-  period?: string; // Bimestre
+  period?: string;
   date?: string;
-  // Planejamento Diário
   content?: string;
   methodology?: string;
   resources?: string;
   evaluation?: string;
   homework?: string;
-  // Planejamento Semestral (Guia de Aprendizagem - Conforme Imagem)
   justification?: string;
   semesterContents?: string;
   cognitiveSkills?: string;
   socialEmotionalSkills?: string;
-  didacticStrategies?: string; // Situações Didáticas
+  didacticStrategies?: string;
   activitiesPre?: string;
   activitiesAuto?: string;
   activitiesCoop?: string;

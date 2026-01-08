@@ -1,6 +1,5 @@
 
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
-// Use @firebase/app for modular SDK functions to avoid shadowing/compatibility issues.
 import { initializeApp, deleteApp } from '@firebase/app';
 import { 
     getAuth, 
@@ -12,13 +11,12 @@ import {
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
 } from 'firebase/firestore';
-// Use @firebase/storage for modular SDK functions.
 import { ref, uploadBytes, getDownloadURL, deleteObject } from '@firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
     StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
-    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence
+    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence, DailySchoolLog
 } from '../types';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
@@ -39,8 +37,8 @@ const ANSWER_KEYS_COLLECTION = 'answer_keys';
 const CORRECTIONS_COLLECTION = 'corrections';
 const PEI_COLLECTION = 'pei';
 const OCCURRENCES_COLLECTION = 'occurrences';
+const DAILY_LOGS_COLLECTION = 'daily_logs';
 
-// --- HELPERS ---
 const sanitizeForFirestore = (obj: any) => {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
         if (value === undefined) return null;
@@ -49,7 +47,6 @@ const sanitizeForFirestore = (obj: any) => {
     }));
 };
 
-// --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
         if (onProgress) onProgress("Conectando ao Gateway...");
@@ -86,7 +83,6 @@ export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void)
     }
 };
 
-// --- LISTENERS ---
 export const listenToAllMaterials = (callback: (materials: ClassMaterial[]) => void) => {
     return onSnapshot(collection(db, CLASS_MATERIALS_COLLECTION), (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ClassMaterial)));
@@ -201,7 +197,17 @@ export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) =
     });
 };
 
-// --- GETTERS ---
+export const getDailySchoolLog = async (date: string): Promise<DailySchoolLog | null> => {
+    const docRef = doc(db, DAILY_LOGS_COLLECTION, date);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) return { id: docSnap.id, ...docSnap.data() } as DailySchoolLog;
+    return null;
+};
+
+export const saveDailySchoolLog = async (log: DailySchoolLog): Promise<void> => {
+    await setDoc(doc(db, DAILY_LOGS_COLLECTION, log.date), sanitizeForFirestore(log));
+};
+
 export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
     const q = teacherId 
         ? query(collection(db, EXAMS_COLLECTION), where("teacherId", "==", teacherId))
@@ -246,7 +252,6 @@ export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> 
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
 };
 
-// --- SETTERS ---
 export const updateExamStatus = async (examId: string, status: ExamStatus): Promise<void> => {
     await updateDoc(doc(db, EXAMS_COLLECTION, examId), { status });
 };
