@@ -78,7 +78,11 @@ import {
     CheckCircle2,
     ArrowLeft,
     History,
-    School
+    School,
+    GraduationCap,
+    Hash,
+    MoreHorizontal,
+    Info
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -161,6 +165,7 @@ export const PrintShopDashboard: React.FC = () => {
     // Filters
     const [examFilter, setExamFilter] = useState<string>('ALL');
     const [examSearch, setExamSearch] = useState('');
+    const [studentSearch, setStudentSearch] = useState('');
     const [occurrenceSearch, setOccurrenceSearch] = useState('');
     const [selectedStudentClass, setSelectedStudentClass] = useState<string>(GRID_CLASSES[0].id);
 
@@ -455,6 +460,12 @@ export const PrintShopDashboard: React.FC = () => {
     });
 
     const currentClassInfo = GRID_CLASSES.find(c => c.id === selectedStudentClass);
+    
+    // --- Lógica de Alunos ---
+    const classStudents = students.filter(s => s.classId === selectedStudentClass || s.className === currentClassInfo?.name);
+    const filteredClassStudents = classStudents.filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()));
+    const classPresentCount = classStudents.filter(s => presentStudentIds.has(s.id)).length;
+    const classAbsentCount = classStudents.length - classPresentCount;
 
     return (
         <div className="flex h-full bg-[#0f0f10]">
@@ -489,7 +500,7 @@ export const PrintShopDashboard: React.FC = () => {
                             {filteredExams.map(exam => (
                                 <div key={exam.id} className="bg-[#18181b] border border-gray-800 rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm hover:border-gray-700 transition-colors">
                                     <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2"><span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${exam.status === ExamStatus.PENDING ? 'bg-yellow-900/20 text-yellow-500 border-yellow-500/20' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-blue-900/20 text-blue-500 border-blue-500/20' : 'bg-green-900/20 text-green-500 border-green-500/20'}`}>{exam.status}</span><span className="text-[10px] text-gray-500 font-black uppercase">{new Date(exam.createdAt).toLocaleDateString()}</span></div>
+                                        <div className="flex items-center gap-3 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${exam.status === ExamStatus.PENDING ? 'bg-yellow-900/20 text-yellow-500 border-yellow-500/20' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-blue-900/20 text-blue-500 border-blue-500/20' : 'bg-green-900/20 text-green-500 border-green-500/20'}`}>{exam.status}</span><span className="text-[10px] text-gray-500 font-black uppercase">{new Date(exam.createdAt).toLocaleDateString()}</span></div>
                                         <h3 className="text-lg font-bold text-white mb-1 uppercase tracking-tight">{exam.title}</h3>
                                         <p className="text-sm text-gray-400 font-bold uppercase text-[10px] tracking-widest">Prof. <span className="text-white">{exam.teacherName}</span> • {exam.gradeLevel} • <span className="text-red-500 font-black">{exam.quantity} cópias</span></p>
                                     </div>
@@ -585,19 +596,159 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'students' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Gestão de Alunos</h1><p className="text-gray-400">Banco de dados de discentes por turma.</p></header>
-                        <div className="flex flex-wrap gap-3 mb-10">{GRID_CLASSES.map(cls => <button key={cls.id} onClick={() => setSelectedStudentClass(cls.id)} className={`px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border transition-all ${selectedStudentClass === cls.id ? 'bg-white text-black' : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10'}`}>{cls.name}</button>)}</div>
-                        <div className="bg-[#18181b] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
-                            <table className="w-full text-left"><thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5"><tr><th className="p-10">Aluno</th><th className="p-10">AEE</th><th className="p-10">Presença Hoje</th><th className="p-10 text-center">Ações</th></tr></thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {students.filter(s => s.classId === selectedStudentClass || s.className === currentClassInfo?.name).map(s => {
-                                        const isPresent = presentStudentIds.has(s.id);
-                                        return (<tr key={s.id} className="hover:bg-white/[0.03] transition-colors"><td className="p-10 font-bold text-white uppercase text-sm">{s.name}</td><td className="p-10"><span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${s.isAEE ? 'bg-red-500/10 text-red-500' : 'bg-gray-500/10 text-gray-500'}`}>{s.isAEE ? 'SIM' : 'NÃO'}</span></td><td className="p-10">{isPresent ? <span className="text-green-500 font-black text-[9px] uppercase tracking-widest flex items-center gap-2"><CheckCircle2 size={12}/> Presente</span> : <span className="text-red-500/50 font-black text-[9px] uppercase tracking-widest">Faltou</span>}</td><td className="p-10 text-center"><button onClick={() => deleteStudent(s.id)} className="p-2 text-gray-600 hover:text-red-500 transition-all"><Trash2 size={18}/></button></td></tr>);
-                                    })}
-                                    {students.filter(s => s.classId === selectedStudentClass || s.className === currentClassInfo?.name).length === 0 && <tr><td colSpan={4} className="p-20 text-center text-gray-600 italic">Nenhum aluno encontrado nesta turma.</td></tr>}
-                                </tbody>
-                            </table>
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
+                        <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-8">
+                            <div>
+                                <h1 className="text-5xl font-black text-white uppercase tracking-tighter leading-none mb-4">Gestão de Alunos</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em]">Controle de Matrícula e Frequência</p>
+                            </div>
+                            <div className="relative group w-full md:w-96">
+                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-red-500 transition-colors" size={24} />
+                                <input 
+                                    className="w-full bg-[#18181b] border border-white/5 rounded-[2rem] py-6 pl-16 pr-8 text-white font-bold outline-none focus:border-red-600/50 transition-all text-lg shadow-2xl" 
+                                    placeholder="Buscar aluno na turma..." 
+                                    value={studentSearch} 
+                                    onChange={e => setStudentSearch(e.target.value)} 
+                                />
+                            </div>
+                        </header>
+
+                        {/* Estatísticas da Turma Selecionada conforme solicitado na imagem */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                            <div className="bg-gradient-to-br from-red-600 to-red-800 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
+                                <Users className="absolute -right-4 -bottom-4 text-white/10 group-hover:scale-110 transition-transform duration-700" size={120} />
+                                <p className="text-white/70 font-black uppercase text-[10px] tracking-widest mb-2">Matriculados na Turma</p>
+                                <h3 className="text-5xl font-black text-white">{classStudents.length}</h3>
+                                <div className="mt-4 flex items-center gap-2 text-white/50 text-[10px] font-bold uppercase tracking-widest"><GraduationCap size={14}/> Discentes Ativos</div>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
+                                <CheckCircle2 className="absolute -right-4 -bottom-4 text-green-500/10 group-hover:scale-110 transition-transform duration-700" size={120} />
+                                <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Presentes Hoje</p>
+                                <h3 className="text-5xl font-black text-green-500">{classPresentCount}</h3>
+                                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] font-bold uppercase tracking-widest"><Hash size={14}/> {((classPresentCount / classStudents.length) * 100 || 0).toFixed(1)}% de Adesão</div>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
+                                <UserMinus className="absolute -right-4 -bottom-4 text-red-500/10 group-hover:scale-110 transition-transform duration-700" size={120} />
+                                <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Ausentes Hoje</p>
+                                <h3 className="text-5xl font-black text-red-500">{classAbsentCount}</h3>
+                                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] font-bold uppercase tracking-widest"><AlertCircle size={14}/> Apoio Pedagógico</div>
+                            </div>
+                        </div>
+
+                        {/* Seletor de Turmas Estilizado e Total Geral solicitado na imagem */}
+                        <div className="flex flex-col gap-6 mb-10">
+                            <div className="flex items-center gap-3 bg-red-600/10 border border-red-600/20 p-4 rounded-2xl w-fit">
+                                <Users size={18} className="text-red-500"/>
+                                <span className="text-[10px] font-black text-white uppercase tracking-widest">Total Geral de Matriculados: <span className="text-red-500">{students.length} alunos</span></span>
+                            </div>
+                            <div className="flex items-center gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                                {GRID_CLASSES.map(cls => (
+                                    <button 
+                                        key={cls.id} 
+                                        onClick={() => setSelectedStudentClass(cls.id)} 
+                                        className={`px-8 py-5 rounded-2xl font-black text-xs uppercase tracking-widest border transition-all shrink-0 flex items-center gap-3 ${selectedStudentClass === cls.id ? 'bg-white text-black border-white shadow-2xl shadow-white/10 scale-105' : 'bg-[#18181b] text-gray-500 border-white/5 hover:bg-white/5 hover:text-white'}`}
+                                    >
+                                        {cls.shift === 'morning' ? <Sun size={16} className={selectedStudentClass === cls.id ? 'text-orange-500' : 'text-gray-600'}/> : <Moon size={16} className={selectedStudentClass === cls.id ? 'text-blue-500' : 'text-gray-600'}/>}
+                                        {cls.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Lista Premium de Alunos */}
+                        <div className="bg-[#18181b] rounded-[3.5rem] border border-white/5 overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.4)]">
+                            <div className="p-10 bg-black/20 border-b border-white/5 flex justify-between items-center">
+                                <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-4">
+                                    <Users size={24} className="text-red-500"/> Relação de Alunos
+                                </h3>
+                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/5">
+                                    Exibindo {filteredClassStudents.length} resultados
+                                </span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-black/10 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em] border-b border-white/5">
+                                        <tr>
+                                            <th className="p-10">Dados do Aluno</th>
+                                            <th className="p-10">Especificidades</th>
+                                            <th className="p-10">Status de Frequência</th>
+                                            <th className="p-10 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {filteredClassStudents.map(s => {
+                                            const isPresent = presentStudentIds.has(s.id);
+                                            return (
+                                                <tr key={s.id} className="hover:bg-white/[0.02] transition-colors group">
+                                                    <td className="p-10">
+                                                        <div className="flex items-center gap-6">
+                                                            <div className={`h-16 w-16 rounded-full border-2 p-1 shrink-0 transition-transform group-hover:scale-110 ${isPresent ? 'border-green-500' : 'border-white/10'}`}>
+                                                                <img 
+                                                                    src={s.photoUrl || `https://ui-avatars.com/api/?name=${s.name}&background=18181b&color=ef4444&bold=true`} 
+                                                                    className="w-full h-full rounded-full object-cover"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-white uppercase text-base tracking-tight mb-1">{s.name}</p>
+                                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{s.id}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-10">
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {s.isAEE ? (
+                                                                <span className="bg-red-500/10 text-red-500 border border-red-500/20 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 animate-pulse">
+                                                                    <AlertCircle size={12}/> AEE Ativo
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-gray-700 text-[9px] font-black uppercase tracking-widest">Padrão</span>
+                                                            )}
+                                                            {!s.photoUrl && (
+                                                                <span className="bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                                                    Sem Biometria
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-10">
+                                                        {isPresent ? (
+                                                            <div className="flex items-center gap-3 text-green-500">
+                                                                <div className="h-2 w-2 rounded-full bg-green-500 animate-ping"></div>
+                                                                <span className="font-black text-[10px] uppercase tracking-widest">Presente</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-3 text-red-500/30">
+                                                                <div className="h-2 w-2 rounded-full bg-red-500/30"></div>
+                                                                <span className="font-black text-[10px] uppercase tracking-widest">Ausente</span>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-10 text-right">
+                                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => deleteStudent(s.id)} className="h-12 w-12 rounded-xl bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white flex items-center justify-center transition-all">
+                                                                <Trash2 size={20}/>
+                                                            </button>
+                                                            <button className="h-12 w-12 rounded-xl bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white flex items-center justify-center transition-all">
+                                                                <MoreHorizontal size={20}/>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {filteredClassStudents.length === 0 && (
+                                            <tr>
+                                                <td colSpan={4} className="p-32 text-center">
+                                                    <div className="flex flex-col items-center opacity-20">
+                                                        <Users size={80} className="mb-6"/>
+                                                        <p className="font-black uppercase tracking-[0.4em] text-xl">Nenhum Registro</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
