@@ -87,7 +87,10 @@ import {
     Info,
     Filter,
     UserX,
-    Star
+    Star,
+    PlayCircle,
+    Layers,
+    FileDown
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -516,7 +519,7 @@ export const PrintShopDashboard: React.FC = () => {
 
     return (
         <div className="flex h-full bg-[#0f0f10]">
-            <div className="w-72 bg-black/40 border-r border-white/5 p-8 flex flex-col h-full shrink-0 z-20 shadow-2xl">
+            <div className="w-72 bg-black/40 border-r border-white/10 p-8 flex flex-col h-full shrink-0 z-20 shadow-2xl">
                 <div className="mb-10 overflow-y-auto custom-scrollbar pr-2 flex-1">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-6 ml-2 opacity-50">Menu Administrador</p>
                     <SidebarItem id="exams" label="Gráfica" icon={Printer} />
@@ -536,24 +539,123 @@ export const PrintShopDashboard: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                            <div><h1 className="text-3xl font-black text-white uppercase tracking-tighter">Central de Cópias</h1><p className="text-gray-400">Solicitações de impressão pendentes.</p></div>
-                            <div className="flex flex-wrap gap-3">
-                                <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} /><input className="pl-10 pr-4 py-2 bg-[#18181b] border border-white/10 rounded-lg text-white text-sm focus:ring-2 focus:ring-red-500 outline-none w-64 font-bold" placeholder="Buscar..." value={examSearch} onChange={e => setExamSearch(e.target.value)} /></div>
-                                <select className="bg-[#18181b] border border-white/10 rounded-lg text-white text-xs font-black uppercase px-4 py-2 outline-none focus:ring-2 focus:ring-red-500 appearance-none" value={examFilter} onChange={e => setExamFilter(e.target.value)}><option value="ALL">Todos</option><option value={ExamStatus.PENDING}>Pendentes</option><option value={ExamStatus.IN_PROGRESS}>Imprimindo</option><option value={ExamStatus.COMPLETED}>Concluídos</option></select>
+                        <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Central de Cópias</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Gestão de Impressões e Material Didático</p>
+                            </div>
+                            <div className="flex flex-wrap gap-4">
+                                <div className="relative group">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-red-500 transition-colors" size={18} />
+                                    <input 
+                                        className="pl-12 pr-6 py-3 bg-[#18181b] border border-white/5 rounded-2xl text-white text-sm focus:ring-2 focus:ring-red-600 outline-none w-72 font-bold shadow-2xl" 
+                                        placeholder="Buscar pedido ou professor..." 
+                                        value={examSearch} 
+                                        onChange={e => setExamSearch(e.target.value)} 
+                                    />
+                                </div>
+                                <div className="flex bg-[#18181b] p-1 rounded-2xl border border-white/5">
+                                    <button onClick={() => setExamFilter('ALL')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${examFilter === 'ALL' ? 'bg-white text-black' : 'text-gray-500 hover:text-white'}`}>Todos</button>
+                                    <button onClick={() => setExamFilter(ExamStatus.PENDING)} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${examFilter === ExamStatus.PENDING ? 'bg-yellow-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Pendentes</button>
+                                    <button onClick={() => setExamFilter(ExamStatus.IN_PROGRESS)} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${examFilter === ExamStatus.IN_PROGRESS ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Executando</button>
+                                </div>
                             </div>
                         </header>
-                        <div className="grid grid-cols-1 gap-4">
-                            {filteredExams.map(exam => (
-                                <div key={exam.id} className="bg-[#18181b] border border-gray-800 rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm hover:border-gray-700 transition-colors">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2"><span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${exam.status === ExamStatus.PENDING ? 'bg-yellow-900/20 text-yellow-500 border-yellow-500/20' : exam.status === ExamStatus.IN_PROGRESS ? 'bg-blue-900/20 text-blue-500 border-blue-500/20' : 'bg-green-900/20 text-green-500 border-green-500/20'}`}>{exam.status}</span><span className="text-[10px] text-gray-500 font-black uppercase">{new Date(exam.createdAt).toLocaleDateString()}</span></div>
-                                        <h3 className="text-lg font-bold text-white mb-1 uppercase tracking-tight">{exam.title}</h3>
-                                        <p className="text-sm text-gray-400 font-bold uppercase text-[10px] tracking-widest">Prof. <span className="text-white">{exam.teacherName}</span> • {exam.gradeLevel} • <span className="text-red-500 font-black">{exam.quantity} cópias</span></p>
+
+                        {/* Estatísticas Rápidas */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+                            <div className="bg-[#18181b] border border-white/5 p-6 rounded-3xl shadow-xl flex items-center gap-6 group hover:border-yellow-600/30 transition-all">
+                                <div className="h-16 w-16 rounded-2xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 group-hover:scale-110 transition-transform"><Clock size={32}/></div>
+                                <div><p className="text-gray-500 font-black uppercase text-[9px] tracking-widest mb-1">Aguardando</p><h3 className="text-3xl font-black text-white">{exams.filter(e => e.status === ExamStatus.PENDING).length}</h3></div>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 p-6 rounded-3xl shadow-xl flex items-center gap-6 group hover:border-blue-600/30 transition-all">
+                                <div className="h-16 w-16 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform"><PlayCircle size={32}/></div>
+                                <div><p className="text-gray-500 font-black uppercase text-[9px] tracking-widest mb-1">Na Impressora</p><h3 className="text-3xl font-black text-white">{exams.filter(e => e.status === ExamStatus.IN_PROGRESS).length}</h3></div>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 p-6 rounded-3xl shadow-xl flex items-center gap-6 group hover:border-green-600/30 transition-all">
+                                <div className="h-16 w-16 rounded-2xl bg-green-500/10 flex items-center justify-center text-green-500 group-hover:scale-110 transition-transform"><CheckCircle2 size={32}/></div>
+                                <div><p className="text-gray-500 font-black uppercase text-[9px] tracking-widest mb-1">Hoje</p><h3 className="text-3xl font-black text-white">{exams.filter(e => e.status === ExamStatus.COMPLETED).length}</h3></div>
+                            </div>
+                            <div className="bg-red-600 border border-red-500 p-6 rounded-3xl shadow-2xl flex items-center gap-6 group">
+                                <div className="h-16 w-16 rounded-2xl bg-white/20 flex items-center justify-center text-white group-hover:scale-110 transition-transform"><Layers size={32}/></div>
+                                <div><p className="text-red-100 font-black uppercase text-[9px] tracking-widest mb-1">Total Geral</p><h3 className="text-3xl font-black text-white">{exams.length}</h3></div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-6">
+                            {filteredExams.length > 0 ? filteredExams.map(exam => (
+                                <div key={exam.id} className={`bg-[#18181b] border rounded-[2.5rem] p-10 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-8 shadow-2xl transition-all hover:scale-[1.01] relative overflow-hidden group ${
+                                    exam.status === ExamStatus.PENDING ? 'border-l-8 border-l-yellow-600 border-white/5' : 
+                                    exam.status === ExamStatus.IN_PROGRESS ? 'border-l-8 border-l-blue-600 border-white/5' : 
+                                    'border-l-8 border-l-green-600 border-white/5 opacity-60'
+                                }`}>
+                                    <div className="flex-1 flex flex-col md:flex-row gap-8 items-center">
+                                        <div className="h-24 w-24 bg-black/40 rounded-[2rem] border border-white/5 flex items-center justify-center shrink-0">
+                                            <Printer size={40} className={exam.status === ExamStatus.PENDING ? 'text-yellow-500' : exam.status === ExamStatus.IN_PROGRESS ? 'text-blue-500 animate-pulse' : 'text-green-500'}/>
+                                        </div>
+                                        <div className="flex-1 text-center md:text-left">
+                                            <div className="flex flex-wrap justify-center md:justify-start items-center gap-3 mb-3">
+                                                <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-colors ${
+                                                    exam.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                                    exam.status === ExamStatus.IN_PROGRESS ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                                    'bg-green-500/10 text-green-500 border-green-500/20'
+                                                }`}>
+                                                    {exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Imprimindo' : 'Finalizado'}
+                                                </span>
+                                                <span className="text-[10px] text-gray-500 font-black uppercase flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full border border-white/5">
+                                                    <Calendar size={12}/> {new Date(exam.createdAt).toLocaleDateString()}
+                                                </span>
+                                                {exam.materialType === 'handout' && (
+                                                    <span className="text-[10px] bg-purple-500/10 text-purple-400 px-3 py-1 rounded-full border border-purple-500/20 font-black uppercase tracking-widest">Apostila</span>
+                                                )}
+                                            </div>
+                                            <h3 className="text-2xl font-black text-white mb-3 uppercase tracking-tight group-hover:text-red-500 transition-colors leading-none">{exam.title}</h3>
+                                            <div className="flex flex-wrap justify-center md:justify-start gap-y-2 gap-x-8">
+                                                <div className="flex items-center gap-3 text-sm text-gray-400">
+                                                    <div className="h-8 w-8 rounded-full bg-gray-800 flex items-center justify-center text-[10px] font-black text-gray-400 border border-white/10 uppercase">{exam.teacherName.charAt(0)}</div>
+                                                    <span className="font-bold uppercase text-[11px] tracking-widest">Prof. <span className="text-white">{exam.teacherName}</span></span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm text-gray-400">
+                                                    <School size={16} className="text-red-600/50" />
+                                                    <span className="font-bold uppercase text-[11px] tracking-widest">{exam.gradeLevel}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3 bg-red-600/10 px-4 py-1.5 rounded-2xl border border-red-600/20">
+                                                    <Hash size={16} className="text-red-500" />
+                                                    <span className="font-black text-red-500 text-base">{exam.quantity} <span className="text-[10px] font-bold text-red-600/70 uppercase">Cópias</span></span>
+                                                </div>
+                                            </div>
+                                            {exam.instructions && (
+                                                <div className="mt-6 p-5 bg-black/30 rounded-3xl border border-white/5 flex items-start gap-4">
+                                                    <FileText size={18} className="text-gray-600 mt-0.5 shrink-0" />
+                                                    <p className="text-xs text-gray-500 italic leading-relaxed uppercase font-bold">Instruções: "{exam.instructions}"</p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-3"><a href={exam.fileUrls?.[0]} target="_blank" className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-black uppercase tracking-widest text-white transition-all flex items-center gap-2"><Download size={14}/> Ver Arquivo</a>{exam.status !== ExamStatus.COMPLETED && <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.COMPLETED)} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-green-900/20">Concluir</button>}</div>
+
+                                    <div className="flex flex-col md:flex-row items-center gap-4 pt-8 md:pt-0 border-t md:border-t-0 md:border-l border-white/5 md:pl-10">
+                                        <a href={exam.fileUrls?.[0]} target="_blank" className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-5 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl transition-all"><FileDown size={20}/> Baixar</a>
+                                        
+                                        {exam.status === ExamStatus.PENDING && (
+                                            <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.IN_PROGRESS)} className="w-full md:w-auto flex items-center justify-center gap-3 px-10 py-5 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl transition-all shadow-2xl shadow-blue-900/40"><PlayCircle size={20}/> Iniciar</button>
+                                        )}
+                                        
+                                        {exam.status === ExamStatus.IN_PROGRESS && (
+                                            <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.COMPLETED)} className="w-full md:w-auto flex items-center justify-center gap-3 px-10 py-5 bg-green-600 hover:bg-green-700 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl transition-all shadow-2xl shadow-green-900/40"><CheckCircle2 size={20}/> Concluir</button>
+                                        )}
+                                        
+                                        {exam.status === ExamStatus.COMPLETED && (
+                                            <div className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-5 bg-green-900/20 text-green-500 font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl border border-green-500/20"><CheckCircle2 size={20}/> Entregue</div>
+                                        )}
+                                    </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="py-40 text-center bg-[#18181b] rounded-[4rem] border-4 border-dashed border-white/5">
+                                    <Printer size={100} className="mx-auto text-gray-800 mb-8 opacity-20" />
+                                    <h3 className="text-2xl font-black text-gray-700 uppercase tracking-tighter">Nenhuma Solicitação</h3>
+                                    <p className="text-gray-800 font-bold uppercase text-[10px] tracking-widest mt-2">Aguardando novos pedidos dos professores...</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
