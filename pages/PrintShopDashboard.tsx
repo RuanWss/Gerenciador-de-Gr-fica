@@ -42,7 +42,8 @@ import {
     StudentOccurrence,
     DailySchoolLog,
     LessonPlan,
-    StaffMember
+    StaffMember,
+    ExtraClassRecord
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -84,7 +85,9 @@ import {
     Hash,
     MoreHorizontal,
     Info,
-    Filter
+    Filter,
+    UserX,
+    Star
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -175,6 +178,9 @@ export const PrintShopDashboard: React.FC = () => {
     const [planSearch, setPlanSearch] = useState('');
     const [planTypeFilter, setPlanTypeFilter] = useState<'semester' | 'daily' | 'ALL'>('semester');
 
+    // Extra Classes Management
+    const [newExtra, setNewExtra] = useState<ExtraClassRecord>({ professor: '', subject: '', className: '' });
+
     useEffect(() => {
         const unsubExams = listenToExams(setExams);
         const unsubStudents = listenToStudents(setStudents);
@@ -208,7 +214,7 @@ export const PrintShopDashboard: React.FC = () => {
     const loadDailyLog = async () => {
         const log = await getDailySchoolLog(logDate);
         if (log) setDailyLog(log);
-        else setDailyLog({ id: logDate, date: logDate, adminAttendance: {}, teacherAttendance: {}, generalObservations: '', updatedAt: Date.now() });
+        else setDailyLog({ id: logDate, date: logDate, adminAttendance: {}, teacherAttendance: {}, extraClasses: [], generalObservations: '', updatedAt: Date.now() });
     };
 
     const loadReportDailyLog = async () => {
@@ -314,6 +320,19 @@ export const PrintShopDashboard: React.FC = () => {
         return Array.from(new Set(dayTeachers)).sort();
     };
 
+    const addExtraClass = () => {
+        if (!newExtra.professor || !newExtra.subject || !newExtra.className) return alert("Preencha todos os campos da aula extra");
+        const extras = dailyLog.extraClasses || [];
+        setDailyLog({ ...dailyLog, extraClasses: [...extras, newExtra] });
+        setNewExtra({ professor: '', subject: '', className: '' });
+    };
+
+    const removeExtraClass = (index: number) => {
+        const extras = [...(dailyLog.extraClasses || [])];
+        extras.splice(index, 1);
+        setDailyLog({ ...dailyLog, extraClasses: extras });
+    };
+
     const handlePrintDailyOccReport = () => {
         const reportOccurrences = occurrences.filter(o => o.date === reportOccDate);
         const l = reportDailyLogData;
@@ -330,6 +349,10 @@ export const PrintShopDashboard: React.FC = () => {
 
         const teacherRows = Object.entries(l?.teacherAttendance || {}).map(([name, data]) => {
             return `<tr><td><strong>${name}</strong></td><td class="${data.present ? 'present' : 'absent'} status-tag">${data.present ? 'PRESENTE' : 'FALTA'}</td><td>${data.substitute || (data.present ? '-' : 'Sem substituto')}</td></tr>`;
+        }).join('');
+
+        const extraRows = (l?.extraClasses || []).map(ex => {
+            return `<tr><td><strong>${ex.professor}</strong></td><td>${ex.subject}</td><td>${ex.className}</td></tr>`;
         }).join('');
 
         const occCards = reportOccurrences.map(occ => {
@@ -387,11 +410,18 @@ export const PrintShopDashboard: React.FC = () => {
                     </table>
                 </section>
                 <section>
-                    <h2>3. Relato Geral da Unidade (Gestão do Prédio)</h2>
+                    <h2>3. Aulas Extras Realizadas</h2>
+                    <table>
+                        <thead><tr><th width="40%">Professor</th><th width="40%">Disciplina</th><th width="20%">Turma</th></tr></thead>
+                        <tbody>${extraRows || '<tr><td colspan="3" align="center">Nenhuma aula extra registrada.</td></tr>'}</tbody>
+                    </table>
+                </section>
+                <section>
+                    <h2>4. Relato Geral da Unidade (Gestão do Prédio)</h2>
                     <div class="obs-box">${l?.generalObservations || 'Sem observações registradas para esta data.'}</div>
                 </section>
                 <section>
-                    <h2>4. Ocorrências com Alunos</h2>
+                    <h2>5. Ocorrências com Alunos</h2>
                     ${occCards || '<p style="font-size: 11px; color: #6b7280; font-style: italic;">Nenhuma ocorrência registrada.</p>'}
                 </section>
                 <div class="footer">CEMAL EQUIPE - 10 ANOS | Gerado em ${new Date().toLocaleString()}</div>
@@ -410,6 +440,7 @@ export const PrintShopDashboard: React.FC = () => {
         const startingDay = firstDay.getDay();
         const totalDays = lastDay.getDate();
         const monthName = firstDay.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
         const days = [];
         for (let i = 0; i < startingDay; i++) days.push(<div key={`empty-${i}`} className="bg-white/5 border border-white/5 min-h-[120px]"></div>);
         for (let d = 1; d <= totalDays; d++) {
@@ -431,7 +462,7 @@ export const PrintShopDashboard: React.FC = () => {
         return (
             <div className="bg-[#18181b] rounded-3xl border border-white/5 overflow-hidden shadow-2xl">
                 <div className="p-6 bg-black/40 flex items-center justify-between">
-                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">{monthName}</h3>
+                    <h3 className="text-xl font-black text-white uppercase tracking-tighter">{capitalizedMonth}</h3>
                     <div className="flex gap-2">
                         <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))} className="p-2 hover:bg-white/10 rounded-full text-white"><ChevronLeft size={20}/></button>
                         <button onClick={() => setCurrentMonth(new Date(year, month + 1, 1))} className="p-2 hover:bg-white/10 rounded-full text-white"><ChevronRight size={20}/></button>
@@ -534,7 +565,7 @@ export const PrintShopDashboard: React.FC = () => {
                             <div className="flex items-center gap-4 w-full xl:w-auto"><div className="bg-black/40 p-4 rounded-3xl border border-white/5 flex items-center gap-4 px-8 shadow-inner flex-1 xl:flex-none justify-center"><Calendar className="text-red-500" size={24}/><input type="date" className="bg-transparent border-none text-white font-black text-xl outline-none cursor-pointer" value={logDate} onChange={e => setLogDate(e.target.value)}/></div><Button onClick={handleSaveDailyLog} isLoading={isSavingLog} className="bg-green-600 px-10 rounded-3xl h-20 font-black uppercase text-xs tracking-widest shadow-2xl shadow-green-900/20 hover:scale-105 transition-transform"><Save size={24} className="mr-3"/> Salvar Relatório</Button></div>
                         </header>
                         {dailyLog ? (
-                            <div className="space-y-12">
+                            <div className="space-y-12 pb-32">
                                 <section>
                                     <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-red-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Equipe Administrativa</h2></div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">{ADMIN_GROUPS.map(group => (<div key={group.role} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-xl overflow-hidden relative group"><h3 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-8 border-b border-white/5 pb-6">{group.role}</h3><div className="space-y-10">{group.names.map(name => { const att = dailyLog.adminAttendance[name] || { present: true, shifts: ['matutino'] }; return (<div key={name} className="flex items-center justify-between group/item"><div className="flex flex-col"><span className={`text-base font-black uppercase tracking-tight transition-colors ${att.present ? 'text-white' : 'text-red-500 line-through opacity-50'}`}>{name}</span><div className="flex gap-4 mt-3">{['matutino', 'vespertino'].map(s => (<label key={s} className="flex items-center gap-2 cursor-pointer group"><input type="checkbox" className="hidden" checked={att.shifts.includes(s)} onChange={() => toggleAdminShift(name, s)} /><div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-all ${att.shifts.includes(s) ? 'bg-red-600 border-red-500 shadow-lg shadow-red-900/40' : 'border-white/10 bg-black/40'}`}>{att.shifts.includes(s) && <CheckCircle2 size={14} className="text-white"/>}</div><span className={`text-[9px] font-black uppercase tracking-widest ${att.shifts.includes(s) ? 'text-white' : 'text-gray-600'}`}>{s}</span></label>))}</div></div><button onClick={() => toggleAdminPresence(name)} className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all ${att.present ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20 shadow-2xl shadow-red-900/40'}`}>{att.present ? <UserCheck size={28}/> : <UserMinus size={28}/>}</button></div>);})}</div></div>))}</div>
@@ -556,6 +587,40 @@ export const PrintShopDashboard: React.FC = () => {
                                                 const att = dailyLog.teacherAttendance[prof] || { present: true };
                                                 return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-500" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
                                             })}</div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section>
+                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-green-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Registro de Aulas Extras</h2></div>
+                                    <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.professor} onChange={e => setNewExtra({...newExtra, professor: e.target.value})}>
+                                                <option value="">Selecione o Professor</option>
+                                                {staff.filter(s => s.isTeacher).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                            </select>
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.subject} onChange={e => setNewExtra({...newExtra, subject: e.target.value})}>
+                                                <option value="">Selecione a Disciplina</option>
+                                                {[...EFAF_SUBJECTS, ...EM_SUBJECTS].sort().map(s => <option key={s} value={s}>{s}</option>)}
+                                            </select>
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.className} onChange={e => setNewExtra({...newExtra, className: e.target.value})}>
+                                                <option value="">Selecione a Turma</option>
+                                                {GRID_CLASSES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                            </select>
+                                            <Button onClick={addExtraClass} className="bg-green-600 h-14 rounded-xl font-black uppercase text-xs tracking-widest"><Plus size={18} className="mr-2"/> Adicionar Aula</Button>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {(dailyLog.extraClasses || []).map((ex, idx) => (
+                                                <div key={idx} className="bg-black/20 p-4 rounded-xl border border-white/5 flex items-center justify-between">
+                                                    <div className="flex gap-6 items-center">
+                                                        <span className="text-white font-black uppercase text-sm">{ex.professor}</span>
+                                                        <span className="text-gray-500 font-bold text-[10px] uppercase tracking-widest">{ex.subject}</span>
+                                                        <span className="bg-green-500/10 text-green-500 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-500/20">{ex.className}</span>
+                                                    </div>
+                                                    <button onClick={() => removeExtraClass(idx)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={16}/></button>
+                                                </div>
+                                            ))}
+                                            {(dailyLog.extraClasses || []).length === 0 && <p className="text-center text-gray-700 py-4 font-bold text-xs uppercase opacity-50 tracking-widest">Nenhuma aula extra registrada para hoje.</p>}
                                         </div>
                                     </div>
                                 </section>
@@ -629,7 +694,6 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </header>
 
-                        {/* Estatísticas da Turma Selecionada conforme solicitado na imagem */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                             <div className="bg-gradient-to-br from-red-600 to-red-800 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
                                 <Users className="absolute -right-4 -bottom-4 text-white/10 group-hover:scale-110 transition-transform duration-700" size={120} />
@@ -651,7 +715,6 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Seletor de Turmas Estilizado e Total Geral solicitado na imagem */}
                         <div className="flex flex-col gap-6 mb-10">
                             <div className="flex items-center gap-3 bg-red-600/10 border border-red-600/20 p-4 rounded-2xl w-fit">
                                 <Users size={18} className="text-red-500"/>
@@ -671,7 +734,6 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Lista Premium de Alunos */}
                         <div className="bg-[#18181b] rounded-[3.5rem] border border-white/5 overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.4)]">
                             <div className="p-10 bg-black/20 border-b border-white/5 flex justify-between items-center">
                                 <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-4">
@@ -796,6 +858,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         </div>
                                         <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl h-full"><h3 className="text-lg font-black text-purple-500 uppercase tracking-widest mb-8 flex items-center gap-3"><FileText size={20}/> Relato do Prédio</h3><div className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap italic bg-black/40 p-6 rounded-2xl border border-white/5">{reportDailyLogData?.generalObservations || "Nenhum relato pedagógico inserido nesta data."}</div></section>
                                     </div>
+                                    <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl"><h3 className="text-lg font-black text-green-500 uppercase tracking-widest mb-8 flex items-center gap-3"><Star size={20}/> Aulas Extras</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{reportDailyLogData?.extraClasses?.length ? reportDailyLogData.extraClasses.map((ex, i) => (<div key={i} className="bg-black/30 p-4 rounded-2xl border border-white/5"><div><p className="font-bold text-white text-sm uppercase">{ex.professor}</p><p className="text-[10px] text-gray-500 uppercase font-black tracking-tighter">{ex.subject}</p><p className="text-[10px] text-green-500 font-black uppercase mt-1 tracking-widest">{ex.className}</p></div></div>)) : <p className="text-gray-600 italic">Nenhuma aula extra registrada.</p>}</div></section>
                                     <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl"><h3 className="text-lg font-black text-yellow-500 uppercase tracking-widest mb-8 flex items-center gap-3"><AlertCircle size={20}/> Ocorrências com Alunos (Hoje)</h3><div className="space-y-4">{occurrences.filter(o => o.date === reportOccDate).length > 0 ? occurrences.filter(o => o.date === reportOccDate).map(occ => (<div key={occ.id} className="bg-black/30 p-6 rounded-2xl border border-white/5 flex gap-6 items-start"><div className="h-12 w-12 bg-red-600/10 rounded-xl flex items-center justify-center text-red-500 shrink-0"><AlertCircle size={24}/></div><div className="flex-1"><div className="flex justify-between mb-2"><h4 className="font-black text-white uppercase text-sm">{occ.studentName} <span className="text-gray-600 ml-2">({occ.studentClass})</span></h4><span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Prof. {occ.reportedBy}</span></div><p className="text-gray-400 text-sm italic">"${occ.description}"</p></div></div>)) : <p className="text-gray-600 italic">Nenhuma ocorrência disciplinar registrada por professores nesta data.</p>}</div></section>
                                 </div>
                             </div>

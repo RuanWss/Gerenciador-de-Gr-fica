@@ -93,11 +93,18 @@ export interface StudentOccurrence {
   reportedBy: string;
 }
 
+export interface ExtraClassRecord {
+  professor: string;
+  subject: string;
+  className: string;
+}
+
 export interface DailySchoolLog {
   id: string;
   date: string;
   adminAttendance: Record<string, { present: boolean; shifts: string[] }>;
   teacherAttendance: Record<string, { present: boolean; substitute?: string }>;
+  extraClasses?: ExtraClassRecord[];
   generalObservations: string;
   updatedAt: number;
 }
