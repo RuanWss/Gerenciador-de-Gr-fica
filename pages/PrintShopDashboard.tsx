@@ -685,6 +685,8 @@ export const PrintShopDashboard: React.FC = () => {
     const currentClassInfo = GRID_CLASSES.find(c => c.id === selectedStudentClass);
     const classStudents = students.filter(s => s.classId === selectedStudentClass || s.className === currentClassInfo?.name);
     const filteredClassStudents = classStudents.filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()));
+    const classPresentCount = classStudents.filter(s => presentStudentIds.has(s.id)).length;
+    const classAbsentCount = classStudents.length - classPresentCount;
     
     const filteredInfantilReports = infantilReports.filter(r => {
         const matchSearch = r.studentName.toLowerCase().includes(infantilSearch.toLowerCase());
