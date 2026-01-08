@@ -27,7 +27,8 @@ import {
     getDailySchoolLog,
     saveDailySchoolLog,
     getLessonPlans,
-    saveStudent
+    saveStudent,
+    listenToAllInfantilReports
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -44,7 +45,8 @@ import {
     DailySchoolLog,
     LessonPlan,
     StaffMember,
-    ExtraClassRecord
+    ExtraClassRecord,
+    InfantilReport
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -94,7 +96,10 @@ import {
     FileDown,
     UserPlus,
     UserPlus2,
-    Check
+    Check,
+    Baby,
+    FileEdit,
+    FileText as FileIconPdf
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -135,9 +140,43 @@ const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
 ];
 
+const SKILLS_CONFIG = [
+  {
+    category: "Linguagem Oral",
+    objectives: [
+      { code: "EI03EF01", desc: "Expressar ideias, desejos e sentimentos sobre suas vivências, por meio da linguagem oral e escrita (escrita espontânea), de fotos, desenhos e outras formas de expressão." },
+      { code: "EI03EF02", desc: "Inventar brincadeiras cantadas, poemas e canções, criando rimas, aliterações e ritmos." },
+      { code: "EI03EF03", desc: "Escolher e folhear livros, procurando orientar-se por temas e ilustrações e tentando identificar palavras conhecidas." },
+      { code: "EI03EF08", desc: "Selecionar livros e textos de gêneros conhecidos para a leitura de um adulto e/ou para sua própria leitura." }
+    ]
+  },
+  {
+    category: "Linguagem Escrita",
+    objectives: [
+      { code: "EI03ET04", desc: "Registrar observações, manipulações e medidas, usando múltiplas linguagens (desenho, registro por números ou escrita espontânea)." },
+      { code: "EI03TS02", desc: "Expressar-se livremente por meio de desenho, pintura, colagem, dobradura e escultura." },
+      { code: "EI03CG05_E", desc: "Coordenar suas habilidades manuais no atendimento adequado a seus interesses e necessidades." }
+    ]
+  },
+  {
+    category: "Linguagem Matemática",
+    objectives: [
+      { code: "EI03TS03", desc: "Reconhecer as qualidades do som (intensidade, duração, altura e timbre)." },
+      { code: "EI03ET07", desc: "Relacionar números às suas respectivas quantidades e identificar sequências." }
+    ]
+  },
+  {
+    category: "Desenvolvimento Psicomotor",
+    objectives: [
+      { code: "EI03CG01", desc: "Criar com o corpo formas diversificadas de expressão de sentimentos, sensações e emoções." },
+      { code: "EI03CG05_P", desc: "Coordenar suas habilidades manuais no atendimento adequado a seus interesses." }
+    ]
+  }
+];
+
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'reports' | 'pei' | 'calendar' | 'plans' | 'schedule' | 'config' | 'materials' | 'occurrences' | 'daily_log'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'reports' | 'pei' | 'calendar' | 'plans' | 'schedule' | 'config' | 'materials' | 'occurrences' | 'daily_log' | 'infantil'>('exams');
     const [exams, setExams] = useState<ExamRequest[]>([]);
     const [students, setStudents] = useState<Student[]>([]);
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
@@ -148,6 +187,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [peis, setPeis] = useState<PEIDocument[]>([]);
     const [staff, setStaff] = useState<StaffMember[]>([]);
     const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+    const [infantilReports, setInfantilReports] = useState<InfantilReport[]>([]);
     
     const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
     const [dailyLog, setDailyLog] = useState<DailySchoolLog | null>(null);
@@ -168,6 +208,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [showEventModal, setShowEventModal] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
     const [eventForm, setEventForm] = useState({ title: '', date: '', type: 'event' as any, description: '' });
+
+    // Infantil Tab States
+    const [infantilSearch, setInfantilSearch] = useState('');
+    const [infantilClassFilter, setInfantilClassFilter] = useState<'JARDIM I' | 'JARDIM II' | 'ALL'>('ALL');
 
     // Reports State
     const [isViewingDailyOccReport, setIsViewingDailyOccReport] = useState(false);
@@ -206,6 +250,7 @@ export const PrintShopDashboard: React.FC = () => {
         const unsubEvents = listenToEvents(setEvents);
         const unsubStaff = listenToStaffMembers(setStaff);
         const unsubAttendance = listenToAttendanceLogs(logDate, setAttendanceLogs);
+        const unsubInfantil = listenToAllInfantilReports(setInfantilReports);
         const unsubConfig = listenToSystemConfig((cfg) => {
             setSysConfig(cfg);
             setConfigBannerMsg(cfg.bannerMessage);
@@ -218,7 +263,8 @@ export const PrintShopDashboard: React.FC = () => {
 
         return () => {
             unsubExams(); unsubStudents(); unsubSchedule(); unsubOccurrences(); 
-            unsubMaterials(); unsubEvents(); unsubConfig(); unsubStaff(); unsubAttendance();
+            unsubMaterials(); unsubEvents(); unsubConfig(); unsubStaff(); 
+            unsubAttendance(); unsubInfantil();
         };
     }, [logDate]);
 
@@ -487,6 +533,91 @@ export const PrintShopDashboard: React.FC = () => {
         printWindow.document.close();
     };
 
+    const handlePrintInfantilReport = (report: InfantilReport) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const dateStr = new Date(report.updatedAt).toLocaleDateString('pt-BR');
+
+        const skillsTable = SKILLS_CONFIG.map(cat => {
+            const rows = cat.objectives.map(obj => {
+                const score = report.scores[obj.code] || '-';
+                return `<tr><td>(${obj.code}) ${obj.desc}</td><td align="center"><strong>${score}</strong></td></tr>`;
+            }).join('');
+            
+            const descriptive = report.descriptiveText[cat.category] || 'Sem observações registradas para este campo.';
+
+            return `
+                <section class="skill-section">
+                    <h3>${cat.category.toUpperCase()}</h3>
+                    <table>
+                        <thead><tr><th width="85%">Objetivo de Aprendizagem</th><th width="15%" align="center">Avaliação</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    <div class="descriptive-box">
+                        <strong>Parecer Descritivo:</strong><br/>
+                        ${descriptive}
+                    </div>
+                </section>
+            `;
+        }).join('');
+
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Parecer Pedagógico - ${report.studentName}</title>
+                <style>
+                    body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #1f2937; line-height: 1.4; font-size: 11px; }
+                    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #f97316; padding-bottom: 15px; margin-bottom: 20px; }
+                    .logo { height: 70px; }
+                    .header-info { text-align: right; }
+                    .header-info h1 { margin: 0; font-size: 18px; color: #f97316; text-transform: uppercase; font-weight: 900; }
+                    .student-info { background: #fff7ed; padding: 15px; border-radius: 12px; border: 1px solid #ffedd5; display: grid; grid-template-cols: 2fr 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+                    .student-info div span { display: block; font-size: 9px; color: #9a3412; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+                    .student-info div strong { font-size: 12px; color: #431407; }
+                    h3 { font-size: 11px; background: #f97316; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 10px; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                    th { background: #fff7ed; padding: 8px; font-size: 9px; text-transform: uppercase; border: 1px solid #fed7aa; text-align: left; }
+                    td { padding: 8px; border: 1px solid #fed7aa; }
+                    .descriptive-box { background: #fafafa; border: 1px dashed #fdba74; padding: 12px; margin-bottom: 25px; font-style: italic; color: #4b5563; }
+                    .legend { display: flex; gap: 15px; margin-bottom: 20px; font-size: 9px; border: 1px solid #e5e7eb; padding: 10px; border-radius: 6px; }
+                    .legend b { color: #f97316; }
+                    .footer { margin-top: 50px; display: flex; justify-content: space-around; }
+                    .sign { width: 200px; border-top: 1px solid #000; text-align: center; padding-top: 5px; font-size: 9px; font-weight: bold; }
+                    @media print { .skill-section { page-break-inside: avoid; } }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" class="logo" />
+                    <div class="header-info">
+                        <h1>Relatório de Desenvolvimento Infantil</h1>
+                        <p>Educação Infantil - 2024</p>
+                    </div>
+                </div>
+                <div class="student-info">
+                    <div><span>Criança</span><strong>${report.studentName}</strong></div>
+                    <div><span>Turma</span><strong>${report.className}</strong></div>
+                    <div><span>Emissão</span><strong>${dateStr}</strong></div>
+                    <div style="grid-column: span 3"><span>Professor(a) Responsável</span><strong>${report.teacherName}</strong></div>
+                </div>
+                <div class="legend">
+                    <span><b>I:</b> Inicia (com apoio frequente)</span>
+                    <span><b>ED:</b> Em desenvolvimento (apoio e autonomia)</span>
+                    <span><b>CA:</b> Com autonomia (com segurança)</span>
+                </div>
+                ${skillsTable}
+                <div class="footer">
+                    <div class="sign">Prof. Responsável</div>
+                    <div class="sign">Coordenação Pedagógica</div>
+                </div>
+                <script>window.onload = function() { window.print(); window.close(); }</script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+
     const renderCalendarGrid = () => {
         const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth();
@@ -552,21 +683,13 @@ export const PrintShopDashboard: React.FC = () => {
     });
 
     const currentClassInfo = GRID_CLASSES.find(c => c.id === selectedStudentClass);
-    
-    // --- Lógica de Alunos ---
     const classStudents = students.filter(s => s.classId === selectedStudentClass || s.className === currentClassInfo?.name);
     const filteredClassStudents = classStudents.filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()));
-    const classPresentCount = classStudents.filter(s => presentStudentIds.has(s.id)).length;
-    const classAbsentCount = classStudents.length - classPresentCount;
-
-    // --- Lógica de Planejamentos ---
-    const filteredPlans = plans.filter(p => {
-        const matchesSearch = 
-            p.className.toLowerCase().includes(planSearch.toLowerCase()) ||
-            p.subject.toLowerCase().includes(planSearch.toLowerCase()) ||
-            p.teacherName.toLowerCase().includes(planSearch.toLowerCase());
-        const matchesType = planTypeFilter === 'ALL' || p.type === planTypeFilter;
-        return matchesSearch && matchesType;
+    
+    const filteredInfantilReports = infantilReports.filter(r => {
+        const matchSearch = r.studentName.toLowerCase().includes(infantilSearch.toLowerCase());
+        const matchClass = infantilClassFilter === 'ALL' || r.className === infantilClassFilter;
+        return matchSearch && matchClass;
     });
 
     return (
@@ -577,6 +700,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="exams" label="Gráfica" icon={Printer} />
                     <SidebarItem id="daily_log" label="Livro Diário" icon={Book} />
                     <SidebarItem id="schedule" label="Horários" icon={Clock} />
+                    <SidebarItem id="infantil" label="Ed. Infantil" icon={Baby} />
                     <SidebarItem id="students" label="Alunos" icon={Users} />
                     <SidebarItem id="reports" label="Relatórios" icon={BarChart3} />
                     <SidebarItem id="occurrences" label="Ocorrências" icon={AlertCircle} />
@@ -589,6 +713,81 @@ export const PrintShopDashboard: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                {activeTab === 'infantil' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Painel Ed. Infantil</h1>
+                                <p className="text-orange-500 font-bold uppercase text-[10px] tracking-[0.3em]">Pareceres Pedagógicos Jardim I e II</p>
+                            </div>
+                            <div className="flex flex-wrap gap-4">
+                                <div className="relative group">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-orange-500 transition-colors" size={18} />
+                                    <input 
+                                        className="pl-12 pr-6 py-3 bg-[#18181b] border border-white/5 rounded-2xl text-white text-sm focus:ring-2 focus:ring-orange-600 outline-none w-72 font-bold shadow-2xl" 
+                                        placeholder="Buscar aluno..." 
+                                        value={infantilSearch} 
+                                        onChange={e => setInfantilSearch(e.target.value)} 
+                                    />
+                                </div>
+                                <div className="flex bg-[#18181b] p-1 rounded-2xl border border-white/5">
+                                    <button onClick={() => setInfantilClassFilter('ALL')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${infantilClassFilter === 'ALL' ? 'bg-white text-black' : 'text-gray-500 hover:text-white'}`}>Todos</button>
+                                    <button onClick={() => setInfantilClassFilter('JARDIM I')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${infantilClassFilter === 'JARDIM I' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Jardim I</button>
+                                    <button onClick={() => setInfantilClassFilter('JARDIM II')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${infantilClassFilter === 'JARDIM II' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Jardim II</button>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                            <table className="w-full text-left">
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-widest border-b border-white/5">
+                                    <tr>
+                                        <th className="p-8">Criança / Aluno</th>
+                                        <th className="p-8">Turma</th>
+                                        <th className="p-8">Emitido por</th>
+                                        <th className="p-8">Última Atualização</th>
+                                        <th className="p-8 text-center">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {filteredInfantilReports.length > 0 ? filteredInfantilReports.map(report => (
+                                        <tr key={report.id} className="hover:bg-white/[0.02] transition-colors group">
+                                            <td className="p-8">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="h-12 w-12 rounded-full bg-orange-600/10 flex items-center justify-center font-black text-orange-500 text-sm border border-orange-600/20">
+                                                        {report.studentName.charAt(0)}
+                                                    </div>
+                                                    <span className="font-black text-white uppercase tracking-tight text-base">{report.studentName}</span>
+                                                </div>
+                                            </td>
+                                            <td className="p-8">
+                                                <span className="bg-white/5 px-4 py-1.5 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest border border-white/5">{report.className}</span>
+                                            </td>
+                                            <td className="p-8">
+                                                <div className="flex flex-col">
+                                                    <span className="text-white font-bold text-sm uppercase">Prof. {report.teacherName}</span>
+                                                    <span className="text-[9px] text-gray-600 font-black uppercase tracking-widest">Responsável</span>
+                                                </div>
+                                            </td>
+                                            <td className="p-8 text-sm text-gray-500 font-bold">{new Date(report.updatedAt).toLocaleDateString()}</td>
+                                            <td className="p-8 text-center">
+                                                <button 
+                                                    onClick={() => handlePrintInfantilReport(report)}
+                                                    className="inline-flex items-center gap-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-900/20 active:scale-95"
+                                                >
+                                                    <FileIconPdf size={16}/> Gerar PDF
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    )) : (
+                                        <tr><td colSpan={5} className="p-40 text-center text-gray-800 font-black uppercase tracking-[0.4em] opacity-30 text-xl">Nenhum parecer encontrado</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -614,7 +813,6 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </header>
 
-                        {/* Estatísticas Rápidas */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
                             <div className="bg-[#18181b] border border-white/5 p-6 rounded-3xl shadow-xl flex items-center gap-6 group hover:border-yellow-600/30 transition-all">
                                 <div className="h-16 w-16 rounded-2xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 group-hover:scale-110 transition-transform"><Clock size={32}/></div>
@@ -1056,7 +1254,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 </div>
                             )}
 
-                            <Button type="submit" isLoading={isEnrolling} className="w-full h-20 bg-red-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-red-900/40 text-sm">
+                            <Button type="submit" isLoading={isEnrolling} className="w-full h-20 bg-red-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-orange-900/40 text-sm">
                                 <Check size={24} className="mr-3"/> Confirmar Matrícula
                             </Button>
                         </form>

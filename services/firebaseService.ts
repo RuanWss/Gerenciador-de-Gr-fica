@@ -520,6 +520,15 @@ export const listenToInfantilReports = (teacherId: string, callback: (reports: I
     });
 };
 
+export const listenToAllInfantilReports = (callback: (reports: InfantilReport[]) => void) => {
+    const q = query(collection(db, INFANTIL_REPORTS_COLLECTION), orderBy("updatedAt", "desc"));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InfantilReport)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro All Infantil Reports:", error);
+    });
+};
+
 export const deleteInfantilReport = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id));
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
     saveStaffMember, 
@@ -231,11 +230,13 @@ export const HRDashboard: React.FC = () => {
 
         const monthName = new Date(monthFilter + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
         
-        const totalAbsences = monthlyLogs.reduce((acc, log) => acc + Object.values(log.teacherAttendance).filter(att => !att.present).length, 0);
+        // @fix: Added explicit type cast for teacher attendance values to prevent TS errors on 'unknown' type
+        const totalAbsences = monthlyLogs.reduce((acc, log) => acc + (Object.values(log.teacherAttendance) as { present: boolean; substitute?: string }[]).filter(att => !att.present).length, 0);
         const totalExtras = monthlyLogs.reduce((acc, log) => acc + (log.extraClasses?.length || 0), 0);
 
         const absenceRows = monthlyLogs.flatMap(log => 
-            Object.entries(log.teacherAttendance)
+            // @fix: Added explicit type cast for teacher attendance entries to prevent TS errors on 'unknown' type
+            (Object.entries(log.teacherAttendance) as [string, { present: boolean; substitute?: string }][])
                 .filter(([_, att]) => !att.present)
                 .map(([name, att]) => `<tr><td>${log.date}</td><td>${name}</td><td>${att.substitute || '-'}</td></tr>`)
         ).join('');
@@ -290,7 +291,8 @@ export const HRDashboard: React.FC = () => {
     const filteredStaff = staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.role.toLowerCase().includes(search.toLowerCase()));
 
     const totalMonthlyAbsences = monthlyLogs.reduce((acc, log) => {
-        return acc + Object.values(log.teacherAttendance).filter(att => !att.present).length;
+        // @fix: Added explicit type cast for teacher attendance values to prevent TS errors on 'unknown' type
+        return acc + (Object.values(log.teacherAttendance) as { present: boolean; substitute?: string }[]).filter(att => !att.present).length;
     }, 0);
 
     const totalMonthlyExtras = monthlyLogs.reduce((acc, log) => {
@@ -602,7 +604,8 @@ export const HRDashboard: React.FC = () => {
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
                                             {monthlyLogs.flatMap(log => 
-                                                Object.entries(log.teacherAttendance)
+                                                // @fix: Added explicit type cast for teacher attendance entries to prevent TS errors on 'unknown' type
+                                                (Object.entries(log.teacherAttendance) as [string, { present: boolean; substitute?: string }][])
                                                     .filter(([_, att]) => !att.present)
                                                     .map(([name, att]) => (
                                                         <tr key={log.date + name} className="hover:bg-white/[0.02]">
