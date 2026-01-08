@@ -11,17 +11,18 @@ import {
     deleteOccurrence,
     saveInfantilReport,
     listenToInfantilReports,
-    deleteInfantilReport
+    deleteInfantilReport,
+    saveStudent
 } from '../services/firebaseService';
 import { ExamRequest, ExamStatus, Student, StudentOccurrence, InfantilReport } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, List, PlusCircle, X, 
   Trash2, FileUp, Download, Calendar, Baby, Smile, 
-  FileEdit, Save, ArrowLeft, Info, CheckCircle2
+  FileEdit, Save, ArrowLeft, Info, CheckCircle2, Users, UserPlus, UserPlus2, Check
 } from 'lucide-react';
 
-const INFANTIL_CLASSES = ["MATERNAL I", "MATERNAL II", "NÍVEL I", "NÍVEL II"];
+const INFANTIL_CLASSES = ["JARDIM I", "JARDIM II"];
 
 const SKILLS_CONFIG = [
   {
@@ -73,7 +74,7 @@ const SKILLS_CONFIG = [
 
 export const InfantilDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'reports' | 'occurrences'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'reports' | 'occurrences' | 'students_list'>('requests');
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teacherOccurrences, setTeacherOccurrences] = useState<StudentOccurrence[]>([]);
@@ -101,6 +102,18 @@ export const InfantilDashboard: React.FC = () => {
   const [reportClass, setReportClass] = useState('');
   const [reportScores, setReportScores] = useState<Record<string, 'I' | 'ED' | 'CA' | ''>>({});
   const [reportDescriptive, setReportDescriptive] = useState<Record<string, string>>({});
+
+  // --- LIST TAB STATES ---
+  const [selectedListClass, setSelectedListClass] = useState<string>('JARDIM I');
+
+  // --- ENROLLMENT STATES ---
+  const [showEnrollmentModal, setShowEnrollmentModal] = useState(false);
+  const [enrollmentType, setEnrollmentType] = useState<'individual' | 'bulk'>('individual');
+  const [isEnrolling, setIsEnrolling] = useState(false);
+  const [enrollFormData, setEnrollFormData] = useState<Partial<Student>>({
+      id: '', name: '', className: '', isAEE: false
+  });
+  const [bulkList, setBulkList] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -195,6 +208,43 @@ export const InfantilDashboard: React.FC = () => {
     finally { setIsSaving(false); }
   };
 
+  const handleEnroll = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setIsEnrolling(true);
+      try {
+          if (enrollmentType === 'individual') {
+              if (!enrollFormData.id || !enrollFormData.name || !enrollFormData.className) return alert("Preencha todos os campos.");
+              await saveStudent({
+                  ...enrollFormData,
+                  classId: enrollFormData.className,
+                  isAEE: !!enrollFormData.isAEE
+              } as Student);
+              alert("Aluno matriculado!");
+          } else {
+              if (!enrollFormData.className || !bulkList.trim()) return alert("Selecione a turma e forneça os nomes.");
+              const names = bulkList.split('\n').map(n => n.trim()).filter(n => n);
+              for (const name of names) {
+                  const id = Math.random().toString(36).substring(7).toUpperCase();
+                  await saveStudent({
+                      id,
+                      name: name.toUpperCase(),
+                      classId: enrollFormData.className,
+                      className: enrollFormData.className || '',
+                      isAEE: false
+                  } as Student);
+              }
+              alert(`${names.length} alunos matriculados em lote!`);
+          }
+          setShowEnrollmentModal(false);
+          setEnrollFormData({ id: '', name: '', className: '', isAEE: false });
+          setBulkList('');
+      } catch (err) {
+          alert("Erro ao matricular.");
+      } finally {
+          setIsEnrolling(false);
+      }
+  };
+
   const resetReportForm = () => {
     setEditingReportId(null);
     setReportStudentId('');
@@ -211,6 +261,8 @@ export const InfantilDashboard: React.FC = () => {
     setReportDescriptive(report.descriptiveText);
     setIsCreatingReport(true);
   };
+
+  const listStudents = students.filter(s => s.className === selectedListClass).sort((a,b) => a.name.localeCompare(b.name));
 
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
@@ -229,6 +281,9 @@ export const InfantilDashboard: React.FC = () => {
                 </button>
                 <button onClick={() => { setActiveTab('create'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'create' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
                     <PlusCircle size={18} /> Enviar Folhas
+                </button>
+                <button onClick={() => { setActiveTab('students_list'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'students_list' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
+                    <Users size={18} /> Alunos
                 </button>
                 <button onClick={() => { setActiveTab('reports'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'reports' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
                     <FileEdit size={18} /> Parecer
@@ -277,9 +332,74 @@ export const InfantilDashboard: React.FC = () => {
                 </div>
             )}
 
+            {activeTab === 'students_list' && (
+                <div className="animate-in fade-in slide-in-from-right-4">
+                    <header className="mb-10 flex flex-col md:flex-row justify-between items-end gap-6">
+                        <div>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Alunos Matriculados</h1>
+                            <p className="text-orange-200/40 font-bold uppercase text-[10px] tracking-[0.3em]">Listagem por turma (Jardim I e II)</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex gap-2">
+                                <Button onClick={() => { setEnrollmentType('individual'); setShowEnrollmentModal(true); }} className="bg-orange-600 hover:bg-orange-700 text-white font-black uppercase text-[10px] tracking-widest h-12 px-6 rounded-2xl shadow-xl shadow-orange-900/40">
+                                    <UserPlus size={16} className="mr-2"/> Matrícula
+                                </Button>
+                                <Button onClick={() => { setEnrollmentType('bulk'); setShowEnrollmentModal(true); }} className="bg-white/5 hover:bg-white/10 text-white border border-white/10 font-black uppercase text-[10px] tracking-widest h-12 px-6 rounded-2xl">
+                                    <UserPlus2 size={16} className="mr-2"/> Lote
+                                </Button>
+                            </div>
+                            <div className="h-12 w-px bg-white/10 hidden md:block mx-2"></div>
+                            <div className="flex gap-4">
+                                {INFANTIL_CLASSES.map(cls => (
+                                    <button 
+                                        key={cls}
+                                        onClick={() => setSelectedListClass(cls)}
+                                        className={`px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border transition-all ${selectedListClass === cls ? 'bg-orange-600 border-orange-500 text-white shadow-xl shadow-orange-900/40 scale-105' : 'bg-black/20 border-white/5 text-gray-500 hover:text-white'}`}
+                                    >
+                                        {cls}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className="bg-[#1c1917] rounded-[2.5rem] border border-orange-500/10 overflow-hidden shadow-2xl">
+                        <table className="w-full text-left">
+                            <thead className="bg-black/40 text-orange-500/50 uppercase text-[9px] font-black tracking-widest border-b border-orange-500/10">
+                                <tr>
+                                    <th className="p-8">Nome do Aluno</th>
+                                    <th className="p-8">ID Matrícula</th>
+                                    <th className="p-8 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-orange-500/5">
+                                {listStudents.length > 0 ? listStudents.map(student => (
+                                    <tr key={student.id} className="hover:bg-white/[0.02] transition-colors group">
+                                        <td className="p-8">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-10 w-10 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center font-black text-orange-500 text-xs">
+                                                    {student.name.charAt(0)}
+                                                </div>
+                                                <span className="font-black text-white uppercase tracking-tight">{student.name}</span>
+                                            </div>
+                                        </td>
+                                        <td className="p-8 text-sm text-gray-500 font-mono uppercase tracking-widest">{student.id}</td>
+                                        <td className="p-8 text-center">
+                                            <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-4 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Ativo</span>
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr><td colSpan={3} className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-30">Nenhum aluno nesta turma</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl mx-auto">
-                    <div className="bg-[#1c1917] border border-orange-500/20 p-12 rounded-[3.5rem] shadow-2xl relative overflow-hidden">
+                    <div className="bg-[#1c1917] border border-orange-500/20 p-12 rounded-[3rem] shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-8 opacity-5"><Baby size={120} /></div>
                         <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-10 flex items-center gap-4">
                             <UploadCloud className="text-orange-600" size={40} /> Solicitar Cópias
@@ -287,7 +407,7 @@ export const InfantilDashboard: React.FC = () => {
                         <div className="space-y-8">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título da Atividade</label>
-                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all text-lg" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Pintura a dedo - Maternal I" />
+                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all text-lg" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Pintura a dedo - Jardim I" />
                             </div>
                             <div className="grid grid-cols-2 gap-8">
                                 <div className="space-y-2">
@@ -497,6 +617,69 @@ export const InfantilDashboard: React.FC = () => {
                 </div>
             )}
         </div>
+
+        {/* MODAL MATRÍCULA */}
+        {showEnrollmentModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                <div className="bg-[#1c1917] border border-orange-500/20 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                    <div className="p-10 border-b border-white/5 flex justify-between items-center bg-black/20">
+                        <div>
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Matrícula Infantil</h3>
+                            <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest mt-1">
+                                {enrollmentType === 'individual' ? 'Registro Único' : 'Importação em Lote'}
+                            </p>
+                        </div>
+                        <button onClick={() => setShowEnrollmentModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                    </div>
+                    <form onSubmit={handleEnroll} className="p-10 space-y-8">
+                        <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5 mb-4">
+                            <button type="button" onClick={() => setEnrollmentType('individual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'individual' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Individual</button>
+                            <button type="button" onClick={() => setEnrollmentType('bulk')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'bulk' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Em Lote</button>
+                        </div>
+
+                        {enrollmentType === 'individual' ? (
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">ID / Matrícula</label>
+                                        <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all" value={enrollFormData.id} onChange={e => setEnrollFormData({...enrollFormData, id: e.target.value.toUpperCase()})} placeholder="EX: 2024001" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
+                                        <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
+                                            <option value="">Selecione...</option>
+                                            {INFANTIL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome Completo da Criança</label>
+                                    <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all" value={enrollFormData.name} onChange={e => setEnrollFormData({...enrollFormData, name: e.target.value.toUpperCase()})} placeholder="DIGITE O NOME COMPLETO" />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino (Todos da Lista)</label>
+                                    <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
+                                        <option value="">Selecione...</option>
+                                        {INFANTIL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Lista de Nomes (Um por linha)</label>
+                                    <textarea required className="w-full bg-black/60 border border-white/10 rounded-2xl p-6 text-white font-bold outline-none focus:border-orange-500 transition-all h-48" value={bulkList} onChange={e => setBulkList(e.target.value)} placeholder="JOÃO SILVA&#10;MARIA OLIVEIRA&#10;PEDRO SANTOS..." />
+                                </div>
+                            </div>
+                        )}
+
+                        <Button type="submit" isLoading={isEnrolling} className="w-full h-20 bg-orange-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-orange-900/40 text-sm">
+                            <Check size={24} className="mr-3"/> Confirmar Matrícula
+                        </Button>
+                    </form>
+                </div>
+            </div>
+        )}
 
         {/* MODAL OCORRÊNCIA */}
         {showOccModal && (
