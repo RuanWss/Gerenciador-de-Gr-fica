@@ -99,7 +99,9 @@ import {
     Check,
     Baby,
     FileEdit,
-    FileText as FileIconPdf
+    FileText as FileIconPdf,
+    Eye,
+    ExternalLink
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -208,6 +210,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [showEventModal, setShowEventModal] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<SchoolEvent | null>(null);
     const [eventForm, setEventForm] = useState({ title: '', date: '', type: 'event' as any, description: '' });
+
+    // PEI View Modal
+    const [showPeiModal, setShowPeiModal] = useState(false);
+    const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
 
     // Infantil Tab States
     const [infantilSearch, setInfantilSearch] = useState('');
@@ -857,9 +863,6 @@ export const PrintShopDashboard: React.FC = () => {
                                                 <span className="text-[10px] text-gray-500 font-black uppercase flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full border border-white/5">
                                                     <Calendar size={12}/> {new Date(exam.createdAt).toLocaleDateString()}
                                                 </span>
-                                                {exam.materialType === 'handout' && (
-                                                    <span className="text-[10px] bg-purple-500/10 text-purple-400 px-3 py-1 rounded-full border border-purple-500/20 font-black uppercase tracking-widest">Apostila</span>
-                                                )}
                                             </div>
                                             <h3 className="text-2xl font-black text-white mb-3 uppercase tracking-tight group-hover:text-red-500 transition-colors leading-none">{exam.title}</h3>
                                             <div className="flex flex-wrap justify-center md:justify-start gap-y-2 gap-x-8">
@@ -876,12 +879,6 @@ export const PrintShopDashboard: React.FC = () => {
                                                     <span className="font-black text-red-500 text-base">{exam.quantity} <span className="text-[10px] font-bold text-red-600/70 uppercase">Cópias</span></span>
                                                 </div>
                                             </div>
-                                            {exam.instructions && (
-                                                <div className="mt-6 p-5 bg-black/30 rounded-3xl border border-white/5 flex items-start gap-4">
-                                                    <FileText size={18} className="text-gray-600 mt-0.5 shrink-0" />
-                                                    <p className="text-xs text-gray-500 italic leading-relaxed uppercase font-bold">Instruções: "{exam.instructions}"</p>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
 
@@ -894,10 +891,6 @@ export const PrintShopDashboard: React.FC = () => {
                                         
                                         {exam.status === ExamStatus.IN_PROGRESS && (
                                             <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.COMPLETED)} className="w-full md:w-auto flex items-center justify-center gap-3 px-10 py-5 bg-green-600 hover:bg-green-700 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl transition-all shadow-2xl shadow-green-900/40"><CheckCircle2 size={20}/> Concluir</button>
-                                        )}
-                                        
-                                        {exam.status === ExamStatus.COMPLETED && (
-                                            <div className="w-full md:w-auto flex items-center justify-center gap-3 px-8 py-5 bg-green-900/20 text-green-500 font-black uppercase text-[10px] tracking-[0.2em] rounded-2xl border border-green-500/20"><CheckCircle2 size={20}/> Entregue</div>
                                         )}
                                     </div>
                                 </div>
@@ -961,118 +954,200 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-6 mb-10">
-                            <div className="flex items-center gap-3 bg-red-600/10 border border-red-600/20 p-4 rounded-2xl w-fit">
-                                <Users size={18} className="text-red-500"/>
-                                <span className="text-[10px] font-black text-white uppercase tracking-widest">Total Geral de Matriculados: <span className="text-red-500">{students.length} alunos</span></span>
-                            </div>
-                            <div className="flex items-center gap-4 overflow-x-auto pb-4 custom-scrollbar">
-                                {GRID_CLASSES.map(cls => (
-                                    <button 
-                                        key={cls.id} 
-                                        onClick={() => setSelectedStudentClass(cls.id)} 
-                                        className={`px-8 py-5 rounded-2xl font-black text-xs uppercase tracking-widest border transition-all shrink-0 flex items-center gap-3 ${selectedStudentClass === cls.id ? 'bg-white text-black border-white shadow-2xl shadow-white/10 scale-105' : 'bg-[#18181b] text-gray-500 border-white/5 hover:bg-white/5 hover:text-white'}`}
-                                    >
-                                        {cls.shift === 'morning' ? <Sun size={16} className={selectedStudentClass === cls.id ? 'text-orange-500' : 'text-gray-600'}/> : <Moon size={16} className={selectedStudentClass === cls.id ? 'text-blue-500' : 'text-gray-600'}/>}
-                                        {cls.name}
-                                    </button>
-                                ))}
-                            </div>
+                        <div className="flex items-center gap-4 overflow-x-auto pb-4 mb-10 custom-scrollbar">
+                            {GRID_CLASSES.map(cls => (
+                                <button key={cls.id} onClick={() => setSelectedStudentClass(cls.id)} className={`px-8 py-5 rounded-2xl font-black text-xs uppercase tracking-widest border transition-all shrink-0 flex items-center gap-3 ${selectedStudentClass === cls.id ? 'bg-white text-black border-white shadow-2xl shadow-white/10 scale-105' : 'bg-[#18181b] text-gray-500 border-white/5 hover:bg-white/5 hover:text-white'}`}>
+                                    {cls.shift === 'morning' ? <Sun size={16} className={selectedStudentClass === cls.id ? 'text-orange-500' : 'text-gray-600'}/> : <Moon size={16} className={selectedStudentClass === cls.id ? 'text-blue-500' : 'text-gray-600'}/>}
+                                    {cls.name}
+                                </button>
+                            ))}
                         </div>
 
-                        <div className="bg-[#18181b] rounded-[3.5rem] border border-white/5 overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.4)]">
-                            <div className="p-10 bg-black/20 border-b border-white/5 flex justify-between items-center">
-                                <h3 className="text-lg font-black text-white uppercase tracking-widest flex items-center gap-4">
-                                    <Users size={24} className="text-red-500"/> Relação de Alunos
-                                </h3>
-                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/5">
-                                    Exibindo {filteredClassStudents.length} resultados
-                                </span>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                    <thead className="bg-black/10 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em] border-b border-white/5">
-                                        <tr>
-                                            <th className="p-10">Dados do Aluno</th>
-                                            <th className="p-10">Especificidades</th>
-                                            <th className="p-10">Status de Frequência</th>
-                                            <th className="p-10 text-right">Ações</th>
+                        <div className="bg-[#18181b] rounded-[3.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                             <table className="w-full text-left">
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-widest border-b border-white/5">
+                                    <tr><th className="p-8">Aluno</th><th className="p-8 text-center">Ações</th></tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {filteredClassStudents.map(s => (
+                                        <tr key={s.id} className="hover:bg-white/[0.02]">
+                                            <td className="p-8 font-black text-white uppercase text-base">{s.name}</td>
+                                            <td className="p-8 text-center"><button onClick={() => deleteStudent(s.id)} className="p-3 bg-red-600/10 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all"><Trash2 size={18}/></button></td>
                                         </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {filteredClassStudents.map(s => {
-                                            const isPresent = presentStudentIds.has(s.id);
-                                            return (
-                                                <tr key={s.id} className="hover:bg-white/[0.02] transition-colors group">
-                                                    <td className="p-10">
-                                                        <div className="flex items-center gap-6">
-                                                            <div className={`h-16 w-16 rounded-full border-2 p-1 shrink-0 transition-transform group-hover:scale-110 ${isPresent ? 'border-green-500' : 'border-white/10'}`}>
-                                                                <img 
-                                                                    src={s.photoUrl || `https://ui-avatars.com/api/?name=${s.name}&background=18181b&color=ef4444&bold=true`} 
-                                                                    className="w-full h-full rounded-full object-cover"
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-black text-white uppercase text-base tracking-tight mb-1">{s.name}</p>
-                                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{s.id}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-10">
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {s.isAEE ? (
-                                                                <span className="bg-red-500/10 text-red-500 border border-red-500/20 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 animate-pulse">
-                                                                    <AlertCircle size={12}/> AEE Ativo
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-gray-700 text-[9px] font-black uppercase tracking-widest">Padrão</span>
-                                                            )}
-                                                            {!s.photoUrl && (
-                                                                <span className="bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">
-                                                                    Sem Biometria
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-10">
-                                                        {isPresent ? (
-                                                            <div className="flex items-center gap-3 text-green-500">
-                                                                <div className="h-2 w-2 rounded-full bg-green-500 animate-ping"></div>
-                                                                <span className="font-black text-[10px] uppercase tracking-widest">Presente</span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center gap-3 text-red-500/30">
-                                                                <div className="h-2 w-2 rounded-full bg-red-500/30"></div>
-                                                                <span className="font-black text-[10px] uppercase tracking-widest">Ausente</span>
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-10 text-right">
-                                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => deleteStudent(s.id)} className="h-12 w-12 rounded-xl bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white flex items-center justify-center transition-all">
-                                                                <Trash2 size={20}/>
-                                                            </button>
-                                                            <button className="h-12 w-12 rounded-xl bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white flex items-center justify-center transition-all">
-                                                                <MoreHorizontal size={20}/>
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {filteredClassStudents.length === 0 && (
-                                            <tr>
-                                                <td colSpan={4} className="p-32 text-center">
-                                                    <div className="flex flex-col items-center opacity-20">
-                                                        <Users size={80} className="mb-6"/>
-                                                        <p className="font-black uppercase tracking-[0.4em] text-xl">Nenhum Registro</p>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                                    ))}
+                                </tbody>
+                             </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'occurrences' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-10">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Ocorrências Globais</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Registros de todos os alunos e turmas</p>
+                        </header>
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                            <table className="w-full text-left">
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-widest border-b border-white/5">
+                                    <tr><th className="p-8">Data</th><th className="p-8">Aluno</th><th className="p-8">Categoria</th><th className="p-8">Relato</th><th className="p-8">Autor</th></tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {occurrences.map(occ => (
+                                        <tr key={occ.id} className="hover:bg-white/[0.02]">
+                                            <td className="p-8 text-xs text-gray-500">{new Date(occ.timestamp).toLocaleDateString()}</td>
+                                            <td className="p-8 font-black text-white uppercase">{occ.studentName}</td>
+                                            <td className="p-8">
+                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>{occ.category}</span>
+                                            </td>
+                                            <td className="p-8 text-sm text-gray-400 italic max-w-xs truncate">"{occ.description}"</td>
+                                            <td className="p-8 text-xs font-bold text-gray-500 uppercase">{occ.reportedBy}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'materials' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-10">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Acervo de Materiais</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Arquivos enviados pelos professores para sala de aula</p>
+                        </header>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {materials.map(mat => (
+                                <div key={mat.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all flex flex-col group">
+                                    <div className="p-4 bg-red-600/10 text-red-500 rounded-2xl w-fit mb-6 group-hover:scale-110 transition-transform"><FileText size={32}/></div>
+                                    <h3 className="text-xl font-black text-white uppercase mb-1 leading-tight truncate">{mat.title}</h3>
+                                    <p className="text-xs text-red-600 font-black uppercase tracking-widest mb-4">{mat.className}</p>
+                                    <p className="text-[10px] text-gray-500 font-bold uppercase mb-8">Por: {mat.teacherName}</p>
+                                    <a href={mat.fileUrl} target="_blank" className="mt-auto w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black text-[10px] uppercase tracking-widest text-center border border-white/10">Baixar Arquivo</a>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'pei' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-10">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">PEI / AEE</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Planejamento Educacional Individualizado</p>
+                        </header>
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                             <table className="w-full text-left">
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-widest border-b border-white/5">
+                                    <tr><th className="p-8">Aluno</th><th className="p-8">Professor / Matéria</th><th className="p-8">Bimestre</th><th className="p-8 text-center">Ações</th></tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {peis.map(pei => (
+                                        <tr key={pei.id} className="hover:bg-white/[0.02]">
+                                            <td className="p-8 font-black text-white uppercase">{pei.studentName}</td>
+                                            <td className="p-8">
+                                                <p className="text-sm font-bold text-gray-200">{pei.teacherName}</p>
+                                                <p className="text-[10px] font-black text-red-500 uppercase">{pei.subject}</p>
+                                            </td>
+                                            <td className="p-8 font-bold text-gray-500 uppercase text-xs">{pei.period}</td>
+                                            <td className="p-8 text-center">
+                                                <button onClick={() => { setSelectedPei(pei); setShowPeiModal(true); }} className="px-6 py-2 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/20">Ver Documento</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                             </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'calendar' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-10">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Agenda Escolar</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Gestão de eventos e recesso</p>
+                        </header>
+                        {renderCalendarGrid()}
+                    </div>
+                )}
+
+                {activeTab === 'plans' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-10">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Acompanhamento pedagógico docente</p>
+                        </header>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {plans.map(plan => (
+                                <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${plan.type === 'semester' ? 'bg-blue-600/10 text-blue-500 border-blue-600/20' : 'bg-green-600/10 text-green-500 border-green-600/20'}`}>
+                                            {plan.type === 'semester' ? 'Bimestral' : 'Diário'}
+                                        </span>
+                                        <span className="text-[10px] text-gray-500 font-bold uppercase">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <h3 className="text-xl font-black text-white uppercase mb-1 leading-tight">{plan.className}</h3>
+                                    <p className="text-xs text-red-600 font-black uppercase tracking-widest mb-6">{plan.subject}</p>
+                                    <p className="text-[11px] text-gray-400 font-medium mb-8 line-clamp-3 italic">"{plan.topic || plan.semesterContents}"</p>
+                                    <div className="pt-6 border-t border-white/5 flex flex-col gap-2">
+                                        <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">Responsável:</p>
+                                        <p className="text-xs font-bold text-white uppercase">{plan.teacherName}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'config' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl mx-auto">
+                        <header className="mb-10">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Configurações</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Mensagens e sistemas do prédio</p>
+                        </header>
+                        <div className="bg-[#18181b] border border-white/10 p-12 rounded-[3rem] shadow-2xl space-y-12">
+                            <section>
+                                <h3 className="text-xl font-black text-white uppercase mb-8 flex items-center gap-4"><Megaphone className="text-red-600"/> Banner de Avisos (TV)</h3>
+                                <div className="space-y-8">
+                                    <label className="flex items-center gap-4 p-4 bg-black/20 rounded-2xl border border-white/5 cursor-pointer group">
+                                        <input type="checkbox" className="w-6 h-6 rounded border-white/10 bg-black text-red-600 focus:ring-red-500" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)} />
+                                        <span className="text-xs font-black text-gray-400 uppercase tracking-widest group-hover:text-white transition-colors">Exibir mensagem nos monitores do prédio</span>
+                                    </label>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Mensagem do Banner</label>
+                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-bold outline-none focus:border-red-600 transition-all min-h-[120px]" value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} placeholder="Ex: Antecipação do feriado conforme decreto estadual..." />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {(['info', 'warning', 'error', 'success'] as const).map(type => (
+                                            <button key={type} onClick={() => setConfigBannerType(type)} className={`py-4 rounded-xl font-black uppercase text-[10px] tracking-widest border transition-all ${configBannerType === type ? 'bg-red-600 border-red-500 text-white' : 'bg-black/20 border-white/5 text-gray-600'}`}>{type}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </section>
+                            <Button onClick={handleSaveConfig} className="w-full h-20 bg-green-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-green-900/40"><Save size={24} className="mr-3"/> Salvar Ajustes</Button>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'reports' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                         <header className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Central de Relatórios</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Extração de dados e livros de registro</p>
                             </div>
+                        </header>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                             <div className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl relative overflow-hidden group">
+                                 <div className="absolute top-0 right-0 p-8 opacity-5"><ClipboardCheck size={120}/></div>
+                                 <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-4">Relatório Diário Consolidado</h3>
+                                 <p className="text-gray-400 text-sm mb-8 leading-relaxed">Gere o documento oficial contendo as faltas da equipe docente, aulas extras e todas as ocorrências de alunos do dia.</p>
+                                 <div className="flex flex-col gap-4">
+                                    <input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={reportOccDate} onChange={e => setReportOccDate(e.target.value)}/>
+                                    <button onClick={handlePrintDailyOccReport} className="w-full py-5 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 transition-all"><Printer size={20}/> Gerar PDF Diário</button>
+                                 </div>
+                             </div>
+                             {/* Outros relatórios podem ser adicionados aqui futuramente */}
                         </div>
                     </div>
                 )}
@@ -1196,6 +1271,41 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
             </div>
 
+            {/* PEI VIEW MODAL */}
+            {showPeiModal && selectedPei && (
+                <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+                    <div className="bg-[#1c1917] border border-orange-500/20 w-full max-w-4xl max-h-[90vh] rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-4"><Heart className="text-orange-500" size={28}/> Documento PEI</h3>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{selectedPei.studentName} • {selectedPei.subject} • {selectedPei.period}</p>
+                            </div>
+                            <button onClick={() => setShowPeiModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-12 space-y-12">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-orange-500 uppercase tracking-widest border-b border-white/5 pb-2">Competências Essenciais</h4>
+                                    <p className="text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.essentialCompetencies}</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-orange-500 uppercase tracking-widest border-b border-white/5 pb-2">Conteúdos Selecionados</h4>
+                                    <p className="text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.selectedContents}</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-orange-500 uppercase tracking-widest border-b border-white/5 pb-2">Recursos Didáticos</h4>
+                                    <p className="text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.didacticResources}</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-orange-500 uppercase tracking-widest border-b border-white/5 pb-2">Estratégias de Avaliação</h4>
+                                    <p className="text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.evaluation}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ENROLLMENT MODAL */}
             {showEnrollmentModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
@@ -1273,6 +1383,24 @@ export const PrintShopDashboard: React.FC = () => {
                             <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Disciplina</label><select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none appearance-none focus:border-red-600" value={newSchedule.subject} onChange={e => setNewSchedule({...newSchedule, subject: e.target.value})}><option value="">Selecione...</option>{(GRID_CLASSES.find(c => c.id === editingCell?.classId)?.type === 'em' ? EM_SUBJECTS : EFAF_SUBJECTS).map(s => (<option key={s} value={s}>{s}</option>))}</select></div>
                             <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Professor</label><select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none appearance-none focus:border-red-600" value={newSchedule.professor} onChange={e => setNewSchedule({...newSchedule, professor: e.target.value})}><option value="">Selecione...</option>{staff.filter(s => s.isTeacher).map(p => (<option key={p.id} value={p.name}>{p.name}</option>))}</select></div>
                             <Button onClick={handleSaveSchedule} className="w-full h-14 bg-red-600 rounded-2xl font-black uppercase tracking-widest">Salvar Horário</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* EVENT MODAL */}
+            {showEventModal && (
+                <div className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-xl font-black text-white uppercase tracking-tighter">{selectedEvent ? 'Editar Evento' : 'Novo Evento'}</h3>
+                            <button onClick={() => setShowEventModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={24}/></button>
+                        </div>
+                        <div className="space-y-6">
+                            <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Título</label><input className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Data</label><input type="date" className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={eventForm.date} onChange={e => setEventForm({...eventForm, date: e.target.value})} /></div>
+                            <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Tipo</label><select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={eventForm.type} onChange={e => setEventForm({...eventForm, type: e.target.value as any})}><option value="event">Evento</option><option value="holiday">Feriado</option><option value="exam">Avaliação</option></select></div>
+                            <Button onClick={handleSaveEvent} className="w-full h-14 bg-red-600 rounded-2xl font-black uppercase tracking-widest">Salvar Evento</Button>
                         </div>
                     </div>
                 </div>
