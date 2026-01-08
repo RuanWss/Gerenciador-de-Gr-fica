@@ -5,47 +5,102 @@ import {
     getExams, 
     saveExam, 
     uploadExamFile,
-    getClassMaterials,
-    saveClassMaterial,
-    deleteClassMaterial,
     listenToStudents,
     saveOccurrence,
     listenToOccurrences,
-    deleteOccurrence
+    deleteOccurrence,
+    saveInfantilReport,
+    listenToInfantilReports,
+    deleteInfantilReport
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, ClassMaterial, Student, StudentOccurrence } from '../types';
+import { ExamRequest, ExamStatus, Student, StudentOccurrence, InfantilReport } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, List, PlusCircle, X, 
-  Folder, FileText, Trash2, FileUp, Search,
-  Download, AlertCircle, Calendar, User, MessageSquare, Baby, Palette, Smile
+  Trash2, FileUp, Download, Calendar, Baby, Smile, 
+  FileEdit, Save, ArrowLeft, Info, CheckCircle2
 } from 'lucide-react';
 
 const INFANTIL_CLASSES = ["MATERNAL I", "MATERNAL II", "NÍVEL I", "NÍVEL II"];
 
+const SKILLS_CONFIG = [
+  {
+    category: "Linguagem Oral",
+    objectives: [
+      { code: "EI03EF01", desc: "Expressar ideias, desejos e sentimentos sobre suas vivências, por meio da linguagem oral e escrita (escrita espontânea), de fotos, desenhos e outras formas de expressão." },
+      { code: "EI03EF02", desc: "Inventar brincadeiras cantadas, poemas e canções, criando rimas, aliterações e ritmos." },
+      { code: "EI03EF03", desc: "Escolher e folhear livros, procurando orientar-se por temas e ilustrações e tentando identificar palavras conhecidas." },
+      { code: "EI03EF08", desc: "Selecionar livros e textos de gêneros conhecidos para a leitura de um adulto e/ou para sua própria leitura (partindo de seu repertório sobre esses textos, como a recuperação pela memória, pela leitura das ilustrações etc.)." }
+    ]
+  },
+  {
+    category: "Linguagem Escrita",
+    objectives: [
+      { code: "EI03ET04", desc: "Registrar observações, manipulações e medidas, usando múltiplas linguagens (desenho, registro por números ou escrita espontânea), em diferentes suportes." },
+      { code: "EI03TS02", desc: "Expressar-se livremente por meio de desenho, pintura, colagem, dobradura e escultura, criando produções bidimensionais e tridimensionais." },
+      { code: "EI03CG05_E", desc: "Coordenar suas habilidades manuais no atendimento adequado a seus interesses e necessidades em situações diversas." },
+      { code: "EI03EF06", desc: "Produzir suas próprias histórias orais e escritas (escrita espontânea), em situações com função social significativa." }
+    ]
+  },
+  {
+    category: "Linguagem Matemática",
+    objectives: [
+      { code: "EI03TS03", desc: "Reconhecer as qualidades do som (intensidade, duração, altura e timbre), utilizando-as em suas produções sonoras e ao ouvir músicas e sons." },
+      { code: "EI03ET07", desc: "Relacionar números às suas respectivas quantidades e identificar o antes, o depois e o entre em uma sequência." },
+      { code: "EI03ET08", desc: "Expressar medidas (peso, altura etc.), construindo gráficos básicos." },
+      { code: "EI03ET05", desc: "Classificar objetos e figuras de acordo com suas semelhanças e diferenças." }
+    ]
+  },
+  {
+    category: "Desenvolvimento Psicomotor",
+    objectives: [
+      { code: "EI03CG01", desc: "Criar com o corpo formas diversificadas de expressão de sentimentos, sensações e emoções, tanto nas situações do cotidiano quanto em brincadeiras, dança, teatro, música." },
+      { code: "EI03CG02", desc: "Demonstrar controle e adequação do uso de seu corpo em brincadeiras e jogos, escuta e reconto de histórias, atividades artísticas, entre outras possibilidades." },
+      { code: "EI03CG03", desc: "Criar movimentos, gestos, olhares e mímicas em brincadeiras, jogos e atividades artísticas como dança, teatro, música." },
+      { code: "EI03CG05_P", desc: "Coordenar suas habilidades manuais no atendimento adequado a seus interesses e necessidades em situações diversas." }
+    ]
+  },
+  {
+    category: "Relações Sociais e Afetivas",
+    objectives: [
+      { code: "EI03EO01", desc: "Demonstrar empatia pelos outros, percebendo que as pessoas têm diferentes sentimentos, necessidades e maneiras de pensar e agir." },
+      { code: "EI03EO02", desc: "Agir de maneira independente, com confiança em suas capacidades, reconhecendo suas conquistas e limitações." },
+      { code: "EI03EO03", desc: "Ampliar as relações interpessoais, desenvolvendo atitudes de participação e cooperação." },
+      { code: "EI03EO04", desc: "Comunicar suas ideias e sentimentos a pessoas e grupos diversos." }
+    ]
+  }
+];
+
 export const InfantilDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'materials' | 'occurrences'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'reports' | 'occurrences'>('requests');
   const [exams, setExams] = useState<ExamRequest[]>([]);
-  const [materials, setMaterials] = useState<ClassMaterial[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teacherOccurrences, setTeacherOccurrences] = useState<StudentOccurrence[]>([]);
+  const [reports, setReports] = useState<InfantilReport[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // --- FORM STATES ---
+  // --- EXAM FORM STATES ---
   const [examTitle, setExamTitle] = useState('');
   const [examGrade, setExamGrade] = useState('');
   const [printQty, setPrintQty] = useState(25);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  
+  // --- OCCURRENCE FORM STATES ---
   const [showOccModal, setShowOccModal] = useState(false);
   const [newOcc, setNewOcc] = useState<Partial<StudentOccurrence>>({
       studentId: '', category: 'elogio', severity: 'low', description: '', date: new Date().toISOString().split('T')[0]
   });
   const [occClass, setOccClass] = useState('');
-  const [showMaterialModal, setShowMaterialModal] = useState(false);
-  const [matFile, setMatFile] = useState<File | null>(null);
-  const [newMaterial, setNewMaterial] = useState({ title: '', className: '', subject: 'Educação Infantil' });
+
+  // --- REPORT (PARECER) STATES ---
+  const [isCreatingReport, setIsCreatingReport] = useState(false);
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [reportStudentId, setReportStudentId] = useState('');
+  const [reportClass, setReportClass] = useState('');
+  const [reportScores, setReportScores] = useState<Record<string, 'I' | 'ED' | 'CA' | ''>>({});
+  const [reportDescriptive, setReportDescriptive] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchData();
@@ -56,7 +111,8 @@ export const InfantilDashboard: React.FC = () => {
       const unsubO = listenToOccurrences((all) => {
           setTeacherOccurrences(all.filter(o => o.reportedBy === user?.name));
       });
-      return () => { unsubS(); unsubO(); };
+      const unsubR = listenToInfantilReports(user?.id || '', setReports);
+      return () => { unsubS(); unsubO(); unsubR(); };
   }, [user]);
 
   const fetchData = async () => {
@@ -66,9 +122,6 @@ export const InfantilDashboard: React.FC = () => {
         if (activeTab === 'requests') {
             const allExams = await getExams(user.id);
             setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
-        } else if (activeTab === 'materials') {
-            const allMats = await getClassMaterials(user.id);
-            setMaterials(allMats.sort((a,b) => b.createdAt - a.createdAt));
         }
     } catch (e) { console.error(e); }
     setIsLoading(false);
@@ -113,73 +166,111 @@ export const InfantilDashboard: React.FC = () => {
               timestamp: Date.now(), reportedBy: user?.name || 'Professor'
           });
           setShowOccModal(false);
-          alert("Registro salvo!");
+          alert("Registro salvo no Diário de Bordo!");
       } catch (e) { alert("Erro ao salvar."); }
       finally { setIsSaving(false); }
   };
 
-  const handleSaveMaterial = async () => {
-      if (!newMaterial.title || !newMaterial.className || !matFile) return alert("Preencha todos os campos.");
-      setIsSaving(true);
-      try {
-          const fileUrl = await uploadExamFile(matFile, user?.name || 'Infantil');
-          await saveClassMaterial({
-              id: '', teacherId: user?.id || '', teacherName: user?.name || '',
-              title: newMaterial.title, className: newMaterial.className,
-              subject: newMaterial.subject, fileUrl: fileUrl, fileName: matFile.name,
-              fileType: matFile.type, createdAt: Date.now()
-          });
-          setShowMaterialModal(false);
-          alert("Material enviado para a TV!");
-          fetchData();
-      } catch (e) { alert("Erro ao enviar."); }
-      finally { setIsSaving(false); }
+  const handleSaveInfantilReport = async () => {
+    if (!reportStudentId) return alert("Selecione o aluno.");
+    setIsSaving(true);
+    try {
+      const student = students.find(s => s.id === reportStudentId);
+      await saveInfantilReport({
+        id: editingReportId || '',
+        studentId: reportStudentId,
+        studentName: student?.name || '',
+        className: reportClass,
+        teacherId: user?.id || '',
+        teacherName: user?.name || '',
+        createdAt: editingReportId ? reports.find(r => r.id === editingReportId)?.createdAt || Date.now() : Date.now(),
+        updatedAt: Date.now(),
+        scores: reportScores,
+        descriptiveText: reportDescriptive
+      });
+      alert("Parecer pedagógico salvo com sucesso!");
+      setIsCreatingReport(false);
+      resetReportForm();
+    } catch (e) { alert("Erro ao salvar relatório."); }
+    finally { setIsSaving(false); }
+  };
+
+  const resetReportForm = () => {
+    setEditingReportId(null);
+    setReportStudentId('');
+    setReportClass('');
+    setReportScores({});
+    setReportDescriptive({});
+  };
+
+  const editReport = (report: InfantilReport) => {
+    setEditingReportId(report.id);
+    setReportStudentId(report.studentId);
+    setReportClass(report.className);
+    setReportScores(report.scores);
+    setReportDescriptive(report.descriptiveText);
+    setIsCreatingReport(true);
   };
 
   return (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
-        <div className="w-64 bg-[#fff7ed]/10 backdrop-blur-xl border-r border-orange-500/20 p-6 flex flex-col h-full z-20 shadow-2xl">
-            <div className="mb-6">
-                <div className="flex items-center gap-2 mb-6 px-2">
-                    <Baby className="text-orange-500" size={24}/>
-                    <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Portal Infantil</p>
+    <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
+        {/* SIDEBAR INFANTIL */}
+        <div className="w-64 bg-[#1c1917] border-r border-orange-500/20 p-6 flex flex-col h-full z-20 shadow-2xl">
+            <div className="mb-10 text-center">
+                <div className="h-16 w-16 bg-orange-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-orange-500/20">
+                    <Baby className="text-orange-500" size={32}/>
                 </div>
-                <button onClick={() => setActiveTab('requests')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-bold transition-all ${activeTab === 'requests' ? 'bg-orange-500 text-white shadow-lg shadow-orange-900/40' : 'text-orange-200/60 hover:bg-white/10'}`}><List size={18} /> Minha Fila</button>
-                <button onClick={() => setActiveTab('create')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-bold transition-all ${activeTab === 'create' ? 'bg-orange-500 text-white shadow-lg shadow-orange-900/40' : 'text-orange-200/60 hover:bg-white/10'}`}><PlusCircle size={18} /> Enviar Atividade</button>
-                <button onClick={() => setActiveTab('materials')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-bold transition-all ${activeTab === 'materials' ? 'bg-orange-500 text-white shadow-lg shadow-orange-900/40' : 'text-orange-200/60 hover:bg-white/10'}`}><Palette size={18} /> Materiais TV</button>
-                <button onClick={() => setActiveTab('occurrences')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-1 text-sm font-bold transition-all ${activeTab === 'occurrences' ? 'bg-orange-500 text-white shadow-lg shadow-orange-900/40' : 'text-orange-200/60 hover:bg-white/10'}`}><Smile size={18} /> Diário de Bordo</button>
+                <p className="text-[10px] font-black text-orange-400 uppercase tracking-[0.3em]">Portal Infantil</p>
             </div>
+            
+            <nav className="flex-1 space-y-1">
+                <button onClick={() => { setActiveTab('requests'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'requests' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
+                    <List size={18} /> Minha Fila
+                </button>
+                <button onClick={() => { setActiveTab('create'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'create' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
+                    <PlusCircle size={18} /> Enviar Folhas
+                </button>
+                <button onClick={() => { setActiveTab('reports'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'reports' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
+                    <FileEdit size={18} /> Parecer
+                </button>
+                <button onClick={() => { setActiveTab('occurrences'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'occurrences' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
+                    <Smile size={18} /> Diário de Bordo
+                </button>
+            </nav>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        {/* CONTENT AREA */}
+        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
             {activeTab === 'requests' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-8">
-                        <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Fila de Impressões</h1>
-                        <p className="text-orange-200/50 text-sm font-bold">Acompanhe as atividades enviadas para a gráfica.</p>
+                    <header className="mb-10">
+                        <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Fila de Impressões</h1>
+                        <p className="text-orange-200/40 font-bold uppercase text-[10px] tracking-[0.3em]">Acompanhe suas solicitações na gráfica</p>
                     </header>
-                    <div className="bg-[#1c1917] rounded-3xl border border-orange-500/10 overflow-hidden shadow-2xl">
+                    <div className="bg-[#1c1917] rounded-[2.5rem] border border-orange-500/10 overflow-hidden shadow-2xl">
                         <table className="w-full text-left">
-                            <thead className="bg-black/40 text-orange-500/50 uppercase text-[10px] font-black tracking-widest border-b border-orange-500/10">
-                                <tr><th className="p-6">Data</th><th className="p-6">Atividade</th><th className="p-6">Turma</th><th className="p-6">Status</th></tr>
+                            <thead className="bg-black/40 text-orange-500/50 uppercase text-[9px] font-black tracking-widest border-b border-orange-500/10">
+                                <tr><th className="p-8">Data</th><th className="p-8">Atividade</th><th className="p-8">Turma</th><th className="p-8">Status</th></tr>
                             </thead>
                             <tbody className="divide-y divide-orange-500/5">
-                                {exams.map(e => (
-                                    <tr key={e.id} className="hover:bg-white/5 transition-colors">
-                                        <td className="p-6 text-sm text-gray-400 font-medium">{new Date(e.createdAt).toLocaleDateString()}</td>
-                                        <td className="p-6 font-bold text-white uppercase">{e.title}</td>
-                                        <td className="p-6"><span className="bg-orange-500/10 px-3 py-1 rounded-full text-xs font-bold text-orange-400">{e.gradeLevel}</span></td>
-                                        <td className="p-6">
-                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                                                e.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500' :
-                                                e.status === ExamStatus.IN_PROGRESS ? 'bg-blue-500/10 text-blue-500' :
-                                                'bg-green-500/10 text-green-500'
+                                {exams.length > 0 ? exams.map(e => (
+                                    <tr key={e.id} className="hover:bg-white/[0.02] transition-colors group">
+                                        <td className="p-8 text-sm text-gray-500 font-bold">{new Date(e.createdAt).toLocaleDateString()}</td>
+                                        <td className="p-8 font-black text-white uppercase tracking-tight">{e.title}</td>
+                                        <td className="p-8"><span className="bg-orange-500/10 border border-orange-500/20 px-3 py-1 rounded-full text-[10px] font-black text-orange-400 uppercase">{e.gradeLevel}</span></td>
+                                        <td className="p-8">
+                                            <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
+                                                e.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                                e.status === ExamStatus.IN_PROGRESS ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                                'bg-green-500/10 text-green-500 border-green-500/20'
                                             }`}>
-                                                {e.status === ExamStatus.PENDING ? 'Fila' : e.status === ExamStatus.IN_PROGRESS ? 'Rodando' : 'Pronto'}
+                                                {e.status === ExamStatus.PENDING ? 'Aguardando' : e.status === ExamStatus.IN_PROGRESS ? 'Imprimindo' : 'Pronto p/ Retirar'}
                                             </span>
                                         </td>
                                     </tr>
-                                ))}
+                                )) : (
+                                    <tr><td colSpan={4} className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-30">Nenhuma solicitação ativa</td></tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -188,99 +279,220 @@ export const InfantilDashboard: React.FC = () => {
 
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl mx-auto">
-                    <div className="bg-[#1c1917] border border-orange-500/20 p-10 rounded-[3rem] shadow-2xl">
-                        <h2 className="text-2xl font-black text-white uppercase tracking-tighter mb-8 flex items-center gap-4">
-                            <UploadCloud className="text-orange-500" size={32} /> Solicitar Cópias
+                    <div className="bg-[#1c1917] border border-orange-500/20 p-12 rounded-[3.5rem] shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-5"><Baby size={120} /></div>
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-10 flex items-center gap-4">
+                            <UploadCloud className="text-orange-600" size={40} /> Solicitar Cópias
                         </h2>
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome da Atividade</label>
-                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-orange-500 transition-all" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Coordenação Motora - Maternal I" />
+                        <div className="space-y-8">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título da Atividade</label>
+                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all text-lg" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Pintura a dedo - Maternal I" />
                             </div>
-                            <div className="grid grid-cols-2 gap-6">
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma</label>
-                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-orange-500 transition-all appearance-none" value={examGrade} onChange={e => setExamGrade(e.target.value)}>
+                            <div className="grid grid-cols-2 gap-8">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all appearance-none text-lg" value={examGrade} onChange={e => setExamGrade(e.target.value)}>
                                         <option value="">-- Selecione --</option>
                                         {INFANTIL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Quantidade</label>
-                                    <input type="number" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-orange-500 transition-all" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Qtd de Cópias</label>
+                                    <input type="number" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all text-lg" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Anexar Folhas</label>
-                                <div className="border-2 border-dashed border-orange-500/20 rounded-3xl p-10 text-center hover:border-orange-500 transition-all relative">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Anexar Arquivo</label>
+                                <div className="border-3 border-dashed border-orange-500/20 rounded-[2.5rem] p-12 text-center hover:border-orange-500 transition-all relative bg-black/20 group cursor-pointer">
                                     <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files && setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)])} />
-                                    <FileUp className="mx-auto text-gray-600 mb-4" size={48} />
-                                    <p className="text-gray-400 font-bold uppercase text-xs">Clique para anexar PDFs ou Imagens</p>
+                                    <FileUp className="mx-auto text-gray-700 mb-4 group-hover:text-orange-500 group-hover:scale-110 transition-all" size={56} />
+                                    <p className="text-gray-500 font-black uppercase text-xs tracking-widest">Arraste os arquivos PDF aqui</p>
                                 </div>
-                                <div className="mt-4 space-y-2">
+                                <div className="mt-6 space-y-3">
                                     {uploadedFiles.map((f, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
-                                            <span className="text-xs text-gray-300 font-bold truncate pr-4">{f.name}</span>
-                                            <button onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500"><X size={16}/></button>
+                                        <div key={i} className="flex justify-between items-center bg-orange-600/5 p-4 rounded-xl border border-orange-600/20 animate-in slide-in-from-left-2">
+                                            <span className="text-xs text-orange-200 font-bold truncate pr-4 uppercase">{f.name}</span>
+                                            <button onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-400 p-2"><X size={18}/></button>
                                         </div>
                                     ))}
                                 </div>
                             </div>
-                            <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-16 rounded-2xl font-black uppercase tracking-widest bg-orange-600 shadow-xl shadow-orange-900/40">Enviar p/ Gráfica</Button>
+                            <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-20 rounded-[2rem] font-black uppercase tracking-[0.2em] bg-orange-600 shadow-2xl shadow-orange-900/40 hover:scale-[1.02] transition-transform">Enviar p/ Produção</Button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {activeTab === 'materials' && (
+            {activeTab === 'reports' && !isCreatingReport && (
                 <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-8 flex justify-between items-end">
+                    <header className="mb-10 flex justify-between items-center">
                         <div>
-                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Materiais para TV</h1>
-                            <p className="text-orange-200/50">Envie vídeos ou imagens para exibir na sala.</p>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Pareceres Pedagógicos</h1>
+                            <p className="text-orange-200/40 font-bold uppercase text-[10px] tracking-[0.3em]">Relatórios descritivos e avaliações por habilidades</p>
                         </div>
-                        <Button onClick={() => setShowMaterialModal(true)} className="bg-orange-600"><Plus size={18} className="mr-2"/> Novo Material</Button>
+                        <Button onClick={() => { resetReportForm(); setIsCreatingReport(true); }} className="bg-orange-600 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-orange-900/40">
+                            <Plus size={18} className="mr-3"/> Novo Parecer
+                        </Button>
                     </header>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {materials.map(mat => (
-                            <div key={mat.id} className="bg-[#1c1917] border border-orange-500/10 p-6 rounded-3xl shadow-xl flex flex-col group">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="p-3 bg-orange-500/10 text-orange-500 rounded-xl"><Palette size={24}/></div>
-                                    <button onClick={async () => { if(confirm("Excluir?")) await deleteClassMaterial(mat.id); fetchData(); }} className="text-gray-700 hover:text-red-500"><Trash2 size={16}/></button>
+                        {reports.map(report => (
+                            <div key={report.id} className="bg-[#1c1917] border border-orange-500/10 p-8 rounded-[2.5rem] shadow-xl hover:border-orange-500/30 transition-all flex flex-col group">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="p-4 bg-orange-500/10 text-orange-500 rounded-2xl"><FileEdit size={24}/></div>
+                                    <button onClick={async () => { if(confirm("Excluir parecer?")) await deleteInfantilReport(report.id); }} className="text-gray-800 hover:text-red-500 transition-colors p-2"><Trash2 size={20}/></button>
                                 </div>
-                                <h3 className="text-lg font-bold text-white mb-1 truncate">{mat.title}</h3>
-                                <p className="text-xs text-orange-500 font-black uppercase mb-6 tracking-widest">{mat.className}</p>
-                                <a href={mat.fileUrl} target="_blank" rel="noreferrer" className="mt-auto flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white font-bold py-3 rounded-xl border border-white/5 transition-all"><Download size={18}/> Baixar</a>
+                                <h3 className="text-xl font-black text-white mb-1 uppercase tracking-tight truncate">{report.studentName}</h3>
+                                <p className="text-xs text-orange-500 font-black uppercase mb-8 tracking-widest">{report.className}</p>
+                                <div className="mt-auto pt-6 border-t border-white/5 flex gap-2">
+                                    <button onClick={() => editReport(report)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all">Editar</button>
+                                    <button className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg shadow-orange-900/20">Baixar PDF</button>
+                                </div>
                             </div>
                         ))}
+                        {reports.length === 0 && (
+                            <div className="col-span-full py-40 text-center opacity-30 font-black uppercase tracking-[0.4em] text-xl">Nenhum parecer cadastrado</div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'reports' && isCreatingReport && (
+                <div className="animate-in fade-in slide-in-from-bottom-4">
+                    <button onClick={() => setIsCreatingReport(false)} className="flex items-center gap-2 text-gray-500 hover:text-orange-500 transition-all mb-8 font-black uppercase text-[10px] tracking-widest">
+                        <ArrowLeft size={16}/> Voltar para a lista
+                    </button>
+                    
+                    <div className="bg-[#1c1917] border border-orange-500/20 rounded-[3.5rem] shadow-2xl overflow-hidden pb-20">
+                        <div className="p-12 border-b border-white/5 bg-black/20">
+                            <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-8 flex items-center gap-4">
+                                <FileEdit className="text-orange-500" size={32}/> Relatório Pedagógico Infantil
+                            </h2>
+                            
+                            <div className="grid grid-cols-2 gap-8">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Selecione a Turma</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={reportClass} onChange={e => { setReportClass(e.target.value); setReportStudentId(''); }}>
+                                        <option value="">-- Turma --</option>
+                                        {INFANTIL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Selecione o Aluno</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={reportStudentId} onChange={e => setReportStudentId(e.target.value)} disabled={!reportClass}>
+                                        <option value="">-- Aluno --</option>
+                                        {students.filter(s => s.className === reportClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-12 space-y-16">
+                            {/* ESCALA INSTITUCIONAL INFO */}
+                            <div className="bg-orange-500/5 border border-orange-500/20 p-8 rounded-3xl flex gap-6 items-start">
+                                <div className="p-3 bg-orange-500/20 text-orange-500 rounded-xl"><Info size={24}/></div>
+                                <div>
+                                    <h4 className="text-orange-500 font-black uppercase text-xs tracking-widest mb-4">Escala Institucional de Avaliação</h4>
+                                    <div className="flex flex-wrap gap-8">
+                                        <div className="flex items-center gap-2"><span className="h-6 w-10 bg-orange-500/20 rounded flex items-center justify-center font-black text-orange-500 text-[10px]">I</span> <span className="text-[10px] text-gray-400 font-bold uppercase">Inicia (com apoio frequente)</span></div>
+                                        <div className="flex items-center gap-2"><span className="h-6 w-10 bg-orange-500/20 rounded flex items-center justify-center font-black text-orange-500 text-[10px]">ED</span> <span className="text-[10px] text-gray-400 font-bold uppercase">Em desenvolvimento (apoio e autonomia)</span></div>
+                                        <div className="flex items-center gap-2"><span className="h-6 w-10 bg-orange-500/20 rounded flex items-center justify-center font-black text-orange-500 text-[10px]">CA</span> <span className="text-[10px] text-gray-400 font-bold uppercase">Com autonomia (com segurança)</span></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* SKILLS TABLE (PAGE 1) */}
+                            <div className="space-y-12">
+                                {SKILLS_CONFIG.map((category, catIdx) => (
+                                    <div key={catIdx} className="bg-black/20 rounded-[2.5rem] border border-white/5 overflow-hidden">
+                                        <div className="bg-white/5 p-6 border-b border-white/5">
+                                            <h3 className="text-orange-500 font-black uppercase text-xs tracking-widest">{category.category}</h3>
+                                        </div>
+                                        <table className="w-full text-left">
+                                            <thead className="bg-black/20 text-[9px] font-black uppercase text-gray-500 tracking-widest border-b border-white/5">
+                                                <tr>
+                                                    <th className="p-6">Objetivo de Aprendizagem</th>
+                                                    <th className="p-6 text-center w-64">Nível de Desenvolvimento</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {category.objectives.map((obj, objIdx) => (
+                                                    <tr key={objIdx} className="hover:bg-white/[0.01]">
+                                                        <td className="p-6">
+                                                            <p className="text-xs font-bold text-gray-400 leading-relaxed"><span className="text-orange-500/50 mr-2">({obj.code})</span> {obj.desc}</p>
+                                                        </td>
+                                                        <td className="p-6">
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                {['I', 'ED', 'CA'].map(score => (
+                                                                    <button 
+                                                                        key={score}
+                                                                        onClick={() => setReportScores({...reportScores, [obj.code]: score as any})}
+                                                                        className={`h-10 w-14 rounded-xl border font-black text-[10px] transition-all ${reportScores[obj.code] === score ? 'bg-orange-600 border-orange-500 text-white shadow-lg' : 'bg-black/40 border-white/5 text-gray-700 hover:text-gray-400'}`}
+                                                                    >
+                                                                        {score}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        {/* PARECER DESCRITIVO POR CAMPO (PAGE 2) */}
+                                        <div className="p-8 bg-black/10 border-t border-white/5">
+                                            <label className="text-[9px] font-black text-orange-500 uppercase tracking-widest mb-4 block">Parecer Descritivo - {category.category}</label>
+                                            <textarea 
+                                                className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-orange-500 transition-all min-h-[120px]"
+                                                placeholder={`Escreva as observações pedagógicas sobre ${category.category}...`}
+                                                value={reportDescriptive[category.category] || ''}
+                                                onChange={e => setReportDescriptive({...reportDescriptive, [category.category]: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-12 border-t border-white/5 bg-black/20 flex justify-between items-center">
+                            <div className="flex items-center gap-4 text-gray-500 text-xs font-bold">
+                                <CheckCircle2 size={20} className="text-green-500"/> Todos os campos preenchidos serão salvos.
+                            </div>
+                            <Button onClick={handleSaveInfantilReport} isLoading={isSaving} className="bg-orange-600 h-20 px-12 rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-2xl shadow-orange-900/40">
+                                <Save size={24} className="mr-3"/> Finalizar Parecer
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}
 
             {activeTab === 'occurrences' && (
-                <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-8 flex justify-between items-end">
+                <div className="animate-in fade-in slide-in-from-right-4 max-w-4xl mx-auto">
+                    <header className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
                         <div>
-                            <h1 className="text-3xl font-black text-white uppercase tracking-tighter">Diário de Bordo</h1>
-                            <p className="text-orange-200/50">Registre observações diárias e elogios dos pequenos.</p>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Bordo</h1>
+                            <p className="text-orange-200/40 font-bold uppercase text-[10px] tracking-[0.3em]">Observações do desenvolvimento infantil</p>
                         </div>
-                        <Button onClick={() => setShowOccModal(true)} className="bg-orange-600"><Plus size={18} className="mr-2"/> Novo Registro</Button>
+                        <Button onClick={() => setShowOccModal(true)} className="bg-orange-600 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-orange-900/40"><Smile size={18} className="mr-3"/> Registrar Evento</Button>
                     </header>
-                    <div className="grid grid-cols-1 gap-4">
-                        {teacherOccurrences.map(occ => (
-                            <div key={occ.id} className="bg-[#1c1917] border border-orange-500/10 p-6 rounded-3xl shadow-xl flex justify-between items-start">
-                                <div>
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-orange-500/10 text-orange-500 border-orange-500/20'}`}>{occ.category}</span>
-                                        <span className="text-[10px] text-gray-500 font-bold">{new Date(occ.timestamp).toLocaleDateString()}</span>
+                    <div className="space-y-6">
+                        {teacherOccurrences.length > 0 ? teacherOccurrences.map(occ => (
+                            <div key={occ.id} className="bg-[#1c1917] border border-orange-500/10 p-10 rounded-[3rem] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center relative group hover:border-orange-500/30 transition-all">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border tracking-widest ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-orange-500/10 text-orange-500 border-orange-500/20'}`}>{occ.category}</span>
+                                        <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest">{new Date(occ.timestamp).toLocaleDateString()}</span>
                                     </div>
-                                    <h3 className="text-lg font-bold text-white uppercase">{occ.studentName}</h3>
-                                    <p className="text-xs text-orange-500 font-black uppercase tracking-widest mb-4">{occ.studentClass}</p>
-                                    <div className="bg-black/20 p-4 rounded-xl text-gray-400 text-sm italic border border-white/5">"{occ.description}"</div>
+                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">{occ.studentName}</h3>
+                                    <p className="text-xs text-orange-500 font-black uppercase tracking-widest mb-6">{occ.studentClass}</p>
+                                    <div className="bg-black/30 p-8 rounded-[2rem] text-orange-100/70 text-lg italic border border-white/5 leading-relaxed">
+                                        "{occ.description}"
+                                    </div>
                                 </div>
-                                <button onClick={async () => { if(confirm("Excluir?")) await deleteOccurrence(occ.id); }} className="text-gray-600 hover:text-red-500"><Trash2 size={18}/></button>
+                                <button onClick={async () => { if(confirm("Excluir este registro?")) await deleteOccurrence(occ.id); }} className="absolute top-10 right-10 text-gray-800 hover:text-red-500 transition-colors p-3 bg-white/5 rounded-xl"><Trash2 size={24}/></button>
                             </div>
-                        ))}
+                        )) : (
+                            <div className="py-40 text-center opacity-30 font-black uppercase tracking-[0.4em] text-xl text-gray-600">Sem registros no Diário</div>
+                        )}
                     </div>
                 </div>
             )}
@@ -288,36 +500,32 @@ export const InfantilDashboard: React.FC = () => {
 
         {/* MODAL OCORRÊNCIA */}
         {showOccModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                <div className="bg-[#1c1917] border border-orange-500/20 w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8">
-                    <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-xl font-black text-white uppercase flex items-center gap-2"><Smile className="text-orange-500"/> Registro Diário</h3>
-                        <button onClick={() => setShowOccModal(false)} className="text-gray-500"><X size={24}/></button>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                <div className="bg-[#1c1917] border border-orange-500/20 w-full max-w-xl rounded-[3.5rem] shadow-2xl p-12 animate-in zoom-in-95">
+                    <div className="flex justify-between items-center mb-10">
+                        <h3 className="text-2xl font-black text-white uppercase tracking-tighter flex items-center gap-4"><Smile className="text-orange-500" size={32}/> Relato Pedagógico</h3>
+                        <button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
                     </div>
                     <div className="space-y-6">
-                        <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" value={occClass} onChange={e => setOccClass(e.target.value)}><option value="">-- Turma --</option>{INFANTIL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                        <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" value={newOcc.studentId} onChange={e => setNewOcc({...newOcc, studentId: e.target.value})} disabled={!occClass}><option value="">-- Aluno --</option>{students.filter(s => s.className === occClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-                        <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" value={newOcc.category} onChange={e => setNewOcc({...newOcc, category: e.target.value as any})}><option value="elogio">Elogio / Destaque</option><option value="atraso">Atraso</option><option value="outros">Observação Geral</option></select>
-                        <textarea className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" rows={4} value={newOcc.description} onChange={e => setNewOcc({...newOcc, description: e.target.value})} placeholder="Como foi o dia desse aluno?" />
-                        <Button onClick={handleSaveOccurrence} isLoading={isSaving} className="w-full h-14 rounded-2xl font-black uppercase tracking-widest bg-orange-600">Salvar Registro</Button>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {/* MODAL MATERIAL */}
-        {showMaterialModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                <div className="bg-[#1c1917] border border-orange-500/20 w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8">
-                    <div className="flex justify-between items-center mb-8"><h3 className="text-xl font-black text-white uppercase">Novo Material TV</h3><button onClick={() => setShowMaterialModal(false)} className="text-gray-500"><X size={24}/></button></div>
-                    <div className="space-y-6">
-                        <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" value={newMaterial.title} onChange={e => setNewMaterial({...newMaterial, title: e.target.value})} placeholder="Título do Material" />
-                        <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none" value={newMaterial.className} onChange={e => setNewMaterial({...newMaterial, className: e.target.value})}><option value="">-- Turma --</option>{INFANTIL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                        <div className="border-2 border-dashed border-orange-500/20 rounded-2xl p-8 text-center relative hover:bg-white/5 cursor-pointer">
-                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setMatFile(e.target.files?.[0] || null)} />
-                            {matFile ? <span className="text-green-500 font-bold truncate block">{matFile.name}</span> : <span className="text-orange-500/50 font-bold">Selecionar arquivo (PDF/Imagem)</span>}
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-2">Turma</label>
+                                <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={occClass} onChange={e => setOccClass(e.target.value)}><option value="">Selecione...</option>{INFANTIL_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-2">Aluno</label>
+                                <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={newOcc.studentId} onChange={e => setNewOcc({...newOcc, studentId: e.target.value})} disabled={!occClass}><option value="">Aguardando Turma...</option>{students.filter(s => s.className === occClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                            </div>
                         </div>
-                        <Button onClick={handleSaveMaterial} isLoading={isSaving} className="w-full h-14 rounded-2xl font-black uppercase tracking-widest bg-orange-600">Enviar para Sala</Button>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-2">Tipo de Registro</label>
+                            <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={newOcc.category} onChange={e => setNewOcc({...newOcc, category: e.target.value as any})}><option value="elogio">Elogio / Superação</option><option value="atraso">Atraso na Entrada</option><option value="outros">Relato de Desenvolvimento</option></select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-gray-600 uppercase tracking-widest ml-2">O que aconteceu?</label>
+                            <textarea className="w-full bg-black/60 border border-white/10 rounded-[2rem] p-6 text-white font-bold outline-none focus:border-orange-500 transition-all min-h-[180px]" value={newOcc.description} onChange={e => setNewOcc({...newOcc, description: e.target.value})} placeholder="Descreva o momento aqui..." />
+                        </div>
+                        <Button onClick={handleSaveOccurrence} isLoading={isSaving} className="w-full h-16 rounded-2xl font-black uppercase tracking-widest bg-orange-600 shadow-2xl shadow-orange-900/40 mt-4">Salvar no Prontuário</Button>
                     </div>
                 </div>
             </div>

@@ -298,3 +298,16 @@ export interface SchoolClass {
   name: string;
   shift: 'morning' | 'afternoon';
 }
+
+export interface InfantilReport {
+  id: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  className: string;
+  createdAt: number;
+  updatedAt: number;
+  scores: Record<string, 'I' | 'ED' | 'CA' | ''>;
+  descriptiveText: Record<string, string>;
+}

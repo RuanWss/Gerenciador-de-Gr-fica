@@ -17,7 +17,7 @@ import {
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
     StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
-    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence, DailySchoolLog
+    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence, DailySchoolLog, InfantilReport
 } from '../types';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
@@ -39,6 +39,7 @@ const CORRECTIONS_COLLECTION = 'corrections';
 const PEI_COLLECTION = 'pei';
 const OCCURRENCES_COLLECTION = 'occurrences';
 const DAILY_LOGS_COLLECTION = 'daily_logs';
+const INFANTIL_REPORTS_COLLECTION = 'infantil_reports';
 
 const sanitizeForFirestore = (obj: any) => {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
@@ -498,4 +499,27 @@ export const updateSystemUserRoles = async (email: string, roles: UserRole[]): P
         const userDoc = snapshot.docs[0];
         await updateDoc(userDoc.ref, { roles: roles, role: roles[0] });
     }
+};
+
+export const saveInfantilReport = async (report: InfantilReport): Promise<void> => {
+    const { id, ...data } = report;
+    if (id) {
+        await setDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id), sanitizeForFirestore(data));
+    } else {
+        const newRef = doc(collection(db, INFANTIL_REPORTS_COLLECTION));
+        await setDoc(newRef, sanitizeForFirestore({ ...data, id: newRef.id }));
+    }
+};
+
+export const listenToInfantilReports = (teacherId: string, callback: (reports: InfantilReport[]) => void) => {
+    const q = query(collection(db, INFANTIL_REPORTS_COLLECTION), where("teacherId", "==", teacherId), orderBy("updatedAt", "desc"));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InfantilReport)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Erro Infantil Reports:", error);
+    });
+};
+
+export const deleteInfantilReport = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id));
 };
