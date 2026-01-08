@@ -306,6 +306,7 @@ export interface InfantilReport {
   teacherId: string;
   teacherName: string;
   className: string;
+  bimester: '1º BIMESTRE' | '2º BIMESTRE' | '3º BIMESTRE' | '4º BIMESTRE';
   createdAt: number;
   updatedAt: number;
   scores: Record<string, 'I' | 'ED' | 'CA' | ''>;

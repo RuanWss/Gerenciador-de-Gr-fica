@@ -19,10 +19,11 @@ import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, List, PlusCircle, X, 
   Trash2, FileUp, Download, Calendar, Baby, Smile, 
-  FileEdit, Save, ArrowLeft, Info, CheckCircle2, Users, UserPlus, UserPlus2, Check
+  FileEdit, Save, ArrowLeft, Info, CheckCircle2, Users, UserPlus, UserPlus2, Check, Clock
 } from 'lucide-react';
 
 const INFANTIL_CLASSES = ["JARDIM I", "JARDIM II"];
+const BIMESTERS = ["1º BIMESTRE", "2º BIMESTRE", "3º BIMESTRE", "4º BIMESTRE"] as const;
 
 const SKILLS_CONFIG = [
   {
@@ -100,6 +101,7 @@ export const InfantilDashboard: React.FC = () => {
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [reportStudentId, setReportStudentId] = useState('');
   const [reportClass, setReportClass] = useState('');
+  const [reportBimester, setReportBimester] = useState<typeof BIMESTERS[number]>('1º BIMESTRE');
   const [reportScores, setReportScores] = useState<Record<string, 'I' | 'ED' | 'CA' | ''>>({});
   const [reportDescriptive, setReportDescriptive] = useState<Record<string, string>>({});
 
@@ -194,6 +196,7 @@ export const InfantilDashboard: React.FC = () => {
         studentId: reportStudentId,
         studentName: student?.name || '',
         className: reportClass,
+        bimester: reportBimester,
         teacherId: user?.id || '',
         teacherName: user?.name || '',
         createdAt: editingReportId ? reports.find(r => r.id === editingReportId)?.createdAt || Date.now() : Date.now(),
@@ -249,6 +252,7 @@ export const InfantilDashboard: React.FC = () => {
     setEditingReportId(null);
     setReportStudentId('');
     setReportClass('');
+    setReportBimester('1º BIMESTRE');
     setReportScores({});
     setReportDescriptive({});
   };
@@ -257,6 +261,7 @@ export const InfantilDashboard: React.FC = () => {
     setEditingReportId(report.id);
     setReportStudentId(report.studentId);
     setReportClass(report.className);
+    setReportBimester(report.bimester || '1º BIMESTRE');
     setReportScores(report.scores);
     setReportDescriptive(report.descriptiveText);
     setIsCreatingReport(true);
@@ -463,15 +468,18 @@ export const InfantilDashboard: React.FC = () => {
                                     <button onClick={async () => { if(confirm("Excluir parecer?")) await deleteInfantilReport(report.id); }} className="text-gray-800 hover:text-red-500 transition-colors p-2"><Trash2 size={20}/></button>
                                 </div>
                                 <h3 className="text-xl font-black text-white mb-1 uppercase tracking-tight truncate">{report.studentName}</h3>
-                                <p className="text-xs text-orange-500 font-black uppercase mb-8 tracking-widest">{report.className}</p>
+                                <div className="flex flex-col gap-1 mb-6">
+                                  <p className="text-xs text-orange-500 font-black uppercase tracking-widest">{report.className}</p>
+                                  <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest flex items-center gap-2"><Clock size={10}/> {report.bimester || '1º BIMESTRE'}</p>
+                                </div>
                                 <div className="mt-auto pt-6 border-t border-white/5 flex gap-2">
                                     <button onClick={() => editReport(report)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all">Editar</button>
-                                    <button className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg shadow-orange-900/20">Baixar PDF</button>
+                                    <button className="flex-1 py-3 bg-orange-600 hover:bg-orange-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg shadow-orange-900/20">Visualizar</button>
                                 </div>
                             </div>
                         ))}
                         {reports.length === 0 && (
-                            <div className="col-span-full py-40 text-center opacity-30 font-black uppercase tracking-[0.4em] text-xl">Nenhum parecer cadastrado</div>
+                            <div className="col-span-full py-40 text-center opacity-30 font-black uppercase tracking-[0.4em] text-xl text-gray-600">Nenhum parecer cadastrado</div>
                         )}
                     </div>
                 </div>
@@ -489,7 +497,7 @@ export const InfantilDashboard: React.FC = () => {
                                 <FileEdit className="text-orange-500" size={32}/> Relatório Pedagógico Infantil
                             </h2>
                             
-                            <div className="grid grid-cols-2 gap-8">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Selecione a Turma</label>
                                     <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={reportClass} onChange={e => { setReportClass(e.target.value); setReportStudentId(''); }}>
@@ -502,6 +510,12 @@ export const InfantilDashboard: React.FC = () => {
                                     <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={reportStudentId} onChange={e => setReportStudentId(e.target.value)} disabled={!reportClass}>
                                         <option value="">-- Aluno --</option>
                                         {students.filter(s => s.className === reportClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Bimestre de Referência</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 appearance-none" value={reportBimester} onChange={e => setReportBimester(e.target.value as any)}>
+                                        {BIMESTERS.map(b => <option key={b} value={b}>{b}</option>)}
                                     </select>
                                 </div>
                             </div>

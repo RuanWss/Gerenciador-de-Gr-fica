@@ -578,7 +578,7 @@ export const PrintShopDashboard: React.FC = () => {
                     .logo { height: 70px; }
                     .header-info { text-align: right; }
                     .header-info h1 { margin: 0; font-size: 18px; color: #f97316; text-transform: uppercase; font-weight: 900; }
-                    .student-info { background: #fff7ed; padding: 15px; border-radius: 12px; border: 1px solid #ffedd5; display: grid; grid-template-cols: 2fr 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+                    .student-info { background: #fff7ed; padding: 15px; border-radius: 12px; border: 1px solid #ffedd5; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 15px; margin-bottom: 20px; }
                     .student-info div span { display: block; font-size: 9px; color: #9a3412; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
                     .student-info div strong { font-size: 12px; color: #431407; }
                     h3 { font-size: 11px; background: #f97316; color: white; padding: 6px 12px; border-radius: 4px; margin-bottom: 10px; }
@@ -598,7 +598,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" class="logo" />
                     <div class="header-info">
                         <h1>Relatório de Desenvolvimento Infantil</h1>
-                        <p>Educação Infantil - 2024</p>
+                        <p>Educação Infantil - 2024 • ${report.bimester || '1º BIMESTRE'}</p>
                     </div>
                 </div>
                 <div class="student-info">
@@ -752,8 +752,8 @@ export const PrintShopDashboard: React.FC = () => {
                                     <tr>
                                         <th className="p-8">Criança / Aluno</th>
                                         <th className="p-8">Turma</th>
+                                        <th className="p-8">Bimestre</th>
                                         <th className="p-8">Emitido por</th>
-                                        <th className="p-8">Última Atualização</th>
                                         <th className="p-8 text-center">Ação</th>
                                     </tr>
                                 </thead>
@@ -772,12 +772,14 @@ export const PrintShopDashboard: React.FC = () => {
                                                 <span className="bg-white/5 px-4 py-1.5 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest border border-white/5">{report.className}</span>
                                             </td>
                                             <td className="p-8">
+                                                <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">{report.bimester || '1º BIMESTRE'}</span>
+                                            </td>
+                                            <td className="p-8">
                                                 <div className="flex flex-col">
                                                     <span className="text-white font-bold text-sm uppercase">Prof. {report.teacherName}</span>
                                                     <span className="text-[9px] text-gray-600 font-black uppercase tracking-widest">Responsável</span>
                                                 </div>
                                             </td>
-                                            <td className="p-8 text-sm text-gray-500 font-bold">{new Date(report.updatedAt).toLocaleDateString()}</td>
                                             <td className="p-8 text-center">
                                                 <button 
                                                     onClick={() => handlePrintInfantilReport(report)}
