@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -82,7 +83,8 @@ import {
     GraduationCap,
     Hash,
     MoreHorizontal,
-    Info
+    Info,
+    Filter
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -168,6 +170,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [studentSearch, setStudentSearch] = useState('');
     const [occurrenceSearch, setOccurrenceSearch] = useState('');
     const [selectedStudentClass, setSelectedStudentClass] = useState<string>(GRID_CLASSES[0].id);
+
+    // Plans Filters
+    const [planSearch, setPlanSearch] = useState('');
+    const [planTypeFilter, setPlanTypeFilter] = useState<'semester' | 'daily' | 'ALL'>('semester');
 
     useEffect(() => {
         const unsubExams = listenToExams(setExams);
@@ -466,6 +472,16 @@ export const PrintShopDashboard: React.FC = () => {
     const filteredClassStudents = classStudents.filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()));
     const classPresentCount = classStudents.filter(s => presentStudentIds.has(s.id)).length;
     const classAbsentCount = classStudents.length - classPresentCount;
+
+    // --- Lógica de Planejamentos ---
+    const filteredPlans = plans.filter(p => {
+        const matchesSearch = 
+            p.className.toLowerCase().includes(planSearch.toLowerCase()) ||
+            p.subject.toLowerCase().includes(planSearch.toLowerCase()) ||
+            p.teacherName.toLowerCase().includes(planSearch.toLowerCase());
+        const matchesType = planTypeFilter === 'ALL' || p.type === planTypeFilter;
+        return matchesSearch && matchesType;
+    });
 
     return (
         <div className="flex h-full bg-[#0f0f10]">
@@ -832,12 +848,78 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'plans' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1><p className="text-gray-400">Acompanhamento dos planos de aula bimestrais.</p></header>
+                        <header className="mb-12">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
+                            <p className="text-gray-400">Acompanhamento dos planos de aula bimestrais.</p>
+                        </header>
+
+                        {/* Barra de Filtros para Planejamentos */}
+                        <div className="flex flex-col md:flex-row items-center gap-6 mb-12">
+                            <div className="relative group w-full md:w-96">
+                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-red-500 transition-colors" size={24} />
+                                <input 
+                                    className="w-full bg-[#18181b] border border-white/5 rounded-[2rem] py-5 pl-16 pr-8 text-white font-bold outline-none focus:border-red-600/50 transition-all text-sm shadow-xl" 
+                                    placeholder="Buscar por professor, disciplina ou turma..." 
+                                    value={planSearch} 
+                                    onChange={e => setPlanSearch(e.target.value)} 
+                                />
+                            </div>
+                            
+                            <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 shrink-0">
+                                <button 
+                                    onClick={() => setPlanTypeFilter('semester')} 
+                                    className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${planTypeFilter === 'semester' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    <Book size={14}/> Bimestrais
+                                </button>
+                                <button 
+                                    onClick={() => setPlanTypeFilter('daily')} 
+                                    className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${planTypeFilter === 'daily' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    <Calendar size={14}/> Diários
+                                </button>
+                                <button 
+                                    onClick={() => setPlanTypeFilter('ALL')} 
+                                    className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${planTypeFilter === 'ALL' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`}
+                                >
+                                    <Filter size={14}/> Todos
+                                </button>
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {plans.map(p => (
-                                <div key={p.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all"><div className="flex justify-between items-start mb-6"><div className="p-3 bg-red-600/10 text-red-500 rounded-xl"><BookOpenCheck size={24}/></div><span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{p.type}</span></div><h3 className="text-lg font-bold text-white uppercase mb-1">{p.className}</h3><p className="text-xs text-red-500 font-black uppercase tracking-widest mb-6">{p.subject}</p><div className="bg-black/20 p-4 rounded-xl text-[10px] text-gray-400 font-bold uppercase mb-8">Prof. {p.teacherName}</div><button className="w-full py-4 bg-white/5 hover:bg-white/10 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl border border-white/5">Visualizar</button></div>
+                            {filteredPlans.map(p => (
+                                <div key={p.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all flex flex-col group relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
+                                        <BookOpenCheck size={80} className="text-white" />
+                                    </div>
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="p-3 bg-red-600/10 text-red-500 rounded-xl">
+                                            <BookOpenCheck size={24}/>
+                                        </div>
+                                        <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${p.type === 'semester' ? 'bg-blue-600/20 text-blue-400' : 'bg-purple-600/20 text-purple-400'}`}>
+                                            {p.type === 'semester' ? 'Semestre' : 'Diário'}
+                                        </span>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white uppercase mb-1 tracking-tight">{p.className}</h3>
+                                    <p className="text-xs text-red-500 font-black uppercase tracking-widest mb-6 min-h-[2.5rem]">{p.subject}</p>
+                                    <div className="bg-black/20 p-5 rounded-2xl text-[10px] text-gray-400 font-bold uppercase mb-8 flex items-center gap-3 border border-white/5">
+                                        <UserCircle size={16} className="text-gray-600" />
+                                        <span>Prof. {p.teacherName}</span>
+                                    </div>
+                                    <button className="w-full py-4 bg-white/5 hover:bg-red-600 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl border border-white/5 transition-all mt-auto shadow-sm">
+                                        Visualizar Plano
+                                    </button>
+                                </div>
                             ))}
                         </div>
+                        
+                        {filteredPlans.length === 0 && (
+                            <div className="py-32 text-center bg-[#18181b] rounded-[3rem] border border-white/5 border-dashed">
+                                <BookOpen size={64} className="mx-auto text-gray-700 mb-4 opacity-20" />
+                                <p className="text-gray-500 font-black uppercase tracking-widest">Nenhum planejamento encontrado para os filtros aplicados.</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
