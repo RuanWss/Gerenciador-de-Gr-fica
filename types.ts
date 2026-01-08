@@ -121,6 +121,7 @@ export interface StaffMember {
   isTeacher?: boolean;
   isAdmin?: boolean;
   weeklyClasses?: number;
+  educationLevels?: string[];
 }
 
 export interface SystemConfig {

@@ -50,7 +50,7 @@ export const HRDashboard: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<Partial<StaffMember>>({
-        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: ''
+        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: []
     });
     const [createLogin, setCreateLogin] = useState(false);
     const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -103,7 +103,7 @@ export const HRDashboard: React.FC = () => {
     // Handlers
     const handleEdit = (staff: StaffMember) => {
         setEditingId(staff.id);
-        setFormData(staff);
+        setFormData({ ...staff, educationLevels: staff.educationLevels || [] });
         setCreateLogin(!!staff.email);
         setPhotoFile(null);
         setPhotoPreview(staff.photoUrl || null);
@@ -144,7 +144,8 @@ export const HRDashboard: React.FC = () => {
                 isTeacher: formData.isTeacher || false,
                 isAdmin: formData.isAdmin || false,
                 weeklyClasses: formData.weeklyClasses,
-                email: formData.email || ''
+                email: formData.email || '',
+                educationLevels: formData.educationLevels || []
             };
 
             const cleanData = JSON.parse(JSON.stringify(dataToSave));
@@ -191,7 +192,7 @@ export const HRDashboard: React.FC = () => {
 
     const resetForm = () => {
         setEditingId(null);
-        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '' });
+        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [] });
         setCreateLogin(false);
         setPhotoFile(null);
         setPhotoPreview(null);
@@ -370,6 +371,30 @@ export const HRDashboard: React.FC = () => {
                                                         <span className="text-xs font-black text-gray-300 uppercase tracking-widest">Admin</span>
                                                     </label>
                                                 </div>
+
+                                                <div className="pt-4 border-t border-white/5 space-y-4">
+                                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">Nível de Ensino</label>
+                                                    <div className="flex flex-wrap gap-6">
+                                                        {['Ed. Infantil', 'EFAI', 'EFAF', 'Médio'].map(level => (
+                                                            <label key={level} className="flex items-center gap-3 cursor-pointer group">
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    className="w-5 h-5 rounded border-white/10 bg-black text-red-600 focus:ring-red-500" 
+                                                                    checked={(formData.educationLevels || []).includes(level)}
+                                                                    onChange={(e) => {
+                                                                        const current = formData.educationLevels || [];
+                                                                        const updated = e.target.checked 
+                                                                            ? [...current, level]
+                                                                            : current.filter(l => l !== level);
+                                                                        setFormData({...formData, educationLevels: updated});
+                                                                    }}
+                                                                />
+                                                                <span className="text-xs font-black text-gray-300 uppercase tracking-widest group-hover:text-white transition-colors">{level}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
                                                 <div className="pt-4 border-t border-white/5">
                                                     <label className="flex items-center gap-3 cursor-pointer mb-6">
                                                         <input type="checkbox" className="w-5 h-5 rounded border-white/10 bg-black text-red-600 focus:ring-red-500" checked={createLogin} onChange={e => setCreateLogin(e.target.checked)} />
