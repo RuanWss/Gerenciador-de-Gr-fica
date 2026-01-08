@@ -9,7 +9,9 @@ import {
     listenToStaffLogs,
     createSystemUserAuth,
     updateSystemUserRoles,
-    getDailySchoolLog
+    getDailySchoolLog,
+    getMonthlySchoolLogs,
+    getMonthlyStaffLogs
 } from '../services/firebaseService';
 import { StaffMember, StaffAttendanceLog, UserRole, DailySchoolLog } from '../types';
 import { Button } from '../components/Button';
@@ -35,7 +37,8 @@ import {
     UserX,
     Star,
     Repeat,
-    ArrowRight
+    ArrowRight,
+    Download
 } from 'lucide-react';
 
 export const HRDashboard: React.FC = () => {
@@ -56,8 +59,10 @@ export const HRDashboard: React.FC = () => {
     // Attendance/Substitutions State
     const [logs, setLogs] = useState<StaffAttendanceLog[]>([]);
     const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+    const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7));
     const [search, setSearch] = useState('');
-    const [dailyLogData, setDailyLogData] = useState<DailySchoolLog | null>(null);
+    const [monthlyLogs, setMonthlyLogs] = useState<DailySchoolLog[]>([]);
+    const [monthlyStaffLogs, setMonthlyStaffLogs] = useState<StaffAttendanceLog[]>([]);
     const [isLoadingSub, setIsLoadingSub] = useState(false);
 
     useEffect(() => {
@@ -75,15 +80,19 @@ export const HRDashboard: React.FC = () => {
             return () => unsub();
         }
         if (activeTab === 'substitutions') {
-            loadSubstitutions();
+            loadMonthlySubstitutions();
         }
-    }, [activeTab, dateFilter]);
+    }, [activeTab, dateFilter, monthFilter]);
 
-    const loadSubstitutions = async () => {
+    const loadMonthlySubstitutions = async () => {
         setIsLoadingSub(true);
         try {
-            const log = await getDailySchoolLog(dateFilter);
-            setDailyLogData(log);
+            const [logs, staffLogs] = await Promise.all([
+                getMonthlySchoolLogs(monthFilter),
+                getMonthlyStaffLogs(monthFilter)
+            ]);
+            setMonthlyLogs(logs);
+            setMonthlyStaffLogs(staffLogs);
         } catch (e) {
             console.error(e);
         } finally {
@@ -209,11 +218,77 @@ export const HRDashboard: React.FC = () => {
         document.body.removeChild(link);
     };
 
+    const handlePrintPDF = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const monthName = new Date(monthFilter + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+        
+        const totalAbsences = monthlyLogs.reduce((acc, log) => acc + Object.values(log.teacherAttendance).filter(att => !att.present).length, 0);
+        const totalExtras = monthlyLogs.reduce((acc, log) => acc + (log.extraClasses?.length || 0), 0);
+
+        const absenceRows = monthlyLogs.flatMap(log => 
+            Object.entries(log.teacherAttendance)
+                .filter(([_, att]) => !att.present)
+                .map(([name, att]) => `<tr><td>${log.date}</td><td>${name}</td><td>${att.substitute || '-'}</td></tr>`)
+        ).join('');
+
+        const extraRows = monthlyLogs.flatMap(log => 
+            (log.extraClasses || []).map(ex => `<tr><td>${log.date}</td><td>${ex.professor}</td><td>${ex.subject}</td><td>${ex.className}</td></tr>`)
+        ).join('');
+
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Relatório Mensal - ${monthFilter}</title>
+                <style>
+                    body { font-family: sans-serif; padding: 40px; color: #1f2937; }
+                    .header { border-bottom: 3px solid #dc2626; padding-bottom: 20px; margin-bottom: 30px; }
+                    h1 { color: #dc2626; text-transform: uppercase; margin: 0; font-size: 24px; }
+                    .summary { display: flex; gap: 40px; margin-bottom: 40px; background: #f3f4f6; padding: 20px; border-radius: 8px; }
+                    .stat { flex: 1; }
+                    .stat p { margin: 0; font-size: 12px; font-weight: bold; color: #6b7280; text-transform: uppercase; }
+                    .stat h3 { margin: 5px 0 0; font-size: 32px; color: #111827; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+                    th { background: #f9fafb; text-align: left; padding: 12px; font-size: 10px; border: 1px solid #e5e7eb; text-transform: uppercase; }
+                    td { padding: 12px; font-size: 11px; border: 1px solid #e5e7eb; }
+                    h2 { font-size: 16px; border-left: 4px solid #dc2626; padding-left: 10px; margin: 30px 0 15px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>Relatório Mensal de RH - ${monthName}</h1>
+                </div>
+                <div class="summary">
+                    <div class="stat"><p>Total de Faltas</p><h3>${totalAbsences}</h3></div>
+                    <div class="stat"><p>Aulas Extras</p><h3>${totalExtras}</h3></div>
+                </div>
+                <h2>Relação de Ausências</h2>
+                <table>
+                    <thead><tr><th>Data</th><th>Professor</th><th>Substituto</th></tr></thead>
+                    <tbody>${absenceRows || '<tr><td colspan="3">Nenhum registro.</td></tr>'}</tbody>
+                </table>
+                <h2>Relação de Aulas Extras</h2>
+                <table>
+                    <thead><tr><th>Data</th><th>Professor</th><th>Disciplina</th><th>Turma</th></tr></thead>
+                    <tbody>${extraRows || '<tr><td colspan="4">Nenhum registro.</td></tr>'}</tbody>
+                </table>
+                <script>window.onload = () => { window.print(); window.close(); }</script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+
     const filteredStaff = staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.role.toLowerCase().includes(search.toLowerCase()));
 
-    const absentTeachers = dailyLogData 
-        ? Object.entries(dailyLogData.teacherAttendance).filter(([_, data]) => !data.present)
-        : [];
+    const totalMonthlyAbsences = monthlyLogs.reduce((acc, log) => {
+        return acc + Object.values(log.teacherAttendance).filter(att => !att.present).length;
+    }, 0);
+
+    const totalMonthlyExtras = monthlyLogs.reduce((acc, log) => {
+        return acc + (log.extraClasses?.length || 0);
+    }, 0);
 
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
@@ -456,60 +531,67 @@ export const HRDashboard: React.FC = () => {
                                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Substituições e Extras</h1>
                                 <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Controle financeiro de ausências e aulas excedentes</p>
                             </div>
-                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
-                                <Calendar className="text-red-600" size={18} />
-                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
+                            <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                                <Button onClick={handlePrintPDF} className="bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl px-6 py-3 shadow-lg shadow-red-900/20">
+                                    <Download size={16} className="mr-2"/> Baixar em PDF
+                                </Button>
+                                <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
+                                    <Calendar className="text-red-600" size={18} />
+                                    <input type="month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
+                                </div>
                             </div>
                         </header>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
                             <div className="bg-[#18181b] p-10 rounded-[3rem] border border-white/5 shadow-xl relative overflow-hidden group">
                                 <UserX className="absolute -right-4 -bottom-4 text-red-600/10 group-hover:scale-110 transition-transform duration-700" size={120} />
-                                <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Total de Faltas/Atestados</p>
-                                <h3 className="text-5xl font-black text-red-600">{absentTeachers.length}</h3>
-                                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[9px] font-black uppercase tracking-widest">Baseado no Livro Diário</div>
+                                <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Total Mensal de Faltas</p>
+                                <h3 className="text-5xl font-black text-red-600">{totalMonthlyAbsences}</h3>
+                                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[9px] font-black uppercase tracking-widest">Compilado do mês selecionado</div>
                             </div>
                             <div className="bg-[#18181b] p-10 rounded-[3rem] border border-white/5 shadow-xl relative overflow-hidden group">
                                 <Star className="absolute -right-4 -bottom-4 text-green-600/10 group-hover:scale-110 transition-transform duration-700" size={120} />
-                                <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Total de Aulas Extras</p>
-                                <h3 className="text-5xl font-black text-green-500">{dailyLogData?.extraClasses?.length || 0}</h3>
-                                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[9px] font-black uppercase tracking-widest">Pagas em folha complementar</div>
+                                <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Total Mensal de Aulas Extras</p>
+                                <h3 className="text-5xl font-black text-green-500">{totalMonthlyExtras}</h3>
+                                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[9px] font-black uppercase tracking-widest">Para pagamento em folha</div>
                             </div>
                         </div>
 
                         <div className="space-y-12">
                             <section>
-                                <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-red-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Ausências e Substitutos</h2></div>
+                                <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-red-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Relação Detalhada de Ausências</h2></div>
                                 <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
                                     <table className="w-full text-left">
                                         <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
                                             <tr>
+                                                <th className="p-8">Data</th>
                                                 <th className="p-8">Professor Ausente</th>
-                                                <th className="p-8">Situação</th>
                                                 <th className="p-8">Substituto / Monitor</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
-                                            {absentTeachers.map(([name, data]) => (
-                                                <tr key={name} className="hover:bg-white/[0.02]">
-                                                    <td className="p-8 font-black text-white uppercase text-sm">{name}</td>
-                                                    <td className="p-8">
-                                                        <span className="bg-red-600/10 text-red-500 border border-red-600/20 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">FALTA REGISTRADA</span>
-                                                    </td>
-                                                    <td className="p-8">
-                                                        {data.substitute ? (
-                                                            <div className="flex items-center gap-3 text-green-500">
-                                                                <ArrowRight size={14}/>
-                                                                <span className="font-black text-xs uppercase tracking-widest">{data.substitute}</span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-gray-700 text-xs font-bold uppercase italic">Sem substituição informada</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {absentTeachers.length === 0 && (
-                                                <tr><td colSpan={3} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Sem ausências registradas hoje</td></tr>
+                                            {monthlyLogs.flatMap(log => 
+                                                Object.entries(log.teacherAttendance)
+                                                    .filter(([_, att]) => !att.present)
+                                                    .map(([name, att]) => (
+                                                        <tr key={log.date + name} className="hover:bg-white/[0.02]">
+                                                            <td className="p-8 text-xs font-bold text-gray-500">{new Date(log.date + 'T12:00:00').toLocaleDateString()}</td>
+                                                            <td className="p-8 font-black text-white uppercase text-sm">{name}</td>
+                                                            <td className="p-8">
+                                                                {att.substitute ? (
+                                                                    <div className="flex items-center gap-3 text-green-500">
+                                                                        <ArrowRight size={14}/>
+                                                                        <span className="font-black text-xs uppercase tracking-widest">{att.substitute}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-gray-700 text-xs font-bold uppercase italic">Sem substituição</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                            )}
+                                            {monthlyLogs.length === 0 && (
+                                                <tr><td colSpan={3} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Sem ausências para este mês</td></tr>
                                             )}
                                         </tbody>
                                     </table>
@@ -517,28 +599,32 @@ export const HRDashboard: React.FC = () => {
                             </section>
 
                             <section>
-                                <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-green-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Aulas Extras (Horas Excedentes)</h2></div>
+                                <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-green-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Relação Detalhada de Extras</h2></div>
                                 <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
                                     <table className="w-full text-left">
                                         <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
                                             <tr>
+                                                <th className="p-8">Data</th>
                                                 <th className="p-8">Professor</th>
                                                 <th className="p-8">Disciplina</th>
-                                                <th className="p-8">Turma Atendida</th>
+                                                <th className="p-8">Turma</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
-                                            {(dailyLogData?.extraClasses || []).map((ex, i) => (
-                                                <tr key={i} className="hover:bg-white/[0.02]">
-                                                    <td className="p-8 font-black text-white uppercase text-sm">{ex.professor}</td>
-                                                    <td className="p-8 text-gray-400 font-bold uppercase text-xs tracking-widest">{ex.subject}</td>
-                                                    <td className="p-8">
-                                                        <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest">{ex.className}</span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {(dailyLogData?.extraClasses || []).length === 0 && (
-                                                <tr><td colSpan={3} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Sem horas extras registradas hoje</td></tr>
+                                            {monthlyLogs.flatMap(log => 
+                                                (log.extraClasses || []).map((ex, i) => (
+                                                    <tr key={log.date + ex.professor + i} className="hover:bg-white/[0.02]">
+                                                        <td className="p-8 text-xs font-bold text-gray-500">{new Date(log.date + 'T12:00:00').toLocaleDateString()}</td>
+                                                        <td className="p-8 font-black text-white uppercase text-sm">{ex.professor}</td>
+                                                        <td className="p-8 text-gray-400 font-bold uppercase text-xs tracking-widest">{ex.subject}</td>
+                                                        <td className="p-8">
+                                                            <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest">{ex.className}</span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                            {monthlyLogs.length === 0 && (
+                                                <tr><td colSpan={4} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Sem horas extras para este mês</td></tr>
                                             )}
                                         </tbody>
                                     </table>

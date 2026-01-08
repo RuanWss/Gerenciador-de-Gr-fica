@@ -9,7 +9,8 @@ import {
 } from 'firebase/auth';
 import { 
     collection, addDoc, updateDoc, deleteDoc, doc, getDocs, getDoc, 
-    query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch 
+    query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch,
+    startAt, endAt
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from '@firebase/storage';
 import { 
@@ -202,6 +203,26 @@ export const getDailySchoolLog = async (date: string): Promise<DailySchoolLog | 
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) return { id: docSnap.id, ...docSnap.data() } as DailySchoolLog;
     return null;
+};
+
+export const getMonthlySchoolLogs = async (month: string): Promise<DailySchoolLog[]> => {
+    const q = query(
+        collection(db, DAILY_LOGS_COLLECTION),
+        where("date", ">=", `${month}-01`),
+        where("date", "<=", `${month}-31`)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DailySchoolLog));
+};
+
+export const getMonthlyStaffLogs = async (month: string): Promise<StaffAttendanceLog[]> => {
+    const q = query(
+        collection(db, STAFF_LOGS_COLLECTION),
+        where("dateString", ">=", `${month}-01`),
+        where("dateString", "<=", `${month}-31`)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
 };
 
 export const saveDailySchoolLog = async (log: DailySchoolLog): Promise<void> => {

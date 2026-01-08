@@ -26,7 +26,8 @@ import {
     deleteStudent,
     getDailySchoolLog,
     saveDailySchoolLog,
-    getLessonPlans
+    getLessonPlans,
+    saveStudent
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -90,7 +91,10 @@ import {
     Star,
     PlayCircle,
     Layers,
-    FileDown
+    FileDown,
+    UserPlus,
+    UserPlus2,
+    Check
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -183,6 +187,15 @@ export const PrintShopDashboard: React.FC = () => {
 
     // Extra Classes Management
     const [newExtra, setNewExtra] = useState<ExtraClassRecord>({ professor: '', subject: '', className: '' });
+
+    // Enrollment State
+    const [showEnrollmentModal, setShowEnrollmentModal] = useState(false);
+    const [enrollmentType, setEnrollmentType] = useState<'individual' | 'bulk'>('individual');
+    const [isEnrolling, setIsEnrolling] = useState(false);
+    const [enrollFormData, setEnrollFormData] = useState<Partial<Student>>({
+        id: '', name: '', classId: '', className: '', isAEE: false, disorder: ''
+    });
+    const [bulkList, setBulkList] = useState('');
 
     useEffect(() => {
         const unsubExams = listenToExams(setExams);
@@ -287,6 +300,45 @@ export const PrintShopDashboard: React.FC = () => {
 
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
+    };
+
+    const handleEnroll = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsEnrolling(true);
+        try {
+            if (enrollmentType === 'individual') {
+                if (!enrollFormData.id || !enrollFormData.name || !enrollFormData.classId) return alert("Preencha todos os campos obrigatórios.");
+                const classInfo = GRID_CLASSES.find(c => c.id === enrollFormData.classId);
+                await saveStudent({
+                    ...enrollFormData,
+                    className: classInfo?.name || enrollFormData.className || '',
+                } as Student);
+                alert("Aluno matriculado com sucesso!");
+            } else {
+                if (!enrollFormData.classId || !bulkList.trim()) return alert("Selecione a turma e forneça a lista de nomes.");
+                const names = bulkList.split('\n').map(n => n.trim()).filter(n => n);
+                const classInfo = GRID_CLASSES.find(c => c.id === enrollFormData.classId);
+                
+                for (const name of names) {
+                    const id = Math.random().toString(36).substring(7).toUpperCase();
+                    await saveStudent({
+                        id,
+                        name: name.toUpperCase(),
+                        classId: enrollFormData.classId,
+                        className: classInfo?.name || '',
+                        isAEE: false
+                    } as Student);
+                }
+                alert(`${names.length} alunos matriculados em lote!`);
+            }
+            setShowEnrollmentModal(false);
+            setEnrollFormData({ id: '', name: '', classId: '', className: '', isAEE: false, disorder: '' });
+            setBulkList('');
+        } catch (err) {
+            alert("Erro ao realizar matrícula.");
+        } finally {
+            setIsEnrolling(false);
+        }
     };
 
     const toggleAdminPresence = (name: string) => {
@@ -660,124 +712,6 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'daily_log' && (
-                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
-                        <header className="mb-12 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 bg-[#18181b] p-10 rounded-[3rem] border border-white/10 shadow-2xl">
-                            <div className="flex items-center gap-8"><div className="h-24 w-24 rounded-[2rem] bg-red-600 flex items-center justify-center shadow-2xl shadow-red-900/40"><ClipboardCheck size={48} className="text-white" /></div><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Livro Diário</h1><p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Registro Oficial da Gestão Escolar</p></div></div>
-                            <div className="flex items-center gap-4 w-full xl:w-auto"><div className="bg-black/40 p-4 rounded-3xl border border-white/5 flex items-center gap-4 px-8 shadow-inner flex-1 xl:flex-none justify-center"><Calendar className="text-red-500" size={24}/><input type="date" className="bg-transparent border-none text-white font-black text-xl outline-none cursor-pointer" value={logDate} onChange={e => setLogDate(e.target.value)}/></div><Button onClick={handleSaveDailyLog} isLoading={isSavingLog} className="bg-green-600 px-10 rounded-3xl h-20 font-black uppercase text-xs tracking-widest shadow-2xl shadow-green-900/20 hover:scale-105 transition-transform"><Save size={24} className="mr-3"/> Salvar Relatório</Button></div>
-                        </header>
-                        {dailyLog ? (
-                            <div className="space-y-12 pb-32">
-                                <section>
-                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-red-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Equipe Administrativa</h2></div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">{ADMIN_GROUPS.map(group => (<div key={group.role} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-xl overflow-hidden relative group"><h3 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-8 border-b border-white/5 pb-6">{group.role}</h3><div className="space-y-10">{group.names.map(name => { const att = dailyLog.adminAttendance[name] || { present: true, shifts: ['matutino'] }; return (<div key={name} className="flex items-center justify-between group/item"><div className="flex flex-col"><span className={`text-base font-black uppercase tracking-tight transition-colors ${att.present ? 'text-white' : 'text-red-500 line-through opacity-50'}`}>{name}</span><div className="flex gap-4 mt-3">{['matutino', 'vespertino'].map(s => (<label key={s} className="flex items-center gap-2 cursor-pointer group"><input type="checkbox" className="hidden" checked={att.shifts.includes(s)} onChange={() => toggleAdminShift(name, s)} /><div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-all ${att.shifts.includes(s) ? 'bg-red-600 border-red-500 shadow-lg shadow-red-900/40' : 'border-white/10 bg-black/40'}`}>{att.shifts.includes(s) && <CheckCircle2 size={14} className="text-white"/>}</div><span className={`text-[9px] font-black uppercase tracking-widest ${att.shifts.includes(s) ? 'text-white' : 'text-gray-600'}`}>{s}</span></label>))}</div></div><button onClick={() => toggleAdminPresence(name)} className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all ${att.present ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20 shadow-2xl shadow-red-900/40'}`}>{att.present ? <UserCheck size={28}/> : <UserMinus size={28}/>}</button></div>);})}</div></div>))}</div>
-                                </section>
-
-                                <section>
-                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-blue-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Corpo Docente (Substituições)</h2></div>
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                                        <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
-                                            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-10 flex items-center gap-4"><Sun size={28} className="text-yellow-500"/> Turno Matutino</h3>
-                                            <div className="space-y-6">{getTeachersByShift('morning').map(prof => {
-                                                const att = dailyLog.teacherAttendance[prof] || { present: true };
-                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-500" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
-                                            })}</div>
-                                        </div>
-                                        <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
-                                            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-10 flex items-center gap-4"><Moon size={28} className="text-blue-500"/> Turno Vespertino</h3>
-                                            <div className="space-y-6">{getTeachersByShift('afternoon').map(prof => {
-                                                const att = dailyLog.teacherAttendance[prof] || { present: true };
-                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-500" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
-                                            })}</div>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section>
-                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-green-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Registro de Aulas Extras</h2></div>
-                                    <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.professor} onChange={e => setNewExtra({...newExtra, professor: e.target.value})}>
-                                                <option value="">Selecione o Professor</option>
-                                                {staff.filter(s => s.isTeacher).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                                            </select>
-                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.subject} onChange={e => setNewExtra({...newExtra, subject: e.target.value})}>
-                                                <option value="">Selecione a Disciplina</option>
-                                                {[...EFAF_SUBJECTS, ...EM_SUBJECTS].sort().map(s => <option key={s} value={s}>{s}</option>)}
-                                            </select>
-                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.className} onChange={e => setNewExtra({...newExtra, className: e.target.value})}>
-                                                <option value="">Selecione a Turma</option>
-                                                {GRID_CLASSES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                            </select>
-                                            <Button onClick={addExtraClass} className="bg-green-600 h-14 rounded-xl font-black uppercase text-xs tracking-widest"><Plus size={18} className="mr-2"/> Adicionar Aula</Button>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {(dailyLog.extraClasses || []).map((ex, idx) => (
-                                                <div key={idx} className="bg-black/20 p-4 rounded-xl border border-white/5 flex items-center justify-between">
-                                                    <div className="flex gap-6 items-center">
-                                                        <span className="text-white font-black uppercase text-sm">{ex.professor}</span>
-                                                        <span className="text-gray-500 font-bold text-[10px] uppercase tracking-widest">{ex.subject}</span>
-                                                        <span className="bg-green-500/10 text-green-500 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-500/20">{ex.className}</span>
-                                                    </div>
-                                                    <button onClick={() => removeExtraClass(idx)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={16}/></button>
-                                                </div>
-                                            ))}
-                                            {(dailyLog.extraClasses || []).length === 0 && <p className="text-center text-gray-700 py-4 font-bold text-xs uppercase opacity-50 tracking-widest">Nenhuma aula extra registrada para hoje.</p>}
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section><div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-purple-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Relatório Geral da Unidade</h2></div><div className="bg-[#18181b] border border-white/5 rounded-[3.5rem] p-12 shadow-2xl relative overflow-hidden"><textarea className="w-full bg-black/20 border border-white/10 rounded-[2.5rem] p-10 text-white font-medium text-lg outline-none focus:border-purple-600 transition-all min-h-[300px]" placeholder="Relate as ocorrências gerais do prédio..." value={dailyLog.generalObservations} onChange={e => setDailyLog({...dailyLog, generalObservations: e.target.value})} /></div></section>
-                                
-                                <section>
-                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-yellow-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Ocorrências de Alunos (Hoje)</h2></div>
-                                    <div className="space-y-6">
-                                        {occurrences.filter(o => o.date === logDate).length > 0 ? occurrences.filter(o => o.date === logDate).map(occ => (
-                                            <div key={occ.id} className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl flex gap-8 items-start relative overflow-hidden">
-                                                <div className={`h-16 w-16 rounded-2xl flex items-center justify-center shrink-0 ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}><AlertCircle size={32}/></div>
-                                                <div className="flex-1">
-                                                    <div className="flex justify-between mb-2"><h4 className="text-xl font-black text-white uppercase">{occ.studentName} <span className="text-gray-600 ml-2">({occ.studentClass})</span></h4><span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Prof. {occ.reportedBy}</span></div>
-                                                    <p className="text-gray-400 text-lg italic bg-black/20 p-6 rounded-2xl border border-white/5">"{occ.description}"</p>
-                                                </div>
-                                            </div>
-                                        )) : <p className="text-center text-gray-600 py-10 font-bold uppercase text-xs tracking-widest opacity-40">Nenhuma ocorrência registrada por professores hoje.</p>}
-                                    </div>
-                                </section>
-                            </div>
-                        ) : (<div className="py-40 text-center animate-pulse"><Loader2 size={40} className="text-red-600 animate-spin mx-auto mb-4"/><p className="text-white font-black uppercase tracking-[0.3em]">Carregando Livro...</p></div>)}
-                    </div>
-                )}
-
-                {activeTab === 'schedule' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12 flex flex-col lg:flex-row justify-between items-center gap-6">
-                            <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Grade Horária</h1><p className="text-gray-400">Distribuição semanal de aulas.</p></div>
-                            <div className="flex flex-wrap gap-4 items-center">
-                                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10"><button onClick={() => setScheduleShiftTab('morning')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'morning' ? 'bg-yellow-600 text-white' : 'text-gray-500'}`}><Sun size={14}/> Matutino</button><button onClick={() => setScheduleShiftTab('afternoon')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'afternoon' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}><Moon size={14}/> Vespertino</button></div>
-                                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">{[1,2,3,4,5].map(d => (<button key={d} onClick={() => setSelectedDay(d)} className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedDay === d ? 'bg-red-600 text-white' : 'text-gray-500'}`}>{['Seg', 'Ter', 'Qua', 'Qui', 'Sex'][d-1]}</button>))}</div>
-                            </div>
-                        </header>
-                        <div className="bg-[#18181b] rounded-[3rem] border border-white/5 overflow-x-auto shadow-2xl custom-scrollbar">
-                            <table className="w-full text-left min-w-[1000px]">
-                                <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5">
-                                    <tr><th className="p-8 sticky left-0 bg-[#18181b] z-10">Horário</th>{GRID_CLASSES.filter(c => c.shift === scheduleShiftTab).map(c => <th key={c.id} className="p-8">{c.name}</th>)}</tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {(scheduleShiftTab === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => (
-                                        <tr key={slot.id} className="hover:bg-white/[0.02]">
-                                            <td className="p-8 sticky left-0 bg-[#18181b] z-10"><div className="text-white font-bold text-sm">{slot.label}</div><div className="text-[10px] text-gray-500 font-bold uppercase">{slot.start} - {slot.end}</div></td>
-                                            {GRID_CLASSES.filter(c => c.shift === scheduleShiftTab).map(cls => {
-                                                const entry = schedule.find(s => s.classId === cls.id && s.slotId === slot.id && s.dayOfWeek === selectedDay);
-                                                return (<td key={cls.id} className="p-8">{entry ? (<div className="group relative bg-black/40 p-4 rounded-2xl border border-white/5"><div className="text-red-500 font-black text-[10px] uppercase mb-1">{entry.subject}</div><div className="text-[9px] text-gray-400 font-bold uppercase truncate">{entry.professor}</div><button onClick={() => handleDeleteSchedule(entry.id)} className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button></div>) : (<button onClick={() => { setEditingCell({classId: cls.id, slotId: slot.id}); setShowScheduleModal(true); }} className="w-full p-4 rounded-2xl border-2 border-dashed border-white/5 text-gray-700 hover:text-red-600 transition-all flex items-center justify-center"><Plus size={20}/></button>)}</td>);
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-8">
@@ -785,14 +719,24 @@ export const PrintShopDashboard: React.FC = () => {
                                 <h1 className="text-5xl font-black text-white uppercase tracking-tighter leading-none mb-4">Gestão de Alunos</h1>
                                 <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em]">Controle de Matrícula e Frequência</p>
                             </div>
-                            <div className="relative group w-full md:w-96">
-                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-red-500 transition-colors" size={24} />
-                                <input 
-                                    className="w-full bg-[#18181b] border border-white/5 rounded-[2rem] py-6 pl-16 pr-8 text-white font-bold outline-none focus:border-red-600/50 transition-all text-lg shadow-2xl" 
-                                    placeholder="Buscar aluno na turma..." 
-                                    value={studentSearch} 
-                                    onChange={e => setStudentSearch(e.target.value)} 
-                                />
+                            <div className="flex flex-col gap-4 w-full md:w-auto">
+                                <div className="flex gap-2 justify-end">
+                                    <Button onClick={() => { setEnrollmentType('individual'); setShowEnrollmentModal(true); }} className="bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl px-6 py-3 shadow-lg shadow-red-900/20">
+                                        <UserPlus size={16} className="mr-2"/> Matrícula Individual
+                                    </Button>
+                                    <Button onClick={() => { setEnrollmentType('bulk'); setShowEnrollmentModal(true); }} className="bg-white/10 hover:bg-white/20 text-white font-black uppercase text-[10px] tracking-widest rounded-xl px-6 py-3 border border-white/10">
+                                        <UserPlus2 size={16} className="mr-2"/> Matrícula em Lote
+                                    </Button>
+                                </div>
+                                <div className="relative group w-full md:w-96">
+                                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-red-500 transition-colors" size={24} />
+                                    <input 
+                                        className="w-full bg-[#18181b] border border-white/5 rounded-[2rem] py-6 pl-16 pr-8 text-white font-bold outline-none focus:border-red-600/50 transition-all text-lg shadow-2xl" 
+                                        placeholder="Buscar aluno na turma..." 
+                                        value={studentSearch} 
+                                        onChange={e => setStudentSearch(e.target.value)} 
+                                    />
+                                </div>
                             </div>
                         </header>
 
@@ -932,174 +876,195 @@ export const PrintShopDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
+                
+                {activeTab === 'daily_log' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
+                        <header className="mb-12 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 bg-[#18181b] p-10 rounded-[3rem] border border-white/10 shadow-2xl">
+                            <div className="flex items-center gap-8"><div className="h-24 w-24 rounded-[2rem] bg-red-600 flex items-center justify-center shadow-2xl shadow-red-900/40"><ClipboardCheck size={48} className="text-white" /></div><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Livro Diário</h1><p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Registro Oficial da Gestão Escolar</p></div></div>
+                            <div className="flex items-center gap-4 w-full xl:w-auto"><div className="bg-black/40 p-4 rounded-3xl border border-white/5 flex items-center gap-4 px-8 shadow-inner flex-1 xl:flex-none justify-center"><Calendar className="text-red-500" size={24}/><input type="date" className="bg-transparent border-none text-white font-black text-xl outline-none cursor-pointer" value={logDate} onChange={e => setLogDate(e.target.value)}/></div><Button onClick={handleSaveDailyLog} isLoading={isSavingLog} className="bg-green-600 px-10 rounded-3xl h-20 font-black uppercase text-xs tracking-widest shadow-2xl shadow-green-900/20 hover:scale-105 transition-transform"><Save size={24} className="mr-3"/> Salvar Relatório</Button></div>
+                        </header>
+                        {dailyLog ? (
+                            <div className="space-y-12 pb-32">
+                                <section>
+                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-red-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Equipe Administrativa</h2></div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">{ADMIN_GROUPS.map(group => (<div key={group.role} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-xl overflow-hidden relative group"><h3 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-8 border-b border-white/5 pb-6">{group.role}</h3><div className="space-y-10">{group.names.map(name => { const att = dailyLog.adminAttendance[name] || { present: true, shifts: ['matutino'] }; return (<div key={name} className="flex items-center justify-between group/item"><div className="flex flex-col"><span className={`text-base font-black uppercase tracking-tight transition-colors ${att.present ? 'text-white' : 'text-red-500 line-through opacity-50'}`}>{name}</span><div className="flex gap-4 mt-3">{['matutino', 'vespertino'].map(s => (<label key={s} className="flex items-center gap-2 cursor-pointer group"><input type="checkbox" className="hidden" checked={att.shifts.includes(s)} onChange={() => toggleAdminShift(name, s)} /><div className={`w-6 h-6 rounded-lg border flex items-center justify-center transition-all ${att.shifts.includes(s) ? 'bg-red-600 border-red-500 shadow-lg shadow-red-900/40' : 'border-white/10 bg-black/40'}`}>{att.shifts.includes(s) && <CheckCircle2 size={14} className="text-white"/>}</div><span className={`text-[9px] font-black uppercase tracking-widest ${att.shifts.includes(s) ? 'text-white' : 'text-gray-600'}`}>{s}</span></label>))}</div></div><button onClick={() => toggleAdminPresence(name)} className={`h-14 w-14 rounded-2xl flex items-center justify-center transition-all ${att.present ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20 shadow-2xl shadow-red-900/40'}`}>{att.present ? <UserCheck size={28}/> : <UserMinus size={28}/>}</button></div>);})}</div></div>))}</div>
+                                </section>
 
-                {activeTab === 'reports' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        {!isViewingDailyOccReport ? (
-                            <div className="max-w-4xl">
-                                <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Relatórios da Gestão</h1><p className="text-gray-400">Acesse dados consolidados para auditoria e coordenação.</p></header>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl flex flex-col relative group cursor-pointer hover:border-red-600/30 transition-all" onClick={() => setIsViewingDailyOccReport(true)}>
-                                        <div className="flex items-start gap-4 mb-6"><div className="h-14 w-14 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500"><ClipboardCheck size={32}/></div><div className="flex-1"><h3 className="text-xl font-bold text-white leading-tight">Histórico Consolidado</h3><p className="text-xs text-gray-500 mt-2 leading-relaxed opacity-60">Visualização total do Livro Diário de qualquer data escolhida.</p></div></div>
-                                        <div className="mt-auto pt-10"><div className="w-full py-5 bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl flex items-center justify-center gap-2 transition-all"><History size={16}/> Abrir Consulta Diária</div></div>
-                                    </div>
-                                    <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl flex flex-col opacity-50"><div className="flex items-start gap-4 mb-6"><div className="h-14 w-14 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-500"><FileBarChart size={32}/></div><div className="flex-1"><h3 className="text-xl font-bold text-white leading-tight">Análise de Frequência %</h3><p className="text-xs text-gray-500 mt-2 leading-relaxed opacity-60">Relatório estatístico de presença por turma (em desenvolvimento).</p></div></div></div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="animate-in slide-in-from-right-4">
-                                <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
-                                    <div className="flex items-center gap-6"><button onClick={() => setIsViewingDailyOccReport(false)} className="h-14 w-14 rounded-2xl bg-white/5 hover:bg-white/10 text-white flex items-center justify-center transition-all"><ArrowLeft size={24}/></button><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Relatório Diário</h1><p className="text-gray-400 font-medium uppercase text-[10px] tracking-widest">Resumo completo do dia letivo</p></div></div>
-                                    <div className="flex flex-wrap items-center gap-4 w-full md:w-auto"><div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl"><Calendar className="text-red-500" size={18}/><input type="date" className="bg-transparent border-none text-white font-bold text-sm outline-none cursor-pointer" value={reportOccDate} onChange={e => setReportOccDate(e.target.value)}/></div><Button onClick={handlePrintDailyOccReport} className="h-16 px-8 bg-green-600 hover:bg-green-700 text-white font-black uppercase text-xs tracking-widest rounded-2xl shadow-xl shadow-green-900/20"><Download size={18} className="mr-2"/> Download PDF</Button></div>
-                                </header>
-                                <div className="space-y-12 pb-20">
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                        <div className="lg:col-span-2 space-y-8">
-                                            <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl"><h3 className="text-lg font-black text-red-500 uppercase tracking-widest mb-8 flex items-center gap-3"><Users size={20}/> Frequência Administrativa</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{reportDailyLogData ? Object.entries(reportDailyLogData.adminAttendance).map(([name, data]) => (<div key={name} className="bg-black/30 p-4 rounded-2xl border border-white/5 flex items-center justify-between"><div><p className="font-bold text-white text-sm uppercase">{name}</p><p className="text-[10px] text-gray-500 uppercase">{data.shifts.join(', ')}</p></div>{data.present ? <CheckCircle2 size={20} className="text-green-500"/> : <UserMinus size={20} className="text-red-500"/>}</div>)) : <p className="text-gray-600 italic">Sem registros administrativos.</p>}</div></section>
-                                            <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl"><h3 className="text-lg font-black text-blue-500 uppercase tracking-widest mb-8 flex items-center gap-3"><School size={20}/> Frequência Docente</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{reportDailyLogData ? Object.entries(reportDailyLogData.teacherAttendance).map(([name, data]) => (<div key={name} className={`bg-black/30 p-4 rounded-2xl border ${!data.present ? 'border-red-600/30' : 'border-white/5'} flex items-center justify-between`}><div><p className={`font-bold text-sm uppercase ${!data.present ? 'text-red-500' : 'text-white'}`}>{name}</p>{!data.present && <p className="text-[10px] text-red-400 mt-1">Substituto: {data.substitute || 'Não informado'}</p>}</div>{data.present ? <CheckCircle2 size={20} className="text-green-500"/> : <UserMinus size={20} className="text-red-500"/>}</div>)) : <p className="text-gray-600 italic">Sem registros docentes.</p>}</div></section>
+                                <section>
+                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-blue-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Corpo Docente (Substituições)</h2></div>
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                                        <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
+                                            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-10 flex items-center gap-4"><Sun size={28} className="text-yellow-500"/> Turno Matutino</h3>
+                                            <div className="space-y-6">{getTeachersByShift('morning').map(prof => {
+                                                const att = dailyLog.teacherAttendance[prof] || { present: true };
+                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-500" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
+                                            })}</div>
                                         </div>
-                                        <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl h-full"><h3 className="text-lg font-black text-purple-500 uppercase tracking-widest mb-8 flex items-center gap-3"><FileText size={20}/> Relato do Prédio</h3><div className="text-gray-400 text-sm leading-relaxed whitespace-pre-wrap italic bg-black/40 p-6 rounded-2xl border border-white/5">{reportDailyLogData?.generalObservations || "Nenhum relato pedagógico inserido nesta data."}</div></section>
+                                        <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
+                                            <h3 className="text-lg font-black text-white uppercase tracking-widest mb-10 flex items-center gap-4"><Moon size={28} className="text-blue-500"/> Turno Vespertino</h3>
+                                            <div className="space-y-6">{getTeachersByShift('afternoon').map(prof => {
+                                                const att = dailyLog.teacherAttendance[prof] || { present: true };
+                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-500" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
+                                            })}</div>
+                                        </div>
                                     </div>
-                                    <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl"><h3 className="text-lg font-black text-green-500 uppercase tracking-widest mb-8 flex items-center gap-3"><Star size={20}/> Aulas Extras</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-4">{reportDailyLogData?.extraClasses?.length ? reportDailyLogData.extraClasses.map((ex, i) => (<div key={i} className="bg-black/30 p-4 rounded-2xl border border-white/5"><div><p className="font-bold text-white text-sm uppercase">{ex.professor}</p><p className="text-[10px] text-gray-500 uppercase font-black tracking-tighter">{ex.subject}</p><p className="text-[10px] text-green-500 font-black uppercase mt-1 tracking-widest">{ex.className}</p></div></div>)) : <p className="text-gray-600 italic">Nenhuma aula extra registrada.</p>}</div></section>
-                                    <section className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl"><h3 className="text-lg font-black text-yellow-500 uppercase tracking-widest mb-8 flex items-center gap-3"><AlertCircle size={20}/> Ocorrências com Alunos (Hoje)</h3><div className="space-y-4">{occurrences.filter(o => o.date === reportOccDate).length > 0 ? occurrences.filter(o => o.date === reportOccDate).map(occ => (<div key={occ.id} className="bg-black/30 p-6 rounded-2xl border border-white/5 flex gap-6 items-start"><div className="h-12 w-12 bg-red-600/10 rounded-xl flex items-center justify-center text-red-500 shrink-0"><AlertCircle size={24}/></div><div className="flex-1"><div className="flex justify-between mb-2"><h4 className="font-black text-white uppercase text-sm">{occ.studentName} <span className="text-gray-600 ml-2">({occ.studentClass})</span></h4><span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Prof. {occ.reportedBy}</span></div><p className="text-gray-400 text-sm italic">"${occ.description}"</p></div></div>)) : <p className="text-gray-600 italic">Nenhuma ocorrência disciplinar registrada por professores nesta data.</p>}</div></section>
-                                </div>
+                                </section>
+
+                                <section>
+                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-green-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Registro de Aulas Extras</h2></div>
+                                    <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.professor} onChange={e => setNewExtra({...newExtra, professor: e.target.value})}>
+                                                <option value="">Selecione o Professor</option>
+                                                {staff.filter(s => s.isTeacher).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                            </select>
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.subject} onChange={e => setNewExtra({...newExtra, subject: e.target.value})}>
+                                                <option value="">Selecione a Disciplina</option>
+                                                {[...EFAF_SUBJECTS, ...EM_SUBJECTS].sort().map(s => <option key={s} value={s}>{s}</option>)}
+                                            </select>
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-green-600" value={newExtra.className} onChange={e => setNewExtra({...newExtra, className: e.target.value})}>
+                                                <option value="">Selecione a Turma</option>
+                                                {GRID_CLASSES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                            </select>
+                                            <Button onClick={addExtraClass} className="bg-green-600 h-14 rounded-xl font-black uppercase text-xs tracking-widest"><Plus size={18} className="mr-2"/> Adicionar Aula</Button>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {(dailyLog.extraClasses || []).map((ex, idx) => (
+                                                <div key={idx} className="bg-black/20 p-4 rounded-xl border border-white/5 flex items-center justify-between">
+                                                    <div className="flex gap-6 items-center">
+                                                        <span className="text-white font-black uppercase text-sm">{ex.professor}</span>
+                                                        <span className="text-gray-500 font-bold text-[10px] uppercase tracking-widest">{ex.subject}</span>
+                                                        <span className="bg-green-500/10 text-green-500 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-green-500/20">{ex.className}</span>
+                                                    </div>
+                                                    <button onClick={() => removeExtraClass(idx)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={16}/></button>
+                                                </div>
+                                            ))}
+                                            {(dailyLog.extraClasses || []).length === 0 && <p className="text-center text-gray-700 py-4 font-bold text-xs uppercase opacity-50 tracking-widest">Nenhuma aula extra registrada para hoje.</p>}
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section><div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-purple-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Relatório Geral da Unidade</h2></div><div className="bg-[#18181b] border border-white/5 rounded-[3.5rem] p-12 shadow-2xl relative overflow-hidden"><textarea className="w-full bg-black/20 border border-white/10 rounded-[2.5rem] p-10 text-white font-medium text-lg outline-none focus:border-purple-600 transition-all min-h-[300px]" placeholder="Relate as ocorrências gerais do prédio..." value={dailyLog.generalObservations} onChange={e => setDailyLog({...dailyLog, generalObservations: e.target.value})} /></div></section>
+                                
+                                <section>
+                                    <div className="flex items-center gap-4 mb-8"><div className="h-10 w-2 bg-yellow-600 rounded-full"></div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Ocorrências de Alunos (Hoje)</h2></div>
+                                    <div className="space-y-6">
+                                        {occurrences.filter(o => o.date === logDate).length > 0 ? occurrences.filter(o => o.date === logDate).map(occ => (
+                                            <div key={occ.id} className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-xl flex gap-8 items-start relative overflow-hidden">
+                                                <div className={`h-16 w-16 rounded-2xl flex items-center justify-center shrink-0 ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}><AlertCircle size={32}/></div>
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between mb-2"><h4 className="text-xl font-black text-white uppercase">{occ.studentName} <span className="text-gray-600 ml-2">({occ.studentClass})</span></h4><span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Prof. {occ.reportedBy}</span></div>
+                                                    <p className="text-gray-400 text-lg italic bg-black/20 p-6 rounded-2xl border border-white/5">"{occ.description}"</p>
+                                                </div>
+                                            </div>
+                                        )) : <p className="text-center text-gray-600 py-10 font-bold uppercase text-xs tracking-widest opacity-40">Nenhuma ocorrência registrada por professores hoje.</p>}
+                                    </div>
+                                </section>
                             </div>
-                        )}
+                        ) : (<div className="py-40 text-center animate-pulse"><Loader2 size={40} className="text-red-600 animate-spin mx-auto mb-4"/><p className="text-white font-black uppercase tracking-[0.3em]">Carregando Livro...</p></div>)}
                     </div>
                 )}
 
-                {activeTab === 'occurrences' && (
-                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl">
-                         <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Histórico de Ocorrências</h1><p className="text-gray-400">Relatos disciplinares e acadêmicos enviados pelo corpo docente.</p></header>
-                        <div className="mb-10 relative"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-500" size={20} /><input className="w-full bg-[#18181b] border border-white/5 rounded-[2rem] py-6 pl-16 pr-8 text-white font-bold outline-none focus:border-red-600 transition-all text-lg" placeholder="Buscar aluno ou professor..." value={occurrenceSearch} onChange={e => setOccurrenceSearch(e.target.value)} /></div>
-                        <div className="grid grid-cols-1 gap-6">
-                            {occurrences.filter(occ => occ.studentName.toLowerCase().includes(occurrenceSearch.toLowerCase()) || occ.reportedBy.toLowerCase().includes(occurrenceSearch.toLowerCase())).map(occ => (
-                                <div key={occ.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all"><div className="flex justify-between items-start mb-6"><div className="flex items-center gap-4"><div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}><AlertCircle size={28}/></div><div><h3 className="text-xl font-bold text-white uppercase">{occ.studentName}</h3><p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{occ.studentClass} • {occ.date}</p></div></div><button onClick={() => deleteOccurrence(occ.id)} className="text-gray-600 hover:text-red-500 transition-colors p-1"><Trash2 size={18}/></button></div><div className="bg-black/20 p-6 rounded-2xl border border-white/5 mb-4 text-gray-300 italic">"{occ.description}"</div><div className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2"><UserCircle size={14}/> Relatado por: {occ.reportedBy}</div></div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'materials' && (
+                {activeTab === 'schedule' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12 flex justify-between items-center"><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Arquivos da Sala</h1><p className="text-gray-400">Materiais enviados para exibição nas Smart TVs.</p></div></header>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {materials.map(mat => (
-                                <div key={mat.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all flex flex-col group"><div className="flex justify-between items-start mb-6"><div className="p-4 bg-red-600/10 text-red-500 rounded-2xl"><Folder size={32}/></div><button onClick={() => deleteClassMaterial(mat.id)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={20}/></button></div><h3 className="text-xl font-bold text-white mb-2 truncate uppercase">{mat.title}</h3><p className="text-xs text-red-500 font-black uppercase tracking-widest mb-2">{mat.className} • {mat.subject}</p><p className="text-[10px] text-gray-500 font-bold uppercase mb-8">Enviado por Prof. {mat.teacherName}</p><a href={mat.fileUrl} target="_blank" className="mt-auto flex items-center justify-center gap-3 bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest py-5 rounded-2xl border border-white/5 transition-all text-xs"><Download size={18}/> Baixar Arquivo</a></div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'pei' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12 flex justify-between items-center"><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planos AEE (PEI)</h1><p className="text-gray-400">Atendimento Educacional Especializado.</p></div></header>
-                        <div className="bg-[#18181b] rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl">
-                            <table className="w-full text-left"><thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5"><tr><th className="p-10">Aluno</th><th className="p-10">Professor</th><th className="p-10">Atualização</th><th className="p-10 text-center">Ações</th></tr></thead>
+                        <header className="mb-12 flex flex-col lg:flex-row justify-between items-center gap-6">
+                            <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Grade Horária</h1><p className="text-gray-400">Distribuição semanal de aulas.</p></div>
+                            <div className="flex flex-wrap gap-4 items-center">
+                                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10"><button onClick={() => setScheduleShiftTab('morning')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'morning' ? 'bg-yellow-600 text-white' : 'text-gray-500'}`}><Sun size={14}/> Matutino</button><button onClick={() => setScheduleShiftTab('afternoon')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'afternoon' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}><Moon size={14}/> Vespertino</button></div>
+                                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">{[1,2,3,4,5].map(d => (<button key={d} onClick={() => setSelectedDay(d)} className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedDay === d ? 'bg-red-600 text-white' : 'text-gray-500'}`}>{['Seg', 'Ter', 'Qua', 'Qui', 'Sex'][d-1]}</button>))}</div>
+                            </div>
+                        </header>
+                        <div className="bg-[#18181b] rounded-[3rem] border border-white/5 overflow-x-auto shadow-2xl custom-scrollbar">
+                            <table className="w-full text-left min-w-[1000px]">
+                                <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5">
+                                    <tr><th className="p-8 sticky left-0 bg-[#18181b] z-10">Horário</th>{GRID_CLASSES.filter(c => c.shift === scheduleShiftTab).map(c => <th key={c.id} className="p-8">{c.name}</th>)}</tr>
+                                </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {peis.map(p => (<tr key={p.id} className="hover:bg-white/[0.03] transition-colors"><td className="p-10 font-bold text-white uppercase text-sm">{p.studentName}</td><td className="p-10 font-bold text-gray-400 text-sm">{p.teacherName} <span className="block text-[10px] text-red-500 uppercase font-black">{p.subject}</span></td><td className="p-10 font-bold text-gray-500 text-xs uppercase">{new Date(p.updatedAt).toLocaleDateString()}</td><td className="p-10 text-center"><button className="p-3 bg-red-600/10 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all"><FileText size={20}/></button></td></tr>))}
+                                    {(scheduleShiftTab === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => (
+                                        <tr key={slot.id} className="hover:bg-white/[0.02]">
+                                            <td className="p-8 sticky left-0 bg-[#18181b] z-10"><div className="text-white font-bold text-sm">{slot.label}</div><div className="text-[10px] text-gray-500 font-bold uppercase">{slot.start} - {slot.end}</div></td>
+                                            {GRID_CLASSES.filter(c => c.shift === scheduleShiftTab).map(cls => {
+                                                const entry = schedule.find(s => s.classId === cls.id && s.slotId === slot.id && s.dayOfWeek === selectedDay);
+                                                return (<td key={cls.id} className="p-8">{entry ? (<div className="group relative bg-black/40 p-4 rounded-2xl border border-white/5"><div className="text-red-500 font-black text-[10px] uppercase mb-1">{entry.subject}</div><div className="text-[9px] text-gray-400 font-bold uppercase truncate">{entry.professor}</div><button onClick={() => handleDeleteSchedule(entry.id)} className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button></div>) : (<button onClick={() => { setEditingCell({classId: cls.id, slotId: slot.id}); setShowScheduleModal(true); }} className="w-full p-4 rounded-2xl border-2 border-dashed border-white/5 text-gray-700 hover:text-red-600 transition-all flex items-center justify-center"><Plus size={20}/></button>)}</td>);
+                                            })}
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 )}
-
-                {activeTab === 'calendar' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12 flex justify-between items-center"><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Agenda Escolar</h1><p className="text-gray-400">Eventos, feriados e avaliações.</p></div><Button onClick={() => setShowEventModal(true)} className="bg-red-600 h-16 px-8 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40"><Plus size={18} className="mr-2"/> Novo Evento</Button></header>
-                        {renderCalendarGrid()}
-                    </div>
-                )}
-
-                {activeTab === 'plans' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12">
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
-                            <p className="text-gray-400">Acompanhamento dos planos de aula bimestrais.</p>
-                        </header>
-
-                        {/* Barra de Filtros para Planejamentos */}
-                        <div className="flex flex-col md:flex-row items-center gap-6 mb-12">
-                            <div className="relative group w-full md:w-96">
-                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-red-500 transition-colors" size={24} />
-                                <input 
-                                    className="w-full bg-[#18181b] border border-white/5 rounded-[2rem] py-5 pl-16 pr-8 text-white font-bold outline-none focus:border-red-600/50 transition-all text-sm shadow-xl" 
-                                    placeholder="Buscar por professor, disciplina ou turma..." 
-                                    value={planSearch} 
-                                    onChange={e => setPlanSearch(e.target.value)} 
-                                />
-                            </div>
-                            
-                            <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 shrink-0">
-                                <button 
-                                    onClick={() => setPlanTypeFilter('semester')} 
-                                    className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${planTypeFilter === 'semester' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    <Book size={14}/> Bimestrais
-                                </button>
-                                <button 
-                                    onClick={() => setPlanTypeFilter('daily')} 
-                                    className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${planTypeFilter === 'daily' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    <Calendar size={14}/> Diários
-                                </button>
-                                <button 
-                                    onClick={() => setPlanTypeFilter('ALL')} 
-                                    className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${planTypeFilter === 'ALL' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'}`}
-                                >
-                                    <Filter size={14}/> Todos
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {filteredPlans.map(p => (
-                                <div key={p.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-red-600/30 transition-all flex flex-col group relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-30 transition-opacity">
-                                        <BookOpenCheck size={80} className="text-white" />
-                                    </div>
-                                    <div className="flex justify-between items-start mb-6">
-                                        <div className="p-3 bg-red-600/10 text-red-500 rounded-xl">
-                                            <BookOpenCheck size={24}/>
-                                        </div>
-                                        <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${p.type === 'semester' ? 'bg-blue-600/20 text-blue-400' : 'bg-purple-600/20 text-purple-400'}`}>
-                                            {p.type === 'semester' ? 'Semestre' : 'Diário'}
-                                        </span>
-                                    </div>
-                                    <h3 className="text-xl font-bold text-white uppercase mb-1 tracking-tight">{p.className}</h3>
-                                    <p className="text-xs text-red-500 font-black uppercase tracking-widest mb-6 min-h-[2.5rem]">{p.subject}</p>
-                                    <div className="bg-black/20 p-5 rounded-2xl text-[10px] text-gray-400 font-bold uppercase mb-8 flex items-center gap-3 border border-white/5">
-                                        <UserCircle size={16} className="text-gray-600" />
-                                        <span>Prof. {p.teacherName}</span>
-                                    </div>
-                                    <button className="w-full py-4 bg-white/5 hover:bg-red-600 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl border border-white/5 transition-all mt-auto shadow-sm">
-                                        Visualizar Plano
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        {filteredPlans.length === 0 && (
-                            <div className="py-32 text-center bg-[#18181b] rounded-[3rem] border border-white/5 border-dashed">
-                                <BookOpen size={64} className="mx-auto text-gray-700 mb-4 opacity-20" />
-                                <p className="text-gray-500 font-black uppercase tracking-widest">Nenhum planejamento encontrado para os filtros aplicados.</p>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {activeTab === 'config' && (
-                    <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl">
-                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Configuração</h1><p className="text-gray-400">Parâmetros globais do sistema.</p></header>
-                        <div className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-2xl space-y-10">
-                            <div><h3 className="text-lg font-bold text-white flex items-center gap-3 mb-6"><Megaphone className="text-red-500"/> Banner de Avisos (Smart TV)</h3><div className="space-y-6"><div className="flex items-center gap-3"><input type="checkbox" id="broadcast" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)} className="w-6 h-6 rounded border-white/10 bg-black text-red-600 focus:ring-red-500"/><label htmlFor="broadcast" className="text-gray-400 font-bold uppercase text-xs tracking-widest">Ativar aviso nas telas</label></div><textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-bold outline-none focus:border-red-600 transition-all h-32" placeholder="Digite a mensagem..." value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)}/><div className="flex flex-wrap gap-4">{(['info', 'warning', 'error', 'success'] as const).map(type => (<button key={type} onClick={() => setConfigBannerType(type)} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${configBannerType === type ? 'bg-white text-black' : 'bg-white/5 text-gray-500 border-white/5'}`}>{type}</button>))}</div></div></div>
-                            <Button onClick={handleSaveConfig} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/20">Salvar Alterações</Button>
-                        </div>
-                    </div>
-                )}
             </div>
 
-            {/* MODALS */}
+            {/* ENROLLMENT MODAL */}
+            {showEnrollmentModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-10 border-b border-white/5 flex justify-between items-center bg-black/20">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Matrícula de Aluno</h3>
+                                <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest mt-1">
+                                    {enrollmentType === 'individual' ? 'Registro Único' : 'Importação Manual em Lote'}
+                                </p>
+                            </div>
+                            <button onClick={() => setShowEnrollmentModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <form onSubmit={handleEnroll} className="p-10 space-y-8">
+                            <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5 mb-4">
+                                <button type="button" onClick={() => setEnrollmentType('individual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'individual' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Individual</button>
+                                <button type="button" onClick={() => setEnrollmentType('bulk')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'bulk' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Em Lote</button>
+                            </div>
+
+                            {enrollmentType === 'individual' ? (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">ID / Matrícula</label>
+                                            <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={enrollFormData.id} onChange={e => setEnrollFormData({...enrollFormData, id: e.target.value.toUpperCase()})} placeholder="EX: 2024001" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
+                                            <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-red-600" value={enrollFormData.classId} onChange={e => setEnrollFormData({...enrollFormData, classId: e.target.value})}>
+                                                <option value="">Selecione...</option>
+                                                {GRID_CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome Completo do Aluno</label>
+                                        <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={enrollFormData.name} onChange={e => setEnrollFormData({...enrollFormData, name: e.target.value.toUpperCase()})} placeholder="DIGITE O NOME COMPLETO" />
+                                    </div>
+                                    <label className="flex items-center gap-3 cursor-pointer group">
+                                        <input type="checkbox" className="w-6 h-6 rounded border-white/10 bg-black text-red-600 focus:ring-red-500" checked={enrollFormData.isAEE} onChange={e => setEnrollFormData({...enrollFormData, isAEE: e.target.checked})} />
+                                        <span className="text-xs font-black text-gray-400 uppercase tracking-widest group-hover:text-white transition-colors">Aluno Público Alvo da Educação Especial (AEE)</span>
+                                    </label>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino (Todos da Lista)</label>
+                                        <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-red-600" value={enrollFormData.classId} onChange={e => setEnrollFormData({...enrollFormData, classId: e.target.value})}>
+                                            <option value="">Selecione...</option>
+                                            {GRID_CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Lista de Nomes (Um por linha)</label>
+                                        <textarea required className="w-full bg-black/60 border border-white/10 rounded-2xl p-6 text-white font-bold outline-none focus:border-red-600 transition-all h-48" value={bulkList} onChange={e => setBulkList(e.target.value)} placeholder="JOÃO SILVA&#10;MARIA OLIVEIRA&#10;PEDRO SANTOS..." />
+                                        <p className="text-[9px] text-gray-600 font-bold uppercase tracking-widest mt-2 ml-2 italic">* O sistema gerará IDs de matrícula automáticos para importação em lote.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            <Button type="submit" isLoading={isEnrolling} className="w-full h-20 bg-red-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-red-900/40 text-sm">
+                                <Check size={24} className="mr-3"/> Confirmar Matrícula
+                            </Button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* SCHEDULE MODAL */}
             {showScheduleModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
                     <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden">
@@ -1110,12 +1075,6 @@ export const PrintShopDashboard: React.FC = () => {
                             <Button onClick={handleSaveSchedule} className="w-full h-14 bg-red-600 rounded-2xl font-black uppercase tracking-widest">Salvar Horário</Button>
                         </div>
                     </div>
-                </div>
-            )}
-
-            {showEventModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
-                    <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden"><div className="p-8 border-b border-white/5 flex justify-between items-center"><h3 className="text-xl font-black text-white uppercase tracking-tight">{selectedEvent ? 'Editar Evento' : 'Novo Evento'}</h3><button onClick={() => setShowEventModal(false)} className="text-gray-400 hover:text-white p-2"><X size={24}/></button></div><div className="p-8 space-y-6"><input className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" placeholder="Título do Evento" value={eventForm.title} onChange={e => setEventForm({...eventForm, title: e.target.value})}/><input type="date" className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={eventForm.date} onChange={e => setEventForm({...eventForm, date: e.target.value})}/><select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none appearance-none" value={eventForm.type} onChange={e => setEventForm({...eventForm, type: e.target.value as any})}><option value="event">Evento Geral</option><option value="holiday">Feriado/Recesso</option><option value="exam">Avaliação</option><option value="meeting">Reunião</option></select><textarea className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 h-24" placeholder="Descrição" value={eventForm.description} onChange={e => setEventForm({...eventForm, description: e.target.value})}/><div className="flex gap-3">{selectedEvent && <button onClick={() => handleDeleteEvent(selectedEvent.id)} className="flex-1 h-14 border border-white/5 rounded-2xl text-red-500 font-black uppercase text-[10px] tracking-widest hover:bg-red-500/10 transition-all">Excluir</button>}<Button onClick={handleSaveEvent} className="flex-[2] h-14 bg-red-600 rounded-2xl font-black uppercase tracking-widest">Salvar</Button></div></div></div>
                 </div>
             )}
         </div>
