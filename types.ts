@@ -178,6 +178,7 @@ export interface LessonPlan {
   resources?: string;
   evaluation?: string;
   homework?: string;
+  // Campos detalhados para Planejamento Bimestral
   justification?: string;
   semesterContents?: string;
   cognitiveSkills?: string;
@@ -192,38 +193,6 @@ export interface LessonPlan {
   didacticResources?: string;
   evaluationStrategies?: string;
   references?: string;
-}
-
-export interface PedagogicalProject {
-  id: string;
-  teacherId: string;
-  teacherName: string;
-  className: string;
-  theme: string;
-  guidingQuestion: string;
-  objective: string;
-  expectedResults: string[]; // Consciência ambiental, Criatividade, etc.
-  finalProduct: string;
-  finalProductOther?: string;
-  finalProductDescription: string;
-  steps: string[]; // Checklist concluído (1-6)
-  timeline: {
-    start: string;
-    diagnosis: string;
-    planning: string;
-    handsOn: string[]; // Descrição e períodos
-    socialization: string;
-    evaluation: string;
-  };
-  resources: string;
-  aiUsage: {
-    tools: string;
-    purpose: string[];
-    careTaken: string;
-  };
-  evidence: string[]; // Fotos, Registro caderno, link vídeo, etc.
-  updatedAt: number;
-  createdAt: number;
 }
 
 export interface SchoolEvent {
@@ -343,4 +312,35 @@ export interface InfantilReport {
   updatedAt: number;
   scores: Record<string, 'I' | 'ED' | 'CA' | ''>;
   descriptiveText: Record<string, string>;
+}
+
+export interface PedagogicalProject {
+    id: string;
+    teacherId: string;
+    teacherName: string;
+    className: string;
+    theme: string;
+    guidingQuestion: string;
+    objective: string;
+    expectedResults: string[];
+    finalProduct: string;
+    finalProductDescription: string;
+    steps: string[];
+    timeline: {
+        start: string;
+        diagnosis: string;
+        planning: string;
+        handsOn: string[];
+        socialization: string;
+        evaluation: string;
+    };
+    resources: string;
+    aiUsage: {
+        tools: string;
+        purpose: string[];
+        careTaken: string;
+    };
+    evidence: string[];
+    createdAt: number;
+    updatedAt: number;
 }

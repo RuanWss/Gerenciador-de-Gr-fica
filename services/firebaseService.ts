@@ -17,8 +17,7 @@ import {
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
     StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
-    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence, DailySchoolLog, InfantilReport,
-    PedagogicalProject
+    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence, DailySchoolLog, InfantilReport, PedagogicalProject
 } from '../types';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
@@ -30,7 +29,6 @@ const ATTENDANCE_LOGS_COLLECTION = 'attendance_logs';
 const SCHEDULE_COLLECTION = 'schedule';
 const SYSTEM_CONFIG_COLLECTION = 'system_config';
 const LESSON_PLANS_COLLECTION = 'lesson_plans';
-const PEDAGOGICAL_PROJECTS_COLLECTION = 'pedagogical_projects';
 const STAFF_COLLECTION = 'staff';
 const STAFF_LOGS_COLLECTION = 'staff_logs';
 const EVENTS_COLLECTION = 'events';
@@ -42,6 +40,7 @@ const PEI_COLLECTION = 'pei';
 const OCCURRENCES_COLLECTION = 'occurrences';
 const DAILY_LOGS_COLLECTION = 'daily_logs';
 const INFANTIL_REPORTS_COLLECTION = 'infantil_reports';
+const PEDAGOGICAL_PROJECTS_COLLECTION = 'pedagogical_projects';
 
 const sanitizeForFirestore = (obj: any) => {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
@@ -50,36 +49,6 @@ const sanitizeForFirestore = (obj: any) => {
         return value;
     }));
 };
-
-// --- PEDAGOGICAL PROJECTS (INOVA AI) ---
-
-export const savePedagogicalProject = async (project: PedagogicalProject): Promise<void> => {
-    const { id, ...data } = project;
-    if (id) await setDoc(doc(db, PEDAGOGICAL_PROJECTS_COLLECTION, id), sanitizeForFirestore(data));
-    else await addDoc(collection(db, PEDAGOGICAL_PROJECTS_COLLECTION), sanitizeForFirestore(data));
-};
-
-export const getPedagogicalProjects = async (teacherId?: string): Promise<PedagogicalProject[]> => {
-    const q = teacherId 
-        ? query(collection(db, PEDAGOGICAL_PROJECTS_COLLECTION), where("teacherId", "==", teacherId))
-        : collection(db, PEDAGOGICAL_PROJECTS_COLLECTION);
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PedagogicalProject));
-};
-
-export const listenToAllPedagogicalProjects = (callback: (projects: PedagogicalProject[]) => void) => {
-    return onSnapshot(collection(db, PEDAGOGICAL_PROJECTS_COLLECTION), (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PedagogicalProject)));
-    }, (error) => {
-        console.error("Erro Pedagogical Projects:", error);
-    });
-};
-
-export const deletePedagogicalProject = async (id: string): Promise<void> => {
-    await deleteDoc(doc(db, PEDAGOGICAL_PROJECTS_COLLECTION, id));
-};
-
-// --- REST OF SERVICE ---
 
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
@@ -563,4 +532,28 @@ export const listenToAllInfantilReports = (callback: (reports: InfantilReport[])
 
 export const deleteInfantilReport = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id));
+};
+
+// --- PEDAGOGICAL PROJECTS (INOVA AI) ---
+
+export const getPedagogicalProjects = async (teacherId?: string): Promise<PedagogicalProject[]> => {
+    const q = teacherId 
+        ? query(collection(db, PEDAGOGICAL_PROJECTS_COLLECTION), where("teacherId", "==", teacherId))
+        : collection(db, PEDAGOGICAL_PROJECTS_COLLECTION);
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PedagogicalProject));
+};
+
+export const savePedagogicalProject = async (project: PedagogicalProject): Promise<void> => {
+    const { id, ...data } = project;
+    if (id) {
+        await setDoc(doc(db, PEDAGOGICAL_PROJECTS_COLLECTION, id), sanitizeForFirestore(data));
+    } else {
+        const newRef = doc(collection(db, PEDAGOGICAL_PROJECTS_COLLECTION));
+        await setDoc(newRef, sanitizeForFirestore({ ...data, id: newRef.id }));
+    }
+};
+
+export const deletePedagogicalProject = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, PEDAGOGICAL_PROJECTS_COLLECTION, id));
 };
