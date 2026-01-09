@@ -160,7 +160,7 @@ export interface AttendanceLog {
   type?: 'entry' | 'exit';
 }
 
-export type LessonPlanType = 'daily' | 'semester';
+export type LessonPlanType = 'daily' | 'semester' | 'project';
 
 export interface LessonPlan {
   id: string;
@@ -193,6 +193,20 @@ export interface LessonPlan {
   didacticResources?: string;
   evaluationStrategies?: string;
   references?: string;
+  // Campos para Projeto Inova AI
+  projectTheme?: string;
+  guidingQuestion?: string;
+  projectObjective?: string;
+  expectedResults?: string[]; // Array de resultados selecionados
+  finalProductType?: string;
+  finalProductDescription?: string;
+  projectSteps?: string[]; // Checklist de etapas concluídas
+  timeline?: Record<string, string>; // Datas para cada etapa
+  projectResources?: string;
+  aiTools?: string;
+  aiPurpose?: string[];
+  aiCareTaken?: string;
+  evidenceTypes?: string[];
 }
 
 export interface SchoolEvent {
