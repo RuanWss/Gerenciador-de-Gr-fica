@@ -194,6 +194,38 @@ export interface LessonPlan {
   references?: string;
 }
 
+export interface PedagogicalProject {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  className: string;
+  theme: string;
+  guidingQuestion: string;
+  objective: string;
+  expectedResults: string[]; // Consciência ambiental, Criatividade, etc.
+  finalProduct: string;
+  finalProductOther?: string;
+  finalProductDescription: string;
+  steps: string[]; // Checklist concluído (1-6)
+  timeline: {
+    start: string;
+    diagnosis: string;
+    planning: string;
+    handsOn: string[]; // Descrição e períodos
+    socialization: string;
+    evaluation: string;
+  };
+  resources: string;
+  aiUsage: {
+    tools: string;
+    purpose: string[];
+    careTaken: string;
+  };
+  evidence: string[]; // Fotos, Registro caderno, link vídeo, etc.
+  updatedAt: number;
+  createdAt: number;
+}
+
 export interface SchoolEvent {
   id: string;
   title: string;
