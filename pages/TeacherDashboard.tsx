@@ -20,7 +20,7 @@ import {
   Plus, List, PlusCircle, X, Trash2, FileUp, AlertCircle, 
   BookOpen, Save, ArrowLeft, Cpu, Heart, FileText, Layout, Eye, Clock, UploadCloud, ChevronRight,
   Layers, MapPin, Wrench, Target, BookOpenCheck, BrainCircuit, Rocket, Calendar as CalendarIcon, ClipboardCheck, Sparkles,
-  CheckCircle2
+  CheckCircle2, Download, FileDown, FileType
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -63,6 +63,7 @@ export const TeacherDashboard: React.FC = () => {
   const [examTitle, setExamTitle] = useState('');
   const [examGrade, setExamGrade] = useState('');
   const [printQty, setPrintQty] = useState(30);
+  const [printInstructions, setPrintInstructions] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
   useEffect(() => {
@@ -153,11 +154,14 @@ export const TeacherDashboard: React.FC = () => {
           await saveExam({
               id: '', teacherId: user?.id || '', teacherName: user?.name || '',
               subject: user?.subject || 'Geral', title: examTitle, quantity: Number(printQty),
-              gradeLevel: examGrade, instructions: 'Prova / Material',
+              gradeLevel: examGrade, instructions: printInstructions || 'Sem instruções adicionais',
               fileNames, fileUrls, status: ExamStatus.PENDING, createdAt: Date.now(),
               dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
           });
           alert("Pedido enviado para a gráfica!");
+          setExamTitle('');
+          setPrintInstructions('');
+          setUploadedFiles([]);
           setActiveTab('requests');
       } catch (e) { alert("Erro ao enviar."); }
       finally { setIsSaving(false); }
@@ -664,7 +668,52 @@ export const TeacherDashboard: React.FC = () => {
 
             {/* ENVIAR PROVA TAB */}
             {activeTab === 'create' && (
-                <div className="animate-in fade-in max-w-2xl mx-auto">
+                <div className="animate-in fade-in max-w-4xl mx-auto space-y-8">
+                    {/* SEÇÃO DE MODELOS INSTITUCIONAIS */}
+                    <div className="bg-[#18181b] border-2 border-white/5 p-8 rounded-[3rem] shadow-2xl text-white">
+                        <div className="flex items-center gap-4 mb-6">
+                            <FileType className="text-red-600" size={24} />
+                            <h3 className="text-xl font-black uppercase tracking-tighter">Modelos Institucionais</h3>
+                        </div>
+                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-6 ml-1">Utilize os cabeçalhos oficiais da escola para seus materiais:</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <a 
+                                href="#" 
+                                onClick={(e) => { e.preventDefault(); alert('Iniciando download do modelo de Prova...'); }}
+                                className="flex items-center justify-between p-6 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-red-600/50 transition-all group"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 bg-red-600/20 rounded-xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all">
+                                        <FileDown size={24} />
+                                    </div>
+                                    <div>
+                                        <span className="block font-black uppercase text-[10px] tracking-widest text-white">Cabeçalho Oficial</span>
+                                        <span className="block font-bold text-xs text-gray-500 group-hover:text-red-400 transition-colors">MODELO DE PROVA (.DOCX)</span>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} className="text-gray-700 group-hover:text-white" />
+                            </a>
+
+                            <a 
+                                href="#" 
+                                onClick={(e) => { e.preventDefault(); alert('Iniciando download do modelo de Apostila...'); }}
+                                className="flex items-center justify-between p-6 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-red-600/50 transition-all group"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-500 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                        <FileType size={24} />
+                                    </div>
+                                    <div>
+                                        <span className="block font-black uppercase text-[10px] tracking-widest text-white">Cabeçalho Oficial</span>
+                                        <span className="block font-bold text-xs text-gray-500 group-hover:text-blue-400 transition-colors">MODELO DE APOSTILA (.DOCX)</span>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} className="text-gray-700 group-hover:text-white" />
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* FORMULÁRIO DE ENVIO */}
                     <div className="bg-[#18181b] border border-white/5 p-12 rounded-[3rem] shadow-2xl text-white">
                         <h2 className="text-3xl font-black uppercase tracking-tighter mb-10 flex items-center gap-4">
                             <UploadCloud className="text-red-600" size={40} /> Enviar p/ Gráfica
@@ -687,6 +736,18 @@ export const TeacherDashboard: React.FC = () => {
                                     <input type="number" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
                                 </div>
                             </div>
+                            
+                            {/* CAIXA DE TEXTO PARA DESCRIÇÃO DOS DETALHES PARA IMPRESSÃO */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Detalhes para Impressão</label>
+                                <textarea 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[120px]"
+                                    value={printInstructions}
+                                    onChange={e => setPrintInstructions(e.target.value)}
+                                    placeholder="Ex: Impressão frente e verso, grampear no canto superior esquerdo, etc..."
+                                />
+                            </div>
+
                             <div className="border-3 border-dashed border-white/10 rounded-[2.5rem] p-12 text-center hover:border-red-600 transition-all relative bg-black/20 group">
                                 <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)])} />
                                 <FileUp className="mx-auto text-gray-700 mb-4 group-hover:text-red-500" size={56} />
