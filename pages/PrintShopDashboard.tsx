@@ -230,6 +230,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [showPeiModal, setShowPeiModal] = useState(false);
     const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
 
+    // Plan View Modal
+    const [showPlanModal, setShowPlanModal] = useState(false);
+    const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
+
     // Infantil Tab States
     const [infantilSearch, setInfantilSearch] = useState('');
     const [infantilClassFilter, setInfantilClassFilter] = useState<'JARDIM I' | 'JARDIM II' | 'ALL'>('ALL');
@@ -248,7 +252,7 @@ export const PrintShopDashboard: React.FC = () => {
 
     // Plans Filters
     const [planSearch, setPlanSearch] = useState('');
-    const [planTypeFilter, setPlanTypeFilter] = useState<'semester' | 'daily' | 'ALL'>('semester');
+    const [planTypeFilter, setPlanTypeFilter] = useState<'semester' | 'daily' | 'project' | 'ALL'>('ALL');
 
     // Extra Classes Management
     const [newExtra, setNewExtra] = useState<ExtraClassRecord>({ professor: '', subject: '', className: '' });
@@ -715,6 +719,14 @@ export const PrintShopDashboard: React.FC = () => {
         return matchSearch && matchClass;
     });
 
+    const filteredPlans = plans.filter(p => {
+        const matchesSearch = p.teacherName.toLowerCase().includes(planSearch.toLowerCase()) || 
+                              p.className.toLowerCase().includes(planSearch.toLowerCase()) ||
+                              p.subject.toLowerCase().includes(planSearch.toLowerCase());
+        const matchesType = planTypeFilter === 'ALL' || p.type === planTypeFilter;
+        return matchesSearch && matchesType;
+    });
+
     return (
         <div className="flex h-full bg-[#0f0f10]">
             <div className="w-72 bg-black/40 border-r border-white/10 p-8 flex flex-col h-full shrink-0 z-20 shadow-2xl">
@@ -950,7 +962,7 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </header>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
                             <div className="bg-gradient-to-br from-red-600 to-red-800 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
                                 <Users className="absolute -right-4 -bottom-4 text-white/10 group-hover:scale-110 transition-transform duration-700" size={120} />
                                 <p className="text-white/70 font-black uppercase text-[10px] tracking-widest mb-2">Matriculados na Turma</p>
@@ -968,6 +980,12 @@ export const PrintShopDashboard: React.FC = () => {
                                 <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Ausentes Hoje</p>
                                 <h3 className="text-5xl font-black text-red-500">{classAbsentCount}</h3>
                                 <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] font-bold uppercase tracking-widest"><AlertCircle size={14}/> Apoio Pedagógico</div>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group">
+                                <Layers className="absolute -right-4 -bottom-4 text-blue-500/10 group-hover:scale-110 transition-transform duration-700" size={120} />
+                                <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest mb-2">Total Matriculados</p>
+                                <h3 className="text-5xl font-black text-blue-500">{students.length}</h3>
+                                <div className="mt-4 flex items-center gap-2 text-gray-600 text-[10px] font-bold uppercase tracking-widest"><School size={14}/> Todas as Turmas</div>
                             </div>
                         </div>
 
@@ -1090,28 +1108,66 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'plans' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-10">
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
-                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Acompanhamento pedagógico docente</p>
+                        <header className="mb-10 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Acompanhamento pedagógico docente</p>
+                            </div>
+                            <div className="flex flex-wrap gap-4 w-full xl:w-auto">
+                                <div className="relative group flex-1 xl:flex-none">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-red-500 transition-colors" size={18} />
+                                    <input 
+                                        className="pl-12 pr-6 py-3 bg-[#18181b] border border-white/5 rounded-2xl text-white text-sm focus:ring-2 focus:ring-red-600 outline-none w-full xl:w-80 font-bold" 
+                                        placeholder="Buscar prof, turma ou disciplina..." 
+                                        value={planSearch} 
+                                        onChange={e => setPlanSearch(e.target.value)} 
+                                    />
+                                </div>
+                                <div className="flex bg-[#18181b] p-1 rounded-2xl border border-white/5">
+                                    <button onClick={() => setPlanTypeFilter('ALL')} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${planTypeFilter === 'ALL' ? 'bg-white text-black' : 'text-gray-500 hover:text-white'}`}>Todos</button>
+                                    <button onClick={() => setPlanTypeFilter('daily')} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${planTypeFilter === 'daily' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Diário</button>
+                                    <button onClick={() => setPlanTypeFilter('semester')} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${planTypeFilter === 'semester' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Bimestral</button>
+                                    <button onClick={() => setPlanTypeFilter('project')} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${planTypeFilter === 'project' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Projeto AI</button>
+                                </div>
+                            </div>
                         </header>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {plans.map(plan => (
-                                <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl">
+                            {filteredPlans.map(plan => (
+                                <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl flex flex-col hover:border-red-600/30 transition-all group">
                                     <div className="flex justify-between items-start mb-6">
-                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${plan.type === 'semester' ? 'bg-blue-600/10 text-blue-500 border-blue-600/20' : 'bg-green-600/10 text-green-500 border-green-600/20'}`}>
-                                            {plan.type === 'semester' ? 'Bimestral' : 'Diário'}
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                                            plan.type === 'semester' ? 'bg-blue-600/10 text-blue-500 border-blue-600/20' : 
+                                            plan.type === 'project' ? 'bg-red-600/10 text-red-500 border-red-500/20' : 
+                                            'bg-green-600/10 text-green-500 border-green-500/20'
+                                        }`}>
+                                            {plan.type === 'semester' ? 'Bimestral' : plan.type === 'project' ? 'Projeto AI' : 'Diário'}
                                         </span>
                                         <span className="text-[10px] text-gray-500 font-bold uppercase">{new Date(plan.createdAt).toLocaleDateString()}</span>
                                     </div>
                                     <h3 className="text-xl font-black text-white uppercase mb-1 leading-tight">{plan.className}</h3>
                                     <p className="text-xs text-red-600 font-black uppercase tracking-widest mb-6">{plan.subject}</p>
-                                    <p className="text-[11px] text-gray-400 font-medium mb-8 line-clamp-3 italic">"{plan.topic || plan.semesterContents}"</p>
-                                    <div className="pt-6 border-t border-white/5 flex flex-col gap-2">
-                                        <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">Responsável:</p>
-                                        <p className="text-xs font-bold text-white uppercase">{plan.teacherName}</p>
+                                    <p className="text-[11px] text-gray-400 font-medium mb-8 line-clamp-3 italic">"{plan.topic || plan.projectTheme || plan.semesterContents || 'Sem descrição'}"</p>
+                                    
+                                    <div className="mt-auto pt-6 border-t border-white/5 flex items-center justify-between">
+                                        <div className="flex flex-col gap-1">
+                                            <p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">Responsável:</p>
+                                            <p className="text-xs font-bold text-white uppercase">{plan.teacherName}</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => { setSelectedPlan(plan); setShowPlanModal(true); }}
+                                            className="h-10 w-10 bg-white/5 hover:bg-red-600 text-white rounded-xl flex items-center justify-center transition-all group-hover:scale-110 active:scale-95 shadow-lg"
+                                        >
+                                            <Eye size={18}/>
+                                        </button>
                                     </div>
                                 </div>
                             ))}
+                            {filteredPlans.length === 0 && (
+                                <div className="col-span-full py-40 text-center bg-[#18181b] border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
+                                    <BookOpenCheck size={64} className="mx-auto text-gray-500 mb-4"/>
+                                    <p className="font-black uppercase tracking-[0.3em] text-xl">Nenhum planejamento encontrado</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1322,6 +1378,119 @@ export const PrintShopDashboard: React.FC = () => {
                                     <p className="text-gray-300 leading-relaxed whitespace-pre-wrap text-sm">{selectedPei.evaluation}</p>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* PLAN VIEW MODAL */}
+            {showPlanModal && selectedPlan && (
+                <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+                    <div className="bg-[#18181b] border border-red-600/30 w-full max-w-5xl max-h-[90vh] rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
+                            <div className="flex items-center gap-6">
+                                <div className="h-16 w-16 bg-red-600 rounded-2xl flex items-center justify-center shadow-xl">
+                                    <BookOpenCheck className="text-white" size={32}/>
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight">Visualizar Planejamento</h3>
+                                    <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">
+                                        {selectedPlan.type === 'semester' ? 'Bimestral' : selectedPlan.type === 'project' ? 'Projeto AI' : 'Diário'} • {selectedPlan.className}
+                                    </p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowPlanModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                            <div className="space-y-12">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-red-500 uppercase tracking-widest">Professor Responsável</label>
+                                        <p className="text-xl font-black text-white uppercase">{selectedPlan.teacherName}</p>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-red-500 uppercase tracking-widest">Componente Curricular</label>
+                                        <p className="text-xl font-black text-white uppercase">{selectedPlan.subject}</p>
+                                    </div>
+                                </div>
+
+                                {selectedPlan.type === 'daily' && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 bg-white/5 p-8 rounded-3xl border border-white/5">
+                                        <div className="space-y-4">
+                                            <h4 className="text-[10px] font-black text-white uppercase tracking-widest border-b border-white/10 pb-2">Procedimentos Metodológicos</h4>
+                                            <p className="text-gray-300 leading-relaxed text-sm whitespace-pre-wrap">{selectedPlan.methodology}</p>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <h4 className="text-[10px] font-black text-white uppercase tracking-widest border-b border-white/10 pb-2">Recursos e Avaliação</h4>
+                                            <p className="text-gray-300 leading-relaxed text-sm whitespace-pre-wrap">{selectedPlan.resources}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedPlan.type === 'semester' && (
+                                    <div className="space-y-10">
+                                        <div className="bg-white/5 p-8 rounded-3xl border border-white/5">
+                                            <h4 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">Justificativa e Conteúdos</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Justificativa:</p>
+                                                    <p className="text-gray-300 text-sm italic">"{selectedPlan.justification}"</p>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Conteúdos:</p>
+                                                    <p className="text-gray-300 text-sm">{selectedPlan.semesterContents}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                            <div className="space-y-4">
+                                                <h4 className="text-[10px] font-black text-white uppercase tracking-widest border-b border-white/10 pb-2">Habilidades Cognitivas</h4>
+                                                <p className="text-gray-300 leading-relaxed text-sm whitespace-pre-wrap">{selectedPlan.cognitiveSkills}</p>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <h4 className="text-[10px] font-black text-white uppercase tracking-widest border-b border-white/10 pb-2">Habilidades Socioemocionais</h4>
+                                                <p className="text-gray-300 leading-relaxed text-sm whitespace-pre-wrap">{selectedPlan.socialEmotionalSkills}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedPlan.type === 'project' && (
+                                    <div className="space-y-10">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                            <div className="bg-red-900/10 p-8 rounded-3xl border border-red-900/20">
+                                                <h4 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">Questão Norteadora</h4>
+                                                <p className="text-lg font-bold text-white italic">"{selectedPlan.guidingQuestion}"</p>
+                                            </div>
+                                            <div className="bg-white/5 p-8 rounded-3xl border border-white/5">
+                                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Objetivo do Subprojeto</h4>
+                                                <p className="text-gray-300 text-sm leading-relaxed">{selectedPlan.projectObjective}</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white/5 p-8 rounded-3xl border border-white/5">
+                                            <h4 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-6">Instrumental AI</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                                <div className="space-y-4">
+                                                    <p className="text-[10px] font-black text-gray-500 uppercase">Ferramentas Utilizadas:</p>
+                                                    <p className="text-white font-black text-sm">{selectedPlan.aiTools}</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {selectedPlan.aiPurpose?.map(p => (
+                                                            <span key={p} className="bg-red-600/20 text-red-500 border border-red-600/30 px-3 py-1 rounded-full text-[9px] font-black uppercase">{p}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-4">
+                                                    <p className="text-[10px] font-black text-gray-500 uppercase">Cuidados Éticos / Verificação:</p>
+                                                    <p className="text-gray-300 text-sm italic">"{selectedPlan.aiCareTaken}"</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="p-8 border-t border-white/5 bg-black/40 flex justify-end">
+                            <Button onClick={() => setShowPlanModal(false)} className="bg-red-600 px-12 h-16 rounded-2xl font-black uppercase text-xs tracking-widest">Fechar Documento</Button>
                         </div>
                     </div>
                 </div>
