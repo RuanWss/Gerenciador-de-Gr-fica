@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
     getExams, 
@@ -40,7 +39,8 @@ import {
     CheckCircle,
     XCircle,
     RefreshCw,
-    DatabaseZap
+    DatabaseZap,
+    Loader2
 } from 'lucide-react';
 
 export const PrintShopDashboard: React.FC = () => {
@@ -462,19 +462,6 @@ export const PrintShopDashboard: React.FC = () => {
                                 <p className="text-gray-400">Monitoramento de frequência em tempo real.</p>
                             </div>
                             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                                {isSyncing && (
-                                    <div className="text-right mr-2">
-                                        <p className="text-[10px] font-black text-blue-400 animate-pulse uppercase tracking-widest">{syncMsg}</p>
-                                    </div>
-                                )}
-                                <button 
-                                    onClick={handleSyncGennera}
-                                    disabled={isSyncing}
-                                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-blue-900/40 transition-all transform hover:-translate-y-0.5 active:scale-95"
-                                >
-                                    <DatabaseZap size={16} className={isSyncing ? 'animate-spin' : ''} />
-                                    {isSyncing ? 'Conectando ao ERP...' : 'Sincronizar Gennera'}
-                                </button>
                                 <button 
                                     className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-black uppercase text-[10px] tracking-widest rounded-xl border border-white/10 transition-all transform hover:-translate-y-0.5 active:scale-95"
                                 >
@@ -571,7 +558,66 @@ export const PrintShopDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
-                {/* ... other tabs ... */}
+
+                {activeTab === 'config' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl mx-auto">
+                        <header className="mb-10">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Configurações</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Ajustes e integrações do sistema</p>
+                        </header>
+                        <div className="space-y-8">
+                            <div className="bg-[#18181b] border border-white/10 p-12 rounded-[3rem] shadow-2xl space-y-12">
+                                <section>
+                                    <h3 className="text-xl font-black text-white uppercase mb-8 flex items-center gap-4"><Megaphone className="text-red-600"/> Banner de Avisos (TV)</h3>
+                                    <div className="space-y-8">
+                                        <label className="flex items-center gap-4 p-4 bg-black/20 rounded-2xl border border-white/5 cursor-pointer group">
+                                            <input type="checkbox" className="w-6 h-6 rounded border-white/10 bg-black text-red-600 focus:ring-red-500" checked={configIsBannerActive} onChange={e => setConfigIsBannerActive(e.target.checked)} />
+                                            <span className="text-xs font-black text-gray-400 uppercase tracking-widest group-hover:text-white transition-colors">Exibir mensagem nos monitores do prédio</span>
+                                        </label>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Mensagem do Banner</label>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-bold outline-none focus:border-red-600 transition-all min-h-[120px]" value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} placeholder="Ex: Antecipação do feriado conforme decreto estadual..." />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {(['info', 'warning', 'error', 'success'] as const).map(type => (
+                                                <button key={type} onClick={() => setConfigBannerType(type)} className={`py-4 rounded-xl font-black uppercase text-[10px] tracking-widest border transition-all ${configBannerType === type ? 'bg-red-600 border-red-500 text-white' : 'bg-black/20 border-white/5 text-gray-600'}`}>{type}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </section>
+                                <Button onClick={handleSaveConfig} className="w-full h-20 bg-green-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-green-900/40"><Save size={24} className="mr-3"/> Salvar Ajustes</Button>
+                            </div>
+
+                            <div className="bg-[#18181b] border border-blue-500/20 p-12 rounded-[3rem] shadow-2xl space-y-8">
+                                <section>
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div>
+                                            <h3 className="text-xl font-black text-white uppercase flex items-center gap-4"><DatabaseZap className="text-blue-500"/> Sincronização Gennera</h3>
+                                            <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest mt-1">Ações Administrativas</p>
+                                        </div>
+                                        {isSyncing && (
+                                            <div className="flex items-center gap-3 bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/20">
+                                                <Loader2 size={16} className="text-blue-500 animate-spin" />
+                                                <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{syncMsg}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-gray-400 text-sm leading-relaxed mb-8">
+                                        Importe automaticamente a lista de alunos e turmas matriculados no Gennera (Instituição 891). 
+                                        Este processo sincroniza os dados locais com a base oficial da secretaria.
+                                    </p>
+                                    <Button 
+                                        onClick={handleSyncGennera} 
+                                        isLoading={isSyncing}
+                                        className="w-full h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest"
+                                    >
+                                        <RefreshCw size={18} className={`mr-2 ${isSyncing ? 'animate-spin' : ''}`}/> {isSyncing ? 'Sincronizando...' : 'Sincronizar Alunos com Gennera'}
+                                    </Button>
+                                </section>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
