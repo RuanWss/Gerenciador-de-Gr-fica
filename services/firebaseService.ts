@@ -176,9 +176,14 @@ export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) =
 };
 
 export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
-    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString), orderBy("timestamp", "desc"));
+    // FIX: Removed order by timestamp to avoid composite index requirement
+    // Sorting can be done on the client side if necessary
+    const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
     return onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog)));
+        const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
+        // Client-side sort to maintain chronological order
+        logs.sort((a, b) => b.timestamp - a.timestamp);
+        callback(logs);
     }, (error) => {
         if (error.code !== 'permission-denied') console.error("Erro StaffLogs:", error);
     });

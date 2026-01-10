@@ -39,12 +39,14 @@ import {
     Repeat,
     ArrowRight,
     Download,
-    BookOpen
+    BookOpen,
+    Layers,
+    PlusCircle
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
 export const HRDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'staff' | 'attendance' | 'substitutions'>('staff');
+    const [activeTab, setActiveTab] = useState<'staff' | 'attendance' | 'substitutions' | 'subjects'>('staff');
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     
@@ -59,6 +61,14 @@ export const HRDashboard: React.FC = () => {
     const [createLogin, setCreateLogin] = useState(false);
     const [photoFile, setPhotoFile] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+    // Subjects Tab State
+    const [customSubjects, setCustomSubjects] = useState<string[]>(() => {
+        const saved = localStorage.getItem('hr_custom_subjects');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [showNewSubjectModal, setShowNewSubjectModal] = useState(false);
+    const [newSubjectName, setNewSubjectName] = useState('');
 
     // Attendance/Substitutions State
     const [logs, setLogs] = useState<StaffAttendanceLog[]>([]);
@@ -88,6 +98,15 @@ export const HRDashboard: React.FC = () => {
         }
     }, [activeTab, dateFilter, monthFilter]);
 
+    const handleAddNewSubject = () => {
+        if (!newSubjectName.trim()) return;
+        const updated = [...customSubjects, newSubjectName.trim().toUpperCase()].sort();
+        setCustomSubjects(updated);
+        localStorage.setItem('hr_custom_subjects', JSON.stringify(updated));
+        setNewSubjectName('');
+        setShowNewSubjectModal(false);
+    };
+
     const loadMonthlySubstitutions = async () => {
         setIsLoadingSub(true);
         try {
@@ -111,6 +130,7 @@ export const HRDashboard: React.FC = () => {
         setCreateLogin(!!staff.email);
         setPhotoFile(null);
         setPhotoPreview(staff.photoUrl || null);
+        setTempSubject(staff.role.includes('PROFESSOR DE ') ? staff.role.replace('PROFESSOR DE ', '').replace('PROFESSORA DE ', '') : '');
         setShowForm(true);
     };
 
@@ -301,7 +321,7 @@ export const HRDashboard: React.FC = () => {
         return acc + (log.extraClasses?.length || 0);
     }, 0);
 
-    const allSubjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS])).sort();
+    const allSubjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS, ...customSubjects])).sort();
 
     return (
         <div className="flex flex-col md:flex-row h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
@@ -326,6 +346,12 @@ export const HRDashboard: React.FC = () => {
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest mb-1 ${activeTab === 'substitutions' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
                     >
                         <Repeat size={18} /> Substituições/Extras
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('subjects')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest mb-1 ${activeTab === 'subjects' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                    >
+                        <Layers size={18} /> Disciplinas
                     </button>
                 </div>
             </div>
@@ -405,9 +431,9 @@ export const HRDashboard: React.FC = () => {
                                                     </label>
                                                 </div>
 
-                                                {formData.isTeacher && formData.weeklyClasses && (
+                                                {formData.isTeacher && tempSubject && (
                                                     <div className="text-[10px] font-black text-blue-400 uppercase bg-blue-400/10 p-3 rounded-xl border border-blue-400/20 flex items-center gap-2">
-                                                        <BookOpen size={14}/> Disciplina: {tempSubject || 'Não selecionada'}
+                                                        <BookOpen size={14}/> Disciplina: {tempSubject}
                                                         <button type="button" onClick={() => setShowSubjectModal(true)} className="ml-auto underline">Alterar</button>
                                                     </div>
                                                 )}
@@ -494,7 +520,8 @@ export const HRDashboard: React.FC = () => {
                                         <Button 
                                             onClick={() => {
                                                 if (tempSubject) {
-                                                    setFormData({...formData, weeklyClasses: 1}); // Placeholder for having a subject
+                                                    const genderPrefix = formData.role?.includes('PROFESSORA') ? 'PROFESSORA DE ' : 'PROFESSOR DE ';
+                                                    setFormData({...formData, role: `${genderPrefix}${tempSubject}`, isTeacher: true});
                                                     setShowSubjectModal(false);
                                                 } else {
                                                     alert("Por favor, selecione uma disciplina.");
@@ -570,6 +597,73 @@ export const HRDashboard: React.FC = () => {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'subjects' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Disciplinas e Vínculos</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Gestão de áreas instrumentais e docentes</p>
+                            </div>
+                            <Button onClick={() => setShowNewSubjectModal(true)} className="bg-red-600 px-8 rounded-2xl h-14 font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
+                                <PlusCircle size={20} className="mr-2"/> Inserir Disciplina
+                            </Button>
+                        </header>
+
+                        {/* NEW SUBJECT MODAL */}
+                        {showNewSubjectModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+                                <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95">
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-8">Nova Disciplina Instrumental</h3>
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Nome da Disciplina</label>
+                                            <input 
+                                                autoFocus
+                                                className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600" 
+                                                placeholder="EX: ROBÓTICA" 
+                                                value={newSubjectName} 
+                                                onChange={e => setNewSubjectName(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleAddNewSubject()}
+                                            />
+                                        </div>
+                                        <div className="flex gap-4 pt-4">
+                                            <Button variant="outline" onClick={() => setShowNewSubjectModal(false)} className="flex-1 h-14 rounded-2xl font-black uppercase text-[10px] tracking-widest">Cancelar</Button>
+                                            <Button onClick={handleAddNewSubject} className="flex-1 h-14 bg-red-600 rounded-2xl font-black uppercase text-[10px] tracking-widest">Cadastrar</Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {allSubjects.map(subject => {
+                                const subjectTeachers = staffList.filter(s => s.isTeacher && s.role.toUpperCase().includes(subject.toUpperCase()));
+                                return (
+                                    <div key={subject} className="bg-[#18181b] border border-white/5 rounded-[2rem] p-6 shadow-xl hover:border-red-600/30 transition-all">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h3 className="text-sm font-black text-white uppercase tracking-tight line-clamp-1">{subject}</h3>
+                                            <span className="bg-red-600/10 text-red-500 px-2 py-0.5 rounded-full text-[9px] font-black border border-red-600/20">{subjectTeachers.length}</span>
+                                        </div>
+                                        <div className="space-y-3 max-h-48 overflow-y-auto custom-scrollbar">
+                                            {subjectTeachers.map(teacher => (
+                                                <div key={teacher.id} className="flex items-center gap-3 bg-black/40 p-2 rounded-xl border border-white/5">
+                                                    <div className="w-6 h-6 rounded-full overflow-hidden border border-white/10 shrink-0">
+                                                        {teacher.photoUrl ? <img src={teacher.photoUrl} className="w-full h-full object-cover" /> : <Users className="w-full h-full p-1 text-gray-700"/>}
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-gray-300 uppercase truncate">{teacher.name}</span>
+                                                </div>
+                                            ))}
+                                            {subjectTeachers.length === 0 && (
+                                                <div className="text-center py-4 opacity-20 italic text-[10px] font-black uppercase text-gray-500">Sem professores vinculados</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
