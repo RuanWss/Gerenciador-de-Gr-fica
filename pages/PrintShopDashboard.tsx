@@ -114,6 +114,13 @@ const ADMIN_GROUPS = [
 ];
 
 const GRID_CLASSES = [
+    { id: 'ji', name: 'JARDIM I', type: 'infantil', shift: 'morning' },
+    { id: 'jii', name: 'JARDIM II', type: 'infantil', shift: 'morning' },
+    { id: '1efai', name: '1º ANO EFAI', type: 'efai', shift: 'morning' },
+    { id: '2efai', name: '2º ANO EFAI', type: 'efai', shift: 'morning' },
+    { id: '3efai', name: '3º ANO EFAI', type: 'efai', shift: 'morning' },
+    { id: '4efai', name: '4º ANO EFAI', type: 'efai', shift: 'morning' },
+    { id: '5efai', name: '5º ANO EFAI', type: 'efai', shift: 'morning' },
     { id: '6efaf', name: '6º ANO EFAF', type: 'efaf', shift: 'morning' },
     { id: '7efaf', name: '7º ANO EFAF', type: 'efaf', shift: 'morning' },
     { id: '8efaf', name: '8º ANO EFAF', type: 'efaf', shift: 'morning' },
@@ -121,6 +128,14 @@ const GRID_CLASSES = [
     { id: '1em', name: '1ª SÉRIE EM', type: 'em', shift: 'afternoon' },
     { id: '2em', name: '2ª SÉRIE EM', type: 'em', shift: 'afternoon' },
     { id: '3em', name: '3ª SÉRIE EM', type: 'em', shift: 'afternoon' },
+];
+
+const EFAI_SLOTS: TimeSlot[] = [
+    { id: 'e1', start: '07:30', end: '08:25', type: 'class', label: '1º Horário', shift: 'morning' },
+    { id: 'e2', start: '08:25', end: '09:20', type: 'class', label: '2º Horário', shift: 'morning' },
+    { id: 'ei1', start: '09:20', end: '09:40', type: 'break', label: 'INTERVALO', shift: 'morning' },
+    { id: 'e3', start: '09:40', end: '10:35', type: 'class', label: '3º Horário', shift: 'morning' },
+    { id: 'e4', start: '10:35', end: '11:30', type: 'class', label: '4º Horário', shift: 'morning' },
 ];
 
 const MORNING_SLOTS: TimeSlot[] = [
@@ -201,7 +216,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [configIsBannerActive, setConfigIsBannerActive] = useState(false);
 
     const [selectedDay, setSelectedDay] = useState(new Date().getDay() || 1);
-    const [scheduleShiftTab, setScheduleShiftTab] = useState<'morning' | 'afternoon'>('morning');
+    const [scheduleShiftTab, setScheduleShiftTab] = useState<'efai' | 'efaf' | 'em'>('efaf');
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [editingCell, setEditingCell] = useState<{classId: string, slotId: string} | null>(null);
     const [newSchedule, setNewSchedule] = useState({ subject: '', professor: '' });
@@ -229,7 +244,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [examSearch, setExamSearch] = useState('');
     const [studentSearch, setStudentSearch] = useState('');
     const [occurrenceSearch, setOccurrenceSearch] = useState('');
-    const [selectedStudentClass, setSelectedStudentClass] = useState<string>(GRID_CLASSES[0].id);
+    const [selectedStudentClass, setSelectedStudentClass] = useState<string>('6efaf');
 
     // Plans Filters
     const [planSearch, setPlanSearch] = useState('');
@@ -1174,14 +1189,14 @@ export const PrintShopDashboard: React.FC = () => {
                                             <h3 className="text-lg font-black text-white uppercase tracking-widest mb-10 flex items-center gap-4"><Sun size={28} className="text-yellow-500"/> Turno Matutino</h3>
                                             <div className="space-y-6">{getTeachersByShift('morning').map(prof => {
                                                 const att = dailyLog.teacherAttendance[prof] || { present: true };
-                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-500" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
+                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-600" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
                                             })}</div>
                                         </div>
                                         <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-xl">
                                             <h3 className="text-lg font-black text-white uppercase tracking-widest mb-10 flex items-center gap-4"><Moon size={28} className="text-blue-500"/> Turno Vespertino</h3>
                                             <div className="space-y-6">{getTeachersByShift('afternoon').map(prof => {
                                                 const att = dailyLog.teacherAttendance[prof] || { present: true };
-                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-500" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
+                                                return (<div key={prof} className={`bg-black/20 p-8 rounded-3xl border transition-all ${!att.present ? 'border-red-600/50 bg-red-600/5 shadow-2xl' : 'border-white/5'}`}><div className="flex items-center justify-between mb-6"><span className={`text-base font-black uppercase tracking-tight ${!att.present ? 'text-red-500' : 'text-white'}`}>{prof}</span><div className="flex items-center bg-black/40 p-1 rounded-2xl border border-white/5"><button onClick={() => setTeacherStatus(prof, true)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${att.present ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Presente</button><button onClick={() => setTeacherStatus(prof, false)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${!att.present ? 'bg-red-600 text-white' : 'text-gray-500'}`}>Faltou</button></div></div>{!att.present && (<input className="w-full bg-black/60 border border-red-600/30 rounded-2xl p-5 text-white font-bold text-sm outline-none focus:border-red-600" placeholder="Digite o nome do substituto..." value={att.substitute || ''} onChange={e => setTeacherSubstitute(prof, e.target.value)}/>)}</div>);
                                             })}</div>
                                         </div>
                                     </div>
@@ -1247,20 +1262,24 @@ export const PrintShopDashboard: React.FC = () => {
                         <header className="mb-12 flex flex-col lg:flex-row justify-between items-center gap-6">
                             <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Grade Horária</h1><p className="text-gray-400">Distribuição semanal de aulas.</p></div>
                             <div className="flex flex-wrap gap-4 items-center">
-                                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10"><button onClick={() => setScheduleShiftTab('morning')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'morning' ? 'bg-yellow-600 text-white' : 'text-gray-500'}`}><Sun size={14}/> Matutino</button><button onClick={() => setScheduleShiftTab('afternoon')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'afternoon' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}><Moon size={14}/> Vespertino</button></div>
+                                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
+                                    <button onClick={() => setScheduleShiftTab('efai')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'efai' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500'}`}>EFAI</button>
+                                    <button onClick={() => setScheduleShiftTab('efaf')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'efaf' ? 'bg-yellow-600 text-white shadow-lg' : 'text-gray-500'}`}>EFAF</button>
+                                    <button onClick={() => setScheduleShiftTab('em')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'em' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500'}`}>MÉDIO</button>
+                                </div>
                                 <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">{[1,2,3,4,5].map(d => (<button key={d} onClick={() => setSelectedDay(d)} className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedDay === d ? 'bg-red-600 text-white' : 'text-gray-500'}`}>{['Seg', 'Ter', 'Qua', 'Qui', 'Sex'][d-1]}</button>))}</div>
                             </div>
                         </header>
                         <div className="bg-[#18181b] rounded-[3rem] border border-white/5 overflow-x-auto shadow-2xl custom-scrollbar">
                             <table className="w-full text-left min-w-[1000px]">
                                 <thead className="bg-black/40 text-gray-500 uppercase text-[10px] font-black tracking-widest border-b border-white/5">
-                                    <tr><th className="p-8 sticky left-0 bg-[#18181b] z-10">Horário</th>{GRID_CLASSES.filter(c => c.shift === scheduleShiftTab).map(c => <th key={c.id} className="p-8">{c.name}</th>)}</tr>
+                                    <tr><th className="p-8 sticky left-0 bg-[#18181b] z-10">Horário</th>{GRID_CLASSES.filter(c => c.type === scheduleShiftTab).map(c => <th key={c.id} className="p-8">{c.name}</th>)}</tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {(scheduleShiftTab === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => (
+                                    {(scheduleShiftTab === 'efai' ? EFAI_SLOTS : scheduleShiftTab === 'efaf' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => (
                                         <tr key={slot.id} className="hover:bg-white/[0.02]">
                                             <td className="p-8 sticky left-0 bg-[#18181b] z-10"><div className="text-white font-bold text-sm">{slot.label}</div><div className="text-[10px] text-gray-500 font-bold uppercase">{slot.start} - {slot.end}</div></td>
-                                            {GRID_CLASSES.filter(c => c.shift === scheduleShiftTab).map(cls => {
+                                            {GRID_CLASSES.filter(c => c.type === scheduleShiftTab).map(cls => {
                                                 const entry = schedule.find(s => s.classId === cls.id && s.slotId === slot.id && s.dayOfWeek === selectedDay);
                                                 return (<td key={cls.id} className="p-8">{entry ? (<div className="group relative bg-black/40 p-4 rounded-2xl border border-white/5"><div className="text-red-500 font-black text-[10px] uppercase mb-1">{entry.subject}</div><div className="text-[9px] text-gray-400 font-bold uppercase truncate">{entry.professor}</div><button onClick={() => handleDeleteSchedule(entry.id)} className="absolute -top-3 -right-3 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button></div>) : (<button onClick={() => { setEditingCell({classId: cls.id, slotId: slot.id}); setShowScheduleModal(true); }} className="w-full p-4 rounded-2xl border-2 border-dashed border-white/5 text-gray-700 hover:text-red-600 transition-all flex items-center justify-center"><Plus size={20}/></button>)}</td>);
                                             })}
@@ -1379,7 +1398,7 @@ export const PrintShopDashboard: React.FC = () => {
             {/* SCHEDULE MODAL */}
             {showScheduleModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
-                    <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-md rounded-[3rem] shadow-2xl overflow-hidden">
                         <div className="p-8 border-b border-white/5 flex justify-between items-center"><h3 className="text-xl font-black text-white uppercase tracking-tight">Definir Aula</h3><button onClick={() => setShowScheduleModal(false)} className="text-gray-500 hover:text-white p-2"><X size={24}/></button></div>
                         <div className="p-8 space-y-6">
                             <div><label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Disciplina</label><select className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none appearance-none focus:border-red-600" value={newSchedule.subject} onChange={e => setNewSchedule({...newSchedule, subject: e.target.value})}><option value="">Selecione...</option>{(GRID_CLASSES.find(c => c.id === editingCell?.classId)?.type === 'em' ? EM_SUBJECTS : EFAF_SUBJECTS).map(s => (<option key={s} value={s}>{s}</option>))}</select></div>
