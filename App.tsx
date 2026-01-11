@@ -12,26 +12,23 @@ import { ClassroomFiles } from './pages/ClassroomFiles';
 import { LibraryDashboard } from './pages/LibraryDashboard';
 import { AEEDashboard } from './pages/AEEDashboard';
 import { InfantilDashboard } from './pages/InfantilDashboard';
+import { GenneraSyncPanel } from './pages/GenneraSyncPanel';
 import { UserRole, SystemConfig } from './types';
-import { listenToSystemConfig, syncAllDataWithGennera } from './services/firebaseService';
-import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone, Baby, DatabaseZap, Loader2 } from 'lucide-react';
+import { listenToSystemConfig } from './services/firebaseService';
+import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone, Baby, DatabaseZap } from 'lucide-react';
 import { Button } from './components/Button';
 
 const AppContent: React.FC = () => {
   const { user, isAuthenticated, logout, changePassword } = useAuth();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [currentHash, setCurrentHash] = useState(window.location.hash);
-  const [sessionRole, setSessionRole] = useState<UserRole | null>(null);
+  const [sessionRole, setSessionRole] = useState<UserRole | 'GENNERA_SYNC' | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
-  
-  // Gennera Sync State for TI Coordinator
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState('');
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -62,20 +59,6 @@ const AppContent: React.FC = () => {
           setShowPasswordModal(false);
       } catch (error: any) { setPasswordError("Erro: " + error.message); } finally { setIsChangingPassword(false); }
   };
-
-  const handleSyncGennera = async () => {
-      if (!confirm("Iniciar sincronização global com o Gennera ERP?")) return;
-      setIsSyncing(true);
-      try {
-          await syncAllDataWithGennera((msg) => setSyncProgress(msg));
-          alert("Sincronização concluída!");
-      } catch (e: any) {
-          alert("Erro: " + e.message);
-      } finally {
-          setIsSyncing(false);
-          setSyncProgress('');
-      }
-  };
   
   const getBannerStyles = (type: string) => {
     switch(type) {
@@ -93,7 +76,6 @@ const AppContent: React.FC = () => {
   if (user?.role === UserRole.STAFF_TERMINAL) return <StaffAttendanceTerminal />;
   if (user?.role === UserRole.CLASSROOM) return <ClassroomFiles />;
   
-  // SELEÇÃO DE PERFIL (Para usuários com múltiplas funções)
   if (user?.roles && user.roles.length > 1 && !sessionRole) {
       return (
           <div className="fixed inset-0 z-50 bg-[#0f0f10] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/40 via-[#0f0f10] to-[#0f0f10] flex flex-col items-center justify-center p-4">
@@ -103,15 +85,14 @@ const AppContent: React.FC = () => {
                       <h2 className="text-4xl font-black text-white mb-2 uppercase tracking-tight">Bem-vindo, {user.name.split(' ')[0]}</h2>
                       <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Ambiente Integrado de Gestão Escolar</p>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-7xl mx-auto mb-16">
-                      {/* ACESSO PORTAL INFANTIL */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-7xl mx-auto mb-16 px-4">
                       {user.roles.includes(UserRole.KINDERGARTEN) && (
                           <button onClick={() => setSessionRole(UserRole.KINDERGARTEN)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
                               <div className="h-16 w-16 bg-orange-600/20 text-orange-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
                                 <Baby size={32} />
                               </div>
                               <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal Infantil</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Nível: Ed. Infantil</p>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Nível: Ed. Infantil</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.TEACHER) && (
@@ -120,7 +101,7 @@ const AppContent: React.FC = () => {
                                 <GraduationCap size={32} />
                               </div>
                               <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal Professor</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Ensino Fundamental e Médio</p>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Ensino Fundamental e Médio</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.PRINTSHOP) && (
@@ -129,7 +110,7 @@ const AppContent: React.FC = () => {
                                 <School size={32} />
                               </div>
                               <span className="font-black text-white uppercase tracking-widest text-[11px]">Painel da Escola</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Gestão Administrativa</p>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Gestão Administrativa</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.AEE) && (
@@ -138,6 +119,7 @@ const AppContent: React.FC = () => {
                                 <Heart size={32} />
                               </div>
                               <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal AEE</span>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Apoio Pedagógico</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.HR) && (
@@ -146,6 +128,7 @@ const AppContent: React.FC = () => {
                                 <AlertCircle size={32} />
                               </div>
                               <span className="font-black text-white uppercase tracking-tight text-[11px]">Gestão de RH</span>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Controle de Equipe</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.LIBRARY) && (
@@ -154,22 +137,18 @@ const AppContent: React.FC = () => {
                                 <Book size={32} />
                               </div>
                               <span className="font-black text-white uppercase tracking-tight text-[11px]">Biblioteca</span>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Acervo e Empréstimos</p>
                           </button>
                       )}
                       
-                      {/* PAINEL DE INTEGRAÇÃO GENNERA - SOMENTE PARA TI */}
+                      {/* PAINEL DE SINCRONIZAÇÃO GENNERA - SOMENTE PARA TI */}
                       {user.email === 'ruan.wss@gmail.com' && (
-                          <button 
-                            disabled={isSyncing}
-                            onClick={handleSyncGennera} 
-                            className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-400/20 hover:border-blue-400 hover:bg-white/10"
-                          >
-                              <div className="h-16 w-16 bg-blue-400/20 text-blue-400 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-400 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
-                                {isSyncing ? <Loader2 size={32} className="animate-spin"/> : <DatabaseZap size={32} />}
+                          <button onClick={() => setSessionRole('GENNERA_SYNC')} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-400/20 hover:border-blue-400 hover:bg-white/10">
+                              <div className="h-16 w-16 bg-blue-600/20 text-blue-400 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
+                                <DatabaseZap size={32} />
                               </div>
                               <span className="font-black text-white uppercase tracking-tight text-[11px]">Sincronização Gennera</span>
-                              {isSyncing && <p className="text-[7px] text-blue-300 font-bold mt-2 uppercase tracking-widest animate-pulse">{syncProgress}</p>}
-                              {!isSyncing && <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Painel TI</p>}
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Painel TI</p>
                           </button>
                       )}
                   </div>
@@ -203,11 +182,16 @@ const AppContent: React.FC = () => {
               <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-12 w-auto drop-shadow-lg"/>
               <div className="h-8 w-px bg-white/10"></div>
               <span className="text-xs font-black text-white uppercase tracking-widest">
-                {activeRole === UserRole.KINDERGARTEN ? 'Portal Infantil' : activeRole === UserRole.TEACHER ? 'Portal do Professor' : activeRole === UserRole.HR ? 'Gestão de RH' : activeRole === UserRole.LIBRARY ? 'Painel da Biblioteca' : activeRole === UserRole.AEE ? 'Portal AEE' : 'Painel da Escola'}
+                {activeRole === UserRole.KINDERGARTEN ? 'Portal Infantil' : 
+                 activeRole === UserRole.TEACHER ? 'Portal do Professor' : 
+                 activeRole === UserRole.HR ? 'Gestão de RH' : 
+                 activeRole === UserRole.LIBRARY ? 'Painel da Biblioteca' : 
+                 activeRole === UserRole.AEE ? 'Portal AEE' : 
+                 activeRole === 'GENNERA_SYNC' ? 'Integração Gennera' : 'Painel da Escola'}
               </span>
             </div>
             <div className="flex items-center gap-2">
-               {user?.roles && user.roles.length > 1 && (
+               {(user?.roles && user.roles.length > 1) && (
                    <button onClick={() => setSessionRole(null)} className="p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-2xl transition-all" title="Trocar de Ambiente">
                        <LayoutGrid size={22}/>
                    </button>
@@ -224,6 +208,7 @@ const AppContent: React.FC = () => {
         {activeRole === UserRole.HR && <HRDashboard />}
         {activeRole === UserRole.LIBRARY && <LibraryDashboard />}
         {activeRole === UserRole.AEE && <AEEDashboard />}
+        {activeRole === 'GENNERA_SYNC' && <GenneraSyncPanel />}
       </main>
 
       {showPasswordModal && (
