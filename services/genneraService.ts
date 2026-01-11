@@ -29,38 +29,30 @@ async function genneraRequest(endpoint: string) {
     
     return await response.json();
   } catch (error: any) {
-    console.error("Erro Gennera:", error);
+    console.error("Erro Gennera Service:", error);
     throw error;
   }
 }
 
 /**
  * Retorna as turmas.
- * Implementa uma lógica de busca dupla para evitar o 404 caso a estrutura por instituição falhe.
+ * Usa o endpoint mais genérico possível para evitar 404 de rotas inexistentes.
  */
 export const fetchGenneraClasses = async (): Promise<SchoolClass[]> => {
-  let data;
-  try {
-    // Tentativa 1: Estrutura sugerida pela imagem (/institutions/{id}/classes)
-    data = await genneraRequest(`/institutions/${INSTITUTION_ID}/classes`);
-  } catch (e: any) {
-    if (e.status === 404) {
-      console.warn("Rota /institutions/891/classes não encontrada. Tentando rota direta /classes...");
-      // Tentativa 2: Rota direta filtrada por instituição
-      data = await genneraRequest(`/classes?idInstitution=${INSTITUTION_ID}`);
-    } else {
-      throw e;
-    }
-  }
+  // Testando o endpoint mais simples da API que lista turmas
+  const data = await genneraRequest('/classes');
   
   const list = data.data || data.lista || data.items || (Array.isArray(data) ? data : []);
   if (!Array.isArray(list)) return [];
 
-  return list.map((t: any) => ({
-    id: String(t.id || t.idClass || t.idTurma),
-    name: String(t.name || t.description || t.sigla || 'TURMA SEM NOME').toUpperCase(),
-    shift: String(t.shift || t.turno || '').toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
-  }));
+  // Filtra apenas turmas da instituição correta se o ERP retornar de várias
+  return list
+    .filter((t: any) => !t.idInstitution || String(t.idInstitution) === INSTITUTION_ID)
+    .map((t: any) => ({
+      id: String(t.id || t.idClass || t.idTurma),
+      name: String(t.name || t.description || t.sigla || 'TURMA SEM NOME').toUpperCase(),
+      shift: String(t.shift || t.turno || '').toLowerCase().includes('manhã') ? 'morning' : 'afternoon'
+    }));
 };
 
 /**

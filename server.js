@@ -13,14 +13,14 @@ app.use(express.json());
 
 // --- PROXY PARA API GENNERA ---
 app.all('/gennera-api/*', async (req, res) => {
-  // Pega tudo o que vem depois de /gennera-api
-  const urlParts = req.url.split('/gennera-api');
-  const pathWithParams = urlParts[1] || '/';
+  // Extrai o path real removendo o prefixo local /gennera-api
+  // Exemplo: /gennera-api/classes -> /classes
+  const targetPath = req.url.split('/gennera-api')[1] || '/';
   
-  // URL absoluta do ERP Gennera (v1 para API2)
-  const targetUrl = `https://api2.gennera.com.br/api/v1${pathWithParams}`;
+  // URL absoluta da Gennera API v1 (API2)
+  const targetUrl = `https://api2.gennera.com.br/api/v1${targetPath}`;
   
-  console.log(`[PROXY] Chamando: ${targetUrl}`);
+  console.log(`[PROXY] Chamada Externa: ${targetUrl}`);
 
   try {
     const response = await fetch(targetUrl, {
@@ -43,7 +43,10 @@ app.all('/gennera-api/*', async (req, res) => {
     }
   } catch (error) {
     console.error('[PROXY ERROR]:', error.message);
-    res.status(500).json({ error: 'Erro de conexão com Gennera', details: error.message });
+    res.status(500).json({ 
+      error: 'Erro de gateway com o ERP', 
+      details: error.message 
+    });
   }
 });
 
@@ -54,5 +57,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`🚀 Gateway CEMAL rodando na porta ${port}`);
+  console.log(`🚀 Gateway CEMAL v2.1 rodando na porta ${port}`);
 });
