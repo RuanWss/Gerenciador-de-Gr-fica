@@ -1,3 +1,4 @@
+
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,18 +12,12 @@ const port = process.env.PORT || 8080;
 app.use(express.json());
 
 // --- PROXY PARA API GENNERA ---
-// Este endpoint atua como um Backend-for-Frontend (BFF) para evitar erros de CORS 
-// e simplificar a integração com o ERP.
 app.all('/gennera-api/*', async (req, res) => {
-  // Captura o restante da URL após /gennera-api/
-  let targetPath = req.params[0] || req.url.split('/gennera-api/')[1];
+  // Extrai o path removendo o prefixo /gennera-api
+  const targetPath = req.url.replace('/gennera-api', '');
   
-  // Limpeza de barras duplicadas
-  if (targetPath && targetPath.startsWith('/')) {
-    targetPath = targetPath.substring(1);
-  }
-  
-  const targetUrl = `https://api2.gennera.com.br/api/v1/${targetPath}`;
+  // Monta a URL final garantindo que não haja // entre a base e o path
+  const targetUrl = `https://api2.gennera.com.br/api/v1${targetPath.startsWith('/') ? '' : '/'}${targetPath}`;
   
   console.log(`[PROXY] Chamando Gennera: ${req.method} ${targetUrl}`);
 
@@ -35,7 +30,6 @@ app.all('/gennera-api/*', async (req, res) => {
       }
     };
 
-    // Repassa o corpo da requisição para métodos de escrita
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && Object.keys(req.body).length > 0) {
       fetchOptions.body = JSON.stringify(req.body);
     }
@@ -61,11 +55,8 @@ app.all('/gennera-api/*', async (req, res) => {
   }
 });
 
-// Entrega os arquivos estáticos da pasta 'dist' (build do Vite)
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Suporte ao roteamento do React (Single Page Application)
-// Redireciona todas as rotas não tratadas para o index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
