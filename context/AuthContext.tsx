@@ -30,7 +30,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
+        // ACESSO MASTER - COORDENADOR DE TI
+        if (firebaseUser.email === 'ruan.wss@gmail.com') {
+             setUser({
+                id: firebaseUser.uid,
+                name: 'Ruan Santos',
+                email: firebaseUser.email,
+                role: UserRole.PRINTSHOP,
+                roles: [
+                    UserRole.TEACHER, 
+                    UserRole.PRINTSHOP, 
+                    UserRole.HR, 
+                    UserRole.AEE, 
+                    UserRole.KINDERGARTEN, 
+                    UserRole.LIBRARY
+                ],
+                subject: 'TI',
+                classes: []
+              });
+        }
+        else if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
              setUser({
                 id: firebaseUser.uid,
                 name: 'Terminal de Frequência',
@@ -136,6 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
           const systemPasswords: Record<string, string> = {
+              'ruan.wss@gmail.com': 'cemal#2016',
               'pontoequipecemal@ceprofmal.com': 'cemal#2016',
               'rh@ceprofmal.com': 'cemal#2016',
               'frequencia.cemal@ceprofmal.com': 'cemal#2016',

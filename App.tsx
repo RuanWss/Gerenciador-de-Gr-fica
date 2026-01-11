@@ -13,8 +13,8 @@ import { LibraryDashboard } from './pages/LibraryDashboard';
 import { AEEDashboard } from './pages/AEEDashboard';
 import { InfantilDashboard } from './pages/InfantilDashboard';
 import { UserRole, SystemConfig } from './types';
-import { listenToSystemConfig } from './services/firebaseService';
-import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone, Baby } from 'lucide-react';
+import { listenToSystemConfig, syncAllDataWithGennera } from './services/firebaseService';
+import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone, Baby, DatabaseZap, Loader2 } from 'lucide-react';
 import { Button } from './components/Button';
 
 const AppContent: React.FC = () => {
@@ -28,6 +28,10 @@ const AppContent: React.FC = () => {
   const [passwordError, setPasswordError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
+  
+  // Gennera Sync State for TI Coordinator
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState('');
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -58,6 +62,20 @@ const AppContent: React.FC = () => {
           setShowPasswordModal(false);
       } catch (error: any) { setPasswordError("Erro: " + error.message); } finally { setIsChangingPassword(false); }
   };
+
+  const handleSyncGennera = async () => {
+      if (!confirm("Iniciar sincronização global com o Gennera ERP?")) return;
+      setIsSyncing(true);
+      try {
+          await syncAllDataWithGennera((msg) => setSyncProgress(msg));
+          alert("Sincronização concluída!");
+      } catch (e: any) {
+          alert("Erro: " + e.message);
+      } finally {
+          setIsSyncing(false);
+          setSyncProgress('');
+      }
+  };
   
   const getBannerStyles = (type: string) => {
     switch(type) {
@@ -79,63 +97,79 @@ const AppContent: React.FC = () => {
   if (user?.roles && user.roles.length > 1 && !sessionRole) {
       return (
           <div className="fixed inset-0 z-50 bg-[#0f0f10] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/40 via-[#0f0f10] to-[#0f0f10] flex flex-col items-center justify-center p-4">
-              <div className="max-w-5xl w-full">
+              <div className="max-w-6xl w-full">
                   <div className="text-center mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
                       <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 w-auto mx-auto mb-6 drop-shadow-2xl"/>
                       <h2 className="text-4xl font-black text-white mb-2 uppercase tracking-tight">Bem-vindo, {user.name.split(' ')[0]}</h2>
                       <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Ambiente Integrado de Gestão Escolar</p>
                   </div>
-                  <div className="flex flex-wrap justify-center gap-8 max-w-6xl mx-auto mb-16">
-                      {/* ACESSO EXCLUSIVO PORTAL INFANTIL POR E-MAIL */}
-                      {user.email === 'jessicasouza465@gmail.com' && user.roles.includes(UserRole.KINDERGARTEN) && (
-                          <button onClick={() => setSessionRole(UserRole.KINDERGARTEN)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
-                              <div className="h-24 w-24 bg-orange-600/20 text-orange-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
-                                <Baby size={48} />
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 max-w-7xl mx-auto mb-16">
+                      {/* ACESSO PORTAL INFANTIL */}
+                      {user.roles.includes(UserRole.KINDERGARTEN) && (
+                          <button onClick={() => setSessionRole(UserRole.KINDERGARTEN)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
+                              <div className="h-16 w-16 bg-orange-600/20 text-orange-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
+                                <Baby size={32} />
                               </div>
-                              <span className="font-black text-white uppercase tracking-widest text-sm">Portal Infantil</span>
-                              <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Nível: Ed. Infantil</p>
+                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal Infantil</span>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Nível: Ed. Infantil</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.TEACHER) && (
-                          <button onClick={() => setSessionRole(UserRole.TEACHER)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-red-500/20 hover:border-red-500 hover:bg-white/10">
-                              <div className="h-24 w-24 bg-red-600/20 text-red-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-red-600 group-hover:text-white transition-all shadow-2xl shadow-red-900/20">
-                                <GraduationCap size={48} />
+                          <button onClick={() => setSessionRole(UserRole.TEACHER)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-red-500/20 hover:border-red-500 hover:bg-white/10">
+                              <div className="h-16 w-16 bg-red-600/20 text-red-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-red-600 group-hover:text-white transition-all shadow-2xl shadow-red-900/20">
+                                <GraduationCap size={32} />
                               </div>
-                              <span className="font-black text-white uppercase tracking-widest text-sm">Portal Professor</span>
-                              <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Ensino Fundamental e Médio</p>
+                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal Professor</span>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Ensino Fundamental e Médio</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.PRINTSHOP) && (
-                          <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-500/20 hover:border-blue-500 hover:bg-white/10">
-                              <div className="h-24 w-24 bg-blue-600/20 text-blue-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
-                                <School size={48} />
+                          <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-500/20 hover:border-blue-500 hover:bg-white/10">
+                              <div className="h-16 w-16 bg-blue-600/20 text-blue-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
+                                <School size={32} />
                               </div>
-                              <span className="font-black text-white uppercase tracking-widest text-sm">Painel da Escola</span>
-                              <p className="text-[9px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Gestão Administrativa</p>
+                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Painel da Escola</span>
+                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Gestão Administrativa</p>
                           </button>
                       )}
                       {user.roles.includes(UserRole.AEE) && (
-                          <button onClick={() => setSessionRole(UserRole.AEE)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-pink-500/20 hover:border-pink-500 hover:bg-white/10">
-                              <div className="h-24 w-24 bg-pink-600/20 text-pink-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-pink-600 group-hover:text-white transition-all shadow-2xl shadow-pink-900/20">
-                                <Heart size={48} />
+                          <button onClick={() => setSessionRole(UserRole.AEE)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-pink-500/20 hover:border-pink-500 hover:bg-white/10">
+                              <div className="h-16 w-16 bg-pink-600/20 text-pink-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-pink-600 group-hover:text-white transition-all shadow-2xl shadow-pink-900/20">
+                                <Heart size={32} />
                               </div>
-                              <span className="font-black text-white uppercase tracking-widest text-sm">Portal AEE</span>
+                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal AEE</span>
                           </button>
                       )}
                       {user.roles.includes(UserRole.HR) && (
-                          <button onClick={() => setSessionRole(UserRole.HR)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
-                              <div className="h-24 w-24 bg-orange-600/20 text-orange-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
-                                <AlertCircle size={48} />
+                          <button onClick={() => setSessionRole(UserRole.HR)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
+                              <div className="h-16 w-16 bg-orange-600/20 text-orange-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
+                                <AlertCircle size={32} />
                               </div>
-                              <span className="font-black text-white uppercase tracking-tight text-sm">Gestão de RH</span>
+                              <span className="font-black text-white uppercase tracking-tight text-[11px]">Gestão de RH</span>
                           </button>
                       )}
                       {user.roles.includes(UserRole.LIBRARY) && (
-                          <button onClick={() => setSessionRole(UserRole.LIBRARY)} className="bg-white/5 backdrop-blur-xl min-w-[280px] p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-green-500/20 hover:border-green-500 hover:bg-white/10">
-                              <div className="h-24 w-24 bg-green-600/20 text-green-500 rounded-[2rem] flex items-center justify-center mb-6 group-hover:bg-green-600 group-hover:text-white transition-all shadow-2xl shadow-green-900/20">
-                                <Book size={48} />
+                          <button onClick={() => setSessionRole(UserRole.LIBRARY)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-green-500/20 hover:border-green-500 hover:bg-white/10">
+                              <div className="h-16 w-16 bg-green-600/20 text-green-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition-all shadow-2xl shadow-green-900/20">
+                                <Book size={32} />
                               </div>
-                              <span className="font-black text-white uppercase tracking-tight text-sm">Biblioteca</span>
+                              <span className="font-black text-white uppercase tracking-tight text-[11px]">Biblioteca</span>
+                          </button>
+                      )}
+                      
+                      {/* PAINEL DE INTEGRAÇÃO GENNERA - SOMENTE PARA TI */}
+                      {user.email === 'ruan.wss@gmail.com' && (
+                          <button 
+                            disabled={isSyncing}
+                            onClick={handleSyncGennera} 
+                            className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-400/20 hover:border-blue-400 hover:bg-white/10"
+                          >
+                              <div className="h-16 w-16 bg-blue-400/20 text-blue-400 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-400 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
+                                {isSyncing ? <Loader2 size={32} className="animate-spin"/> : <DatabaseZap size={32} />}
+                              </div>
+                              <span className="font-black text-white uppercase tracking-tight text-[11px]">Sincronização Gennera</span>
+                              {isSyncing && <p className="text-[7px] text-blue-300 font-bold mt-2 uppercase tracking-widest animate-pulse">{syncProgress}</p>}
+                              {!isSyncing && <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest">Painel TI</p>}
                           </button>
                       )}
                   </div>
@@ -184,7 +218,7 @@ const AppContent: React.FC = () => {
         </div>
       </nav>
       <main className="w-full px-8 py-10">
-        {activeRole === UserRole.KINDERGARTEN && user?.email === 'jessicasouza465@gmail.com' && <InfantilDashboard />}
+        {activeRole === UserRole.KINDERGARTEN && <InfantilDashboard />}
         {activeRole === UserRole.TEACHER && <TeacherDashboard />}
         {activeRole === UserRole.PRINTSHOP && <PrintShopDashboard />}
         {activeRole === UserRole.HR && <HRDashboard />}
