@@ -14,9 +14,11 @@ app.use(express.json());
 // --- PROXY PARA API GENNERA ---
 app.all('/gennera-api/*', async (req, res) => {
   // Extrai o path removendo o prefixo /gennera-api
+  // Ex: /gennera-api/institutions/891/classes -> /institutions/891/classes
   const targetPath = req.url.replace('/gennera-api', '');
   
-  // Monta a URL final para a API v1 da Gennera
+  // Monta a URL final para a API da Gennera
+  // Importante: A URL base da Gennera termina em /v1
   const targetUrl = `https://api2.gennera.com.br/api/v1${targetPath}`;
   
   console.log(`[PROXY] Request: ${req.method} -> ${targetUrl}`);
