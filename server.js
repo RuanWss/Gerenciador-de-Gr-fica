@@ -16,10 +16,10 @@ app.all('/gennera-api/*', async (req, res) => {
   // Extrai o path removendo o prefixo /gennera-api
   const targetPath = req.url.replace('/gennera-api', '');
   
-  // Monta a URL final garantindo que não haja // entre a base e o path
-  const targetUrl = `https://api2.gennera.com.br/api/v1${targetPath.startsWith('/') ? '' : '/'}${targetPath}`;
+  // Monta a URL final para a API v1 da Gennera
+  const targetUrl = `https://api2.gennera.com.br/api/v1${targetPath}`;
   
-  console.log(`[PROXY] Chamando Gennera: ${req.method} ${targetUrl}`);
+  console.log(`[PROXY] Request: ${req.method} -> ${targetUrl}`);
 
   try {
     const fetchOptions = {
@@ -37,7 +37,7 @@ app.all('/gennera-api/*', async (req, res) => {
     const response = await fetch(targetUrl, fetchOptions);
     const contentType = response.headers.get('content-type');
     
-    console.log(`[PROXY] Resposta Gennera: ${response.status}`);
+    console.log(`[PROXY] Response Status: ${response.status}`);
 
     if (contentType && contentType.includes('application/json')) {
       const data = await response.json();
