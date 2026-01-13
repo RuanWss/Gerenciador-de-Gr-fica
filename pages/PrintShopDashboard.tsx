@@ -28,6 +28,8 @@ import {
     saveDailySchoolLog,
     getLessonPlans,
     saveStudent,
+    updateStudent,
+    uploadStudentPhoto,
     listenToAllInfantilReports
 } from '../services/firebaseService';
 import { 
@@ -101,7 +103,10 @@ import {
     FileEdit,
     FileText as FileIconPdf,
     Eye,
-    ExternalLink
+    ExternalLink,
+    Edit3,
+    UploadCloud,
+    Camera
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -257,8 +262,15 @@ export const PrintShopDashboard: React.FC = () => {
     // Extra Classes Management
     const [newExtra, setNewExtra] = useState<ExtraClassRecord>({ professor: '', subject: '', className: '' });
 
-    // Enrollment State
+    // Enrollment / Edit State
     const [showEnrollmentModal, setShowEnrollmentModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+    const [editFormData, setEditFormData] = useState<Partial<Student>>({});
+    const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
+    const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
+
     const [enrollmentType, setEnrollmentType] = useState<'individual' | 'bulk'>('individual');
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [enrollFormData, setEnrollFormData] = useState<Partial<Student>>({
@@ -371,6 +383,48 @@ export const PrintShopDashboard: React.FC = () => {
 
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
+    };
+
+    const handleOpenEdit = (student: Student) => {
+        setEditingStudent(student);
+        setEditFormData({ ...student });
+        setEditPhotoPreview(student.photoUrl || null);
+        setEditPhotoFile(null);
+        setShowEditModal(true);
+    };
+
+    const handleEditPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setEditPhotoFile(file);
+            setEditPhotoPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSaveEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingStudent) return;
+        setIsSavingEdit(true);
+        try {
+            let photoUrl = editFormData.photoUrl;
+            if (editPhotoFile) {
+                photoUrl = await uploadStudentPhoto(editPhotoFile, editFormData.name || 'Aluno');
+            }
+
+            const updatedData = {
+                ...editFormData,
+                photoUrl: photoUrl || '',
+                isAEE: !!editFormData.isAEE
+            } as Student;
+
+            await updateStudent(updatedData);
+            alert("Cadastro atualizado com sucesso!");
+            setShowEditModal(false);
+        } catch (error) {
+            alert("Erro ao atualizar cadastro.");
+        } finally {
+            setIsSavingEdit(false);
+        }
     };
 
     const handleEnroll = async (e: React.FormEvent) => {
@@ -1005,9 +1059,22 @@ export const PrintShopDashboard: React.FC = () => {
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
                                     {filteredClassStudents.map(s => (
-                                        <tr key={s.id} className="hover:bg-white/[0.02]">
-                                            <td className="p-8 font-black text-white uppercase text-base">{s.name}</td>
-                                            <td className="p-8 text-center"><button onClick={() => deleteStudent(s.id)} className="p-3 bg-red-600/10 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all"><Trash2 size={18}/></button></td>
+                                        <tr key={s.id} className="hover:bg-white/[0.02] group">
+                                            <td className="p-8 font-black text-white uppercase text-base">
+                                                <div className="flex items-center gap-4">
+                                                    {s.photoUrl && (
+                                                        <img src={s.photoUrl} className="h-10 w-10 rounded-full object-cover border border-white/10" />
+                                                    )}
+                                                    <span>{s.name}</span>
+                                                    {s.isAEE && <span className="bg-red-600/10 text-red-500 px-2 py-0.5 rounded text-[8px] font-black uppercase border border-red-500/20">Público AEE</span>}
+                                                </div>
+                                            </td>
+                                            <td className="p-8 text-center">
+                                                <div className="flex items-center justify-center gap-3">
+                                                    <button onClick={() => handleOpenEdit(s)} className="p-3 bg-blue-600/10 text-blue-500 rounded-xl hover:bg-blue-600 hover:text-white transition-all"><Edit3 size={18}/></button>
+                                                    <button onClick={() => deleteStudent(s.id)} className="p-3 bg-red-600/10 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all"><Trash2 size={18}/></button>
+                                                </div>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1138,7 +1205,7 @@ export const PrintShopDashboard: React.FC = () => {
                                         <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
                                             plan.type === 'semester' ? 'bg-blue-600/10 text-blue-500 border-blue-600/20' : 
                                             plan.type === 'project' ? 'bg-red-600/10 text-red-500 border-red-500/20' : 
-                                            'bg-green-600/10 text-green-500 border-green-500/20'
+                                            'bg-green-600/10 text-green-500 border-green-600/20'
                                         }`}>
                                             {plan.type === 'semester' ? 'Bimestral' : plan.type === 'project' ? 'Projeto AI' : 'Diário'}
                                         </span>
@@ -1348,6 +1415,85 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* EDIT STUDENT MODAL */}
+            {showEditModal && editingStudent && (
+                <div className="fixed inset-0 z-[120] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col">
+                        <div className="p-10 border-b border-white/5 flex justify-between items-center bg-black/20 shrink-0">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Editar Aluno</h3>
+                                <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest mt-1">Atualização de dados e biometria</p>
+                            </div>
+                            <button onClick={() => setShowEditModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <form onSubmit={handleSaveEdit} className="p-10 space-y-8 overflow-y-auto flex-1 custom-scrollbar">
+                            <div className="flex flex-col items-center gap-6 pb-8 border-b border-white/5">
+                                <div className="relative h-40 w-40 rounded-full border-4 border-dashed border-white/10 overflow-hidden flex items-center justify-center bg-black/40 group">
+                                    {editPhotoPreview ? (
+                                        <img src={editPhotoPreview} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <Camera size={48} className="text-gray-700" />
+                                    )}
+                                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer">
+                                        <UploadCloud className="text-white mb-2" size={32} />
+                                        <span className="text-[10px] font-black text-white uppercase">Alterar Foto</span>
+                                        <input type="file" className="sr-only" accept="image/*" onChange={handleEditPhotoChange} />
+                                    </label>
+                                </div>
+                                <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Clique para enviar uma foto para biometria</p>
+                            </div>
+
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 ml-1">Nome Completo</label>
+                                    <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value.toUpperCase()})} />
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 ml-1">ID Matrícula</label>
+                                        <input disabled className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-gray-500 font-bold outline-none cursor-not-allowed" value={editFormData.id} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 ml-1">Turma Atual</label>
+                                        <select className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-red-600" value={editFormData.classId} onChange={e => {
+                                            const cls = GRID_CLASSES.find(c => c.id === e.target.value);
+                                            setEditFormData({...editFormData, classId: e.target.value, className: cls?.name || ''});
+                                        }}>
+                                            {GRID_CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="bg-red-600/5 p-6 rounded-[2rem] border border-red-600/10">
+                                    <label className="flex items-center gap-4 cursor-pointer group">
+                                        <div className="relative">
+                                            <input type="checkbox" className="sr-only" checked={editFormData.isAEE} onChange={e => setEditFormData({...editFormData, isAEE: e.target.checked})} />
+                                            <div className={`w-12 h-7 rounded-full transition-colors ${editFormData.isAEE ? 'bg-red-600' : 'bg-gray-800'}`}></div>
+                                            <div className={`absolute top-1 left-1 bg-white w-5 h-5 rounded-full transition-transform ${editFormData.isAEE ? 'translate-x-5' : ''}`}></div>
+                                        </div>
+                                        <div className="flex-1">
+                                            <span className="block text-xs font-black text-red-500 uppercase tracking-widest">Público Alvo do AEE</span>
+                                            <span className="text-[9px] text-gray-600 font-bold uppercase">Habilitar acompanhamento pedagógico especial</span>
+                                        </div>
+                                    </label>
+                                    {editFormData.isAEE && (
+                                        <div className="mt-4 animate-in slide-in-from-top-2">
+                                            <label className="block text-[9px] font-black text-gray-500 uppercase mb-2 ml-1">Diagnóstico / Transtorno</label>
+                                            <input className="w-full bg-black/60 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600" value={editFormData.disorder || ''} onChange={e => setEditFormData({...editFormData, disorder: e.target.value})} placeholder="EX: TEA, TDAH, DEFICIÊNCIA..." />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <Button type="submit" isLoading={isSavingEdit} className="w-full h-20 bg-blue-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-blue-900/40 text-sm">
+                                <Save size={24} className="mr-3"/> Atualizar Cadastro
+                            </Button>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* PEI VIEW MODAL */}
             {showPeiModal && selectedPei && (
