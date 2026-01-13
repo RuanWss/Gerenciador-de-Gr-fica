@@ -17,21 +17,22 @@ import {
     deleteOccurrence,
     saveClassMaterial,
     getClassMaterials,
-    deleteClassMaterial
+    deleteClassMaterial,
+    logAttendance
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, LessonPlanType, ClassMaterial } from '../types';
+import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, LessonPlanType, ClassMaterial, AttendanceLog } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, List, PlusCircle, X, Trash2, FileUp, AlertCircle, 
   BookOpen, Save, ArrowLeft, Cpu, Heart, FileText, Layout, Eye, Clock, UploadCloud, ChevronRight,
   Layers, MapPin, Wrench, Target, BookOpenCheck, BrainCircuit, Rocket, Calendar as CalendarIcon, ClipboardCheck, Sparkles,
-  CheckCircle2, Download, FileDown, FileType, Smile, MessageSquare, Folder
+  CheckCircle2, Download, FileDown, FileType, Smile, MessageSquare, Folder, UserCheck, UserX
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'plans' | 'occurrences' | 'pei' | 'materials'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'plans' | 'occurrences' | 'pei' | 'materials' | 'attendance'>('requests');
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teacherOccurrences, setTeacherOccurrences] = useState<StudentOccurrence[]>([]);
@@ -41,6 +42,10 @@ export const TeacherDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
+  // --- ATTENDANCE STATES ---
+  const [attendanceClass, setAttendanceClass] = useState('');
+  const [attendanceRecords, setAttendanceRecords] = useState<Record<string, boolean>>({});
+
   // --- OCCURRENCE FORM STATES ---
   const [showOccForm, setShowOccForm] = useState(false);
   const [occClass, setOccClass] = useState('');
@@ -115,6 +120,42 @@ export const TeacherDashboard: React.FC = () => {
         }
     } catch (e) { console.error(e); }
     setIsLoading(false);
+  };
+
+  const handleSaveAttendance = async () => {
+    if (!attendanceClass) return;
+    setIsSaving(true);
+    try {
+        const today = new Date();
+        const dateString = today.toISOString().split('T')[0];
+        const classStudents = students.filter(s => s.className === attendanceClass);
+        
+        for (const student of classStudents) {
+            if (attendanceRecords[student.id]) {
+                const log: AttendanceLog = {
+                    id: '',
+                    studentId: student.id,
+                    studentName: student.name,
+                    className: student.className,
+                    timestamp: today.getTime(),
+                    dateString,
+                    type: 'entry'
+                };
+                await logAttendance(log);
+            }
+        }
+        alert("Frequência registrada com sucesso!");
+        setActiveTab('requests');
+    } catch (e) {
+        alert("Erro ao registrar frequência.");
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const isEligibleForAttendance = () => {
+      const eligible = ["JARDIM I", "JARDIM II", "1º ANO EFAI", "2º ANO EFAI", "3º ANO EFAI", "4º ANO EFAI", "5º ANO EFAI"];
+      return user?.classes?.some(c => eligible.includes(c)) || user?.educationLevels?.some(l => ["Ed. Infantil", "EFAI"].includes(l));
   };
 
   const handleSaveMaterial = async () => {
@@ -257,16 +298,89 @@ export const TeacherDashboard: React.FC = () => {
             <div className="mb-6 flex-1 overflow-y-auto custom-scrollbar">
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-6 ml-2 opacity-50">Menu Professor</p>
                 <button onClick={() => { setActiveTab('requests'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'requests' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><List size={18} /> Fila da Gráfica</button>
-                <button onClick={() => { setActiveTab('create'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'create' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><PlusCircle size={18} /> Enviar Prova</button>
+                <button onClick={() => { setActiveTab('create'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'create' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><PlusCircle size={18} /> Envio de Materiais</button>
                 <button onClick={() => { setActiveTab('materials'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'materials' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><Folder size={18} /> Materiais de Aula</button>
                 <button onClick={() => { setActiveTab('plans'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'plans' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><BookOpen size={18} /> Planejamentos</button>
                 <button onClick={() => { setActiveTab('pei'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'pei' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><Heart size={18} /> PEI / AEE</button>
                 <button onClick={() => { setActiveTab('occurrences'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'occurrences' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><AlertCircle size={18} /> Ocorrências</button>
+                {isEligibleForAttendance() && (
+                    <button onClick={() => { setActiveTab('attendance'); setIsCreatingPlan(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'attendance' ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}><Clock size={18} /> Frequência</button>
+                )}
             </div>
         </div>
         
         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
             
+            {/* ATTENDANCE TAB */}
+            {activeTab === 'attendance' && (
+                <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto pb-40">
+                    <header className="mb-10">
+                        <h1 className="text-4xl font-black uppercase tracking-tighter leading-tight">Diário de Frequência</h1>
+                        <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Chamada diária das turmas de Ed. Infantil e EFAI.</p>
+                    </header>
+                    
+                    <div className="bg-[#18181b] border-2 border-white/5 p-10 rounded-[3rem] shadow-2xl space-y-10">
+                        <div className="flex items-center gap-6">
+                            <div className="flex-1">
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Selecione a Turma</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 transition-all appearance-none"
+                                    value={attendanceClass}
+                                    onChange={(e) => {
+                                        setAttendanceClass(e.target.value);
+                                        setAttendanceRecords({});
+                                    }}
+                                >
+                                    <option value="">-- Escolha uma turma --</option>
+                                    {["JARDIM I", "JARDIM II", "1º ANO EFAI", "2º ANO EFAI", "3º ANO EFAI", "4º ANO EFAI", "5º ANO EFAI"].map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="pt-6">
+                                <span className="bg-red-600/10 text-red-500 border border-red-500/20 px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest">
+                                    {new Date().toLocaleDateString()}
+                                </span>
+                            </div>
+                        </div>
+
+                        {attendanceClass ? (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 gap-2">
+                                    {students.filter(s => s.className === attendanceClass).sort((a,b) => a.name.localeCompare(b.name)).map(student => (
+                                        <div key={student.id} className="flex items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5 group hover:bg-black/40 transition-colors">
+                                            <span className="font-black text-white uppercase tracking-tight text-sm">{student.name}</span>
+                                            <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
+                                                <button 
+                                                    onClick={() => setAttendanceRecords({...attendanceRecords, [student.id]: true})}
+                                                    className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-2 ${attendanceRecords[student.id] === true ? 'bg-green-600 text-white shadow-lg' : 'text-gray-600 hover:text-white'}`}
+                                                >
+                                                    <UserCheck size={14}/> Presente
+                                                </button>
+                                                <button 
+                                                    onClick={() => setAttendanceRecords({...attendanceRecords, [student.id]: false})}
+                                                    className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-2 ${attendanceRecords[student.id] === false ? 'bg-red-600 text-white shadow-lg' : 'text-gray-600 hover:text-white'}`}
+                                                >
+                                                    <UserX size={14}/> Ausente
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <Button onClick={handleSaveAttendance} isLoading={isSaving} className="w-full h-20 bg-red-600 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-red-900/40 text-sm mt-8">
+                                    <Save size={24} className="mr-3"/> Confirmar Chamada do Dia
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2.5rem] opacity-30">
+                                <Clock size={48} className="mx-auto mb-4 text-gray-500" />
+                                <p className="font-black uppercase tracking-widest text-sm">Selecione uma turma para carregar a lista de chamada</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* PLANS TAB */}
             {activeTab === 'plans' && !isCreatingPlan && (
                 <div className="animate-in fade-in slide-in-from-right-4">
@@ -357,11 +471,11 @@ export const TeacherDashboard: React.FC = () => {
                                     <section className="grid grid-cols-1 md:grid-cols-2 gap-10">
                                         <div className="space-y-6">
                                             <h3 className="text-sm font-black text-red-500 uppercase tracking-[0.3em] flex items-center gap-4 border-b border-white/5 pb-4"><Target size={22}/> 2. Questão Norteadora</h3>
-                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-base outline-none focus:border-red-600 min-h-[160px] leading-relaxed" value={planData.guidingQuestion} onChange={e => setPlanData({...planData, guidingQuestion: e.target.value})} placeholder="Que problema real vamos investigar e melhorar?" />
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-2rem p-8 text-white text-base outline-none focus:border-red-600 min-h-[160px] leading-relaxed" value={planData.guidingQuestion} onChange={e => setPlanData({...planData, guidingQuestion: e.target.value})} placeholder="Que problema real vamos investigar e melhorar?" />
                                         </div>
                                         <div className="space-y-6">
                                             <h3 className="text-sm font-black text-red-500 uppercase tracking-[0.3em] flex items-center gap-4 border-b border-white/5 pb-4"><BookOpenCheck size={22}/> 3. Objetivo do Subprojeto</h3>
-                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-base outline-none focus:border-red-600 min-h-[160px] leading-relaxed" value={planData.projectObjective} onChange={e => setPlanData({...planData, projectObjective: e.target.value})} placeholder="Ao final, os alunos serão capazes de...?" />
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-2rem p-8 text-white text-base outline-none focus:border-red-600 min-h-[160px] leading-relaxed" value={planData.projectObjective} onChange={e => setPlanData({...planData, projectObjective: e.target.value})} placeholder="Ao final, os alunos serão capazes de...?" />
                                         </div>
                                     </section>
                                     <section className="space-y-8">
@@ -382,7 +496,7 @@ export const TeacherDashboard: React.FC = () => {
                                                 <button key={type} onClick={() => setPlanData({...planData, finalProductType: type})} className={`px-6 py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${planData.finalProductType === type ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-black/40 border-white/5 text-gray-500'}`}>{type}</button>
                                             ))}
                                         </div>
-                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-base outline-none focus:border-red-600 min-h-[120px] leading-relaxed" value={planData.finalProductDescription} onChange={e => setPlanData({...planData, finalProductDescription: e.target.value})} placeholder="Descrição detalhada do produto final..." />
+                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2rem p-8 text-white text-base outline-none focus:border-red-600 min-h-[120px] leading-relaxed" value={planData.finalProductDescription} onChange={e => setPlanData({...planData, finalProductDescription: e.target.value})} placeholder="Descrição detalhada do produto final..." />
                                     </section>
                                     <section className="grid grid-cols-1 md:grid-cols-2 gap-10">
                                         <div className="space-y-8">
@@ -410,7 +524,7 @@ export const TeacherDashboard: React.FC = () => {
                                     </section>
                                     <section className="space-y-8">
                                         <h3 className="text-sm font-black text-red-500 uppercase tracking-[0.3em] flex items-center gap-4 border-b border-white/5 pb-6"><Wrench size={22}/> 8. Recursos Instrumentais</h3>
-                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-base outline-none focus:border-red-600 min-h-[140px] leading-relaxed" value={planData.projectResources} onChange={e => setPlanData({...planData, projectResources: e.target.value})} placeholder="Recursos materiais, laboratórios..." />
+                                        <textarea className="w-full bg-black/40 border border-white/10 rounded-2rem p-8 text-white text-base outline-none focus:border-red-600 min-h-[140px] leading-relaxed" value={planData.projectResources} onChange={e => setPlanData({...planData, projectResources: e.target.value})} placeholder="Recursos materiais, laboratórios..." />
                                     </section>
                                     <section className="bg-red-900/5 p-10 rounded-[3.5rem] border border-red-500/10 space-y-10">
                                         <h3 className="text-sm font-black text-red-500 uppercase tracking-[0.4em] flex items-center gap-4 border-b border-red-500/20 pb-6"><BrainCircuit size={26}/> 9. Uso de IA (Instrumental AI)</h3>
@@ -464,7 +578,7 @@ export const TeacherDashboard: React.FC = () => {
                                             {planType === 'daily' ? (
                                                 <input type="date" className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 text-base" value={planData.date} onChange={e => setPlanData({...planData, date: e.target.value})} />
                                             ) : (
-                                                <select className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 appearance-none text-base" value={planData.period} onChange={e => setPlanData({...planData, period: e.target.value})}>
+                                                <select className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 appearance-none text-base" value={planData.period} onChange={e => setPlanData({...planData, period: e.target.value as any})}>
                                                     <option value="">-- Selecione --</option>
                                                     <option value="1º BIMESTRE">1º BIMESTRE</option>
                                                     <option value="2º BIMESTRE">2º BIMESTRE</option>
@@ -512,7 +626,7 @@ export const TeacherDashboard: React.FC = () => {
                                 <h3 className="text-xl font-black uppercase tracking-tight">Novo Material</h3>
                             </div>
                             <div className="space-y-4">
-                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título do Arquivo</label>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título do Material</label>
                                 <input className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl text-white font-bold outline-none focus:border-red-600 transition-all" value={materialTitle} onChange={e => setMaterialTitle(e.target.value)} placeholder="Ex: Aula 05 - Revolução Francesa" />
                             </div>
                             <div className="grid grid-cols-2 gap-6">
@@ -542,18 +656,18 @@ export const TeacherDashboard: React.FC = () => {
                                         </div>
                                     ) : (
                                         <>
-                                            <FileUp className="mx-auto text-gray-700 mb-4 group-hover:text-red-500 group-hover:scale-110 transition-all" size={48} />
+                                            <FileUp className="mx-auto text-gray-700 mb-4 group-hover:text-orange-500 group-hover:scale-110 transition-all" size={48} />
                                             <p className="text-gray-500 font-black uppercase text-[10px] tracking-widest">Clique ou arraste o arquivo</p>
                                         </>
                                     )}
                                 </div>
                             </div>
-                            <Button onClick={handleSaveMaterial} isLoading={isSaving} className="w-full h-16 rounded-2xl font-black uppercase tracking-widest bg-red-600 shadow-2xl shadow-red-900/40">Enviar para Sala</Button>
+                            <Button onClick={handleSaveMaterial} isLoading={isSaving} className="w-full h-16 rounded-2xl font-black uppercase tracking-widest bg-red-600 shadow-2xl shadow-red-900/40">Enviar Material</Button>
                         </div>
 
                         {/* LISTA DE MATERIAIS ENVIADOS */}
                         <div className="space-y-6">
-                            <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3"><List size={24} className="text-red-600"/> Arquivos Recentemente Enviados</h3>
+                            <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3"><List size={24} className="text-red-600"/> Materiais Recentemente Enviados</h3>
                             <div className="grid grid-cols-1 gap-4">
                                 {teacherMaterials.length > 0 ? teacherMaterials.map(mat => (
                                     <div key={mat.id} className="bg-[#18181b] border border-white/5 p-6 rounded-3xl flex justify-between items-center group hover:border-red-600/30 transition-all">
@@ -623,17 +737,17 @@ export const TeacherDashboard: React.FC = () => {
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Selecione o Aluno (AEE)</label>
                                     <select className="w-full bg-black/60 border border-white/10 rounded-[1.5rem] p-5 text-white font-bold outline-none focus:border-red-600 appearance-none text-sm" value={newPei.studentId} onChange={e => setNewPei({...newPei, studentId: e.target.value})}>
                                         <option value="">-- Aluno --</option>
-                                        {students.filter(s => s.isAEE).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        {students.filter(s => s.isAEE).map(s => <option key={s.id} value={s.id}>{s.name} ({s.className})</option>)}
                                     </select>
                                 </div>
                                 <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Disciplina</label><input className="w-full bg-black/60 border border-white/10 rounded-[1.5rem] p-5 text-white font-bold outline-none focus:border-red-600 text-sm" value={newPei.subject} onChange={e => setNewPei({...newPei, subject: e.target.value})} /></div>
                                 <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Período / Bimestre</label><input className="w-full bg-black/60 border border-white/10 rounded-[1.5rem] p-5 text-white font-bold outline-none focus:border-red-600 text-sm" value={newPei.period} onChange={e => setNewPei({...newPei, period: e.target.value})} placeholder="Ex: 1º Bimestre" /></div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                <div className="space-y-3"><label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-3">Competências Essenciais</label><textarea className="w-full bg-black/60 border border-white/10 rounded-[2rem] p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.essentialCompetencies} onChange={e => setNewPei({...newPei, essentialCompetencies: e.target.value})} /></div>
-                                <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Conteúdos Selecionados</label><textarea className="w-full bg-black/60 border border-white/10 rounded-[2rem] p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.selectedContents} onChange={e => setNewPei({...newPei, selectedContents: e.target.value})} /></div>
-                                <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Recursos Didáticos</label><textarea className="w-full bg-black/60 border border-white/10 rounded-[2rem] p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.didacticResources} onChange={e => setNewPei({...newPei, didacticResources: e.target.value})} /></div>
-                                <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Procedimentos de Avaliação</label><textarea className="w-full bg-black/60 border border-white/10 rounded-[2rem] p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.evaluation} onChange={e => setNewPei({...newPei, evaluation: e.target.value})} /></div>
+                                <div className="space-y-3"><label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-3">Competências Essenciais</label><textarea className="w-full bg-black/60 border border-white/10 rounded-2rem p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.essentialCompetencies} onChange={e => setNewPei({...newPei, essentialCompetencies: e.target.value})} /></div>
+                                <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Conteúdos Selecionados</label><textarea className="w-full bg-black/60 border border-white/10 rounded-2rem p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.selectedContents} onChange={e => setNewPei({...newPei, selectedContents: e.target.value})} /></div>
+                                <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Recursos Didáticos</label><textarea className="w-full bg-black/60 border border-white/10 rounded-2rem p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.didacticResources} onChange={e => setNewPei({...newPei, didacticResources: e.target.value})} /></div>
+                                <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Procedimentos de Avaliação</label><textarea className="w-full bg-black/60 border border-white/10 rounded-2rem p-8 text-white font-medium text-sm outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newPei.evaluation} onChange={e => setNewPei({...newPei, evaluation: e.target.value})} /></div>
                             </div>
                             <Button onClick={handleSavePei} isLoading={isSaving} className="w-full h-24 rounded-[2.5rem] font-black uppercase tracking-[0.3em] bg-red-600 shadow-2xl shadow-red-900/40 text-xl"><Save size={28} className="mr-4"/> Salvar Planejamento PEI</Button>
                         </div>
@@ -655,7 +769,7 @@ export const TeacherDashboard: React.FC = () => {
                                     <div className="flex items-center gap-4 mb-6"><span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase border tracking-[0.1em] ${occ.category === 'elogio' ? 'bg-green-600/10 text-green-500 border-green-500/20' : 'bg-red-600/10 text-red-500 border-red-500/20'}`}>{occ.category}</span><span className="text-xs text-gray-600 font-black uppercase tracking-widest flex items-center gap-2"><Clock size={14}/> {new Date(occ.timestamp).toLocaleDateString()}</span></div>
                                     <h3 className="text-3xl font-black uppercase mb-2 tracking-tight text-white">{occ.studentName}</h3>
                                     <p className="text-xs text-red-500 font-black uppercase tracking-[0.2em] mb-8">{occ.studentClass}</p>
-                                    <div className="bg-black/30 p-8 rounded-[2rem] border border-white/5 relative"><p className="text-gray-300 italic text-lg leading-relaxed font-medium">"{occ.description}"</p><MessageSquare size={24} className="absolute -top-3 -left-3 text-red-600/30 fill-red-600/10"/></div>
+                                    <div className="bg-black/30 p-8 rounded-2rem border border-white/5 relative"><p className="text-gray-300 italic text-lg leading-relaxed font-medium">"{occ.description}"</p><MessageSquare size={24} className="absolute -top-3 -left-3 text-red-600/30 fill-red-600/10"/></div>
                                 </div>
                                 <button onClick={async () => { if(confirm("Excluir ocorrência?")) await deleteOccurrence(occ.id).then(fetchData); }} className="text-gray-800 hover:text-red-500 transition-colors p-4 bg-white/5 rounded-2xl hover:scale-110 active:scale-95"><Trash2 size={24}/></button>
                             </div>
@@ -671,7 +785,7 @@ export const TeacherDashboard: React.FC = () => {
                         <div className="p-10 border-b border-white/5 flex justify-between items-center bg-red-600/5"><div className="flex items-center gap-6"><div className="h-16 w-16 bg-red-600 rounded-2xl flex items-center justify-center shadow-xl"><AlertCircle size={32}/></div><div><h3 className="text-2xl font-black text-white uppercase tracking-tight">Nova Ocorrência</h3><p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">Registro Pedagógico Disciplinar</p></div></div><button onClick={() => setShowOccForm(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div>
                         <div className="p-12 space-y-10">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Turma</label><select className="w-full bg-black/60 border border-white/10 rounded-[1.5rem] p-5 text-white font-bold outline-none focus:border-red-600 appearance-none text-sm" value={occClass} onChange={e => setOccClass(e.target.value)}><option value="">-- Turma --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Aluno</label><select className="w-full bg-black/60 border border-white/10 rounded-[1.5rem] p-5 text-white font-bold outline-none focus:border-red-600 appearance-none text-sm" value={newOcc.studentId} onChange={e => setNewOcc({...newOcc, studentId: e.target.value})} disabled={!occClass}><option value="">{occClass ? '-- Selecione o Aluno --' : 'Aguardando Turma...'}</option>{students.filter(s => s.className === occClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div>
-                            <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Relato Detalhado</label><textarea className="w-full bg-black/60 border border-white/10 rounded-[2rem] p-8 text-white font-medium text-base outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newOcc.description} onChange={e => setNewOcc({...newOcc, description: e.target.value})} placeholder="Descreva o ocorrido..." /></div>
+                            <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Relato Detalhado</label><textarea className="w-full bg-black/60 border border-white/10 rounded-2rem p-8 text-white font-medium text-base outline-none focus:border-red-600 transition-all min-h-[200px] leading-relaxed" value={newOcc.description} onChange={e => setNewOcc({...newOcc, description: e.target.value})} placeholder="Descreva o ocorrido..." /></div>
                             <Button onClick={handleSaveOccurrenceLocal} isLoading={isSaving} className="w-full h-20 rounded-[2rem] font-black uppercase tracking-[0.2em] bg-red-600 shadow-2xl shadow-red-900/40 text-sm"><Save size={24} className="mr-3"/> Confirmar Registro</Button>
                         </div>
                     </div>
@@ -702,7 +816,7 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* ENVIAR PROVA TAB */}
+            {/* ENVIAR PROVA TAB (Agora renomeado para Criar Material) */}
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-4xl mx-auto space-y-12">
                     <div className="bg-[#18181b] border-2 border-white/5 p-10 rounded-[3.5rem] shadow-2xl text-white">
@@ -723,8 +837,8 @@ export const TeacherDashboard: React.FC = () => {
                         <div className="space-y-10">
                             <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Título do Material</label><input className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 text-lg transition-all" value={examTitle} onChange={e => setExamTitle(e.target.value)} /></div>
                             <div className="grid grid-cols-2 gap-10"><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none appearance-none focus:border-red-600 text-lg" value={examGrade} onChange={e => setExamGrade(e.target.value)}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Qtd</label><input type="number" className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 text-lg" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} /></div></div>
-                            <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Descrição da Impressão</label><textarea className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white font-medium text-base outline-none focus:border-red-600 transition-all min-h-[140px] leading-relaxed" value={printInstructions} onChange={e => setPrintInstructions(e.target.value)} placeholder="Ex: frente e verso..." /></div>
-                            <div className="border-4 border-dashed border-white/5 rounded-[3rem] p-20 text-center hover:border-red-600 transition-all relative bg-black/20 group cursor-pointer"><input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)])} /><FileUp className="mx-auto text-gray-800 mb-6 group-hover:text-red-500 group-hover:scale-110 transition-all" size={80} /><p className="text-gray-600 font-black uppercase text-xs tracking-[0.3em] group-hover:text-red-200 transition-colors">Arraste seus arquivos PDF aqui</p></div>
+                            <div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-3">Descrição da Impressão</label><textarea className="w-full bg-black/40 border border-white/10 rounded-2rem p-8 text-white font-medium text-base outline-none focus:border-red-600 transition-all min-h-[140px] leading-relaxed" value={printInstructions} onChange={e => setPrintInstructions(e.target.value)} placeholder="Ex: frente e verso..." /></div>
+                            <div className="border-4 border-dashed border-white/5 rounded-[3rem] p-20 text-center hover:border-red-600 transition-all relative bg-black/20 group cursor-pointer"><input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)])} /><FileUp className="mx-auto text-gray-700 mb-6 group-hover:text-red-500 group-hover:scale-110 transition-all" size={80} /><p className="text-gray-600 font-black uppercase text-xs tracking-[0.3em] group-hover:text-red-200 transition-colors">Arraste seus arquivos PDF aqui</p></div>
                             <div className="mt-8 space-y-3">{uploadedFiles.map((f, i) => (<div key={i} className="flex justify-between items-center bg-white/5 p-5 rounded-2xl border border-white/5 animate-in slide-in-from-left-4"><span className="text-sm text-gray-300 font-bold truncate pr-6 uppercase tracking-tight">{f.name}</span><button onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-400 p-2 transition-colors"><X size={24}/></button></div>))}</div>
                             <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-24 rounded-[2.5rem] font-black uppercase tracking-[0.3em] bg-red-600 shadow-2xl shadow-red-900/60 text-xl hover:scale-[1.02] transition-transform">Enviar p/ Impressão</Button>
                         </div>

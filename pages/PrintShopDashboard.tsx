@@ -216,7 +216,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [configIsBannerActive, setConfigIsBannerActive] = useState(false);
 
     const [selectedDay, setSelectedDay] = useState(new Date().getDay() || 1);
-    const [scheduleShiftTab, setScheduleShiftTab] = useState<'efai' | 'efaf' | 'em'>('efaf');
+    const [scheduleShiftTab, setScheduleShiftTab] = useState<'infantil' | 'efai' | 'efaf' | 'em'>('efaf');
     const [showScheduleModal, setShowScheduleModal] = useState(false);
     const [editingCell, setEditingCell] = useState<{classId: string, slotId: string} | null>(null);
     const [newSchedule, setNewSchedule] = useState({ subject: '', professor: '' });
@@ -1319,9 +1319,10 @@ export const PrintShopDashboard: React.FC = () => {
                             <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Grade Horária</h1><p className="text-gray-400">Distribuição semanal de aulas.</p></div>
                             <div className="flex flex-wrap gap-4 items-center">
                                 <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
-                                    <button onClick={() => setScheduleShiftTab('efai')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'efai' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500'}`}>EFAI</button>
+                                    <button onClick={() => setScheduleShiftTab('infantil')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'infantil' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500'}`}>INFANTIL</button>
+                                    <button onClick={() => setScheduleShiftTab('efai')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'efai' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500'}`}>EFAI</button>
                                     <button onClick={() => setScheduleShiftTab('efaf')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'efaf' ? 'bg-yellow-600 text-white shadow-lg' : 'text-gray-500'}`}>EFAF</button>
-                                    <button onClick={() => setScheduleShiftTab('em')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'em' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500'}`}>MÉDIO</button>
+                                    <button onClick={() => setScheduleShiftTab('em')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2 ${scheduleShiftTab === 'em' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500'}`}>MÉDIO</button>
                                 </div>
                                 <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">{[1,2,3,4,5].map(d => (<button key={d} onClick={() => setSelectedDay(d)} className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedDay === d ? 'bg-red-600 text-white' : 'text-gray-500'}`}>{['Seg', 'Ter', 'Qua', 'Qui', 'Sex'][d-1]}</button>))}</div>
                             </div>
@@ -1332,7 +1333,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     <tr><th className="p-8 sticky left-0 bg-[#18181b] z-10">Horário</th>{GRID_CLASSES.filter(c => c.type === scheduleShiftTab).map(c => <th key={c.id} className="p-8">{c.name}</th>)}</tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {(scheduleShiftTab === 'efai' ? EFAI_SLOTS : scheduleShiftTab === 'efaf' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => (
+                                    {(scheduleShiftTab === 'efai' || scheduleShiftTab === 'infantil' ? EFAI_SLOTS : scheduleShiftTab === 'efaf' ? MORNING_SLOTS : AFTERNOON_SLOTS).map(slot => (
                                         <tr key={slot.id} className="hover:bg-white/[0.02]">
                                             <td className="p-8 sticky left-0 bg-[#18181b] z-10"><div className="text-white font-bold text-sm">{slot.label}</div><div className="text-[10px] text-gray-500 font-bold uppercase">{slot.start} - {slot.end}</div></td>
                                             {GRID_CLASSES.filter(c => c.type === scheduleShiftTab).map(cls => {

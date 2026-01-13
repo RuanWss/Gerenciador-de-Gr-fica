@@ -124,6 +124,8 @@ export interface StaffMember {
   isAdmin?: boolean;
   weeklyClasses?: number;
   educationLevels?: string[];
+  // Fix: Added classes property to interface
+  classes?: string[];
 }
 
 export interface SystemConfig {

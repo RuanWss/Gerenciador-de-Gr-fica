@@ -43,7 +43,7 @@ import {
     Layers,
     PlusCircle
 } from 'lucide-react';
-import { EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
+import { EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES } from '../constants';
 
 export const HRDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'staff' | 'attendance' | 'substitutions' | 'subjects'>('staff');
@@ -126,7 +126,11 @@ export const HRDashboard: React.FC = () => {
     // Handlers
     const handleEdit = (staff: StaffMember) => {
         setEditingId(staff.id);
-        setFormData({ ...staff, educationLevels: staff.educationLevels || [] });
+        setFormData({ 
+            ...staff, 
+            educationLevels: staff.educationLevels || [], 
+            classes: staff.classes || [] 
+        });
         setCreateLogin(!!staff.email);
         setPhotoFile(null);
         setPhotoPreview(staff.photoUrl || null);
@@ -169,7 +173,8 @@ export const HRDashboard: React.FC = () => {
                 isAdmin: formData.isAdmin || false,
                 weeklyClasses: formData.weeklyClasses,
                 email: formData.email || '',
-                educationLevels: formData.educationLevels || []
+                educationLevels: formData.educationLevels || [],
+                classes: formData.classes || []
             };
 
             const cleanData = JSON.parse(JSON.stringify(dataToSave));
@@ -221,7 +226,7 @@ export const HRDashboard: React.FC = () => {
 
     const resetForm = () => {
         setEditingId(null);
-        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [] });
+        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [], classes: [] });
         setCreateLogin(false);
         setPhotoFile(null);
         setPhotoPreview(null);
@@ -378,7 +383,7 @@ export const HRDashboard: React.FC = () => {
                                         <h3 className="text-xl font-black text-white uppercase tracking-tight">{editingId ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
                                         <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
                                     </div>
-                                    <form onSubmit={handleSave} className="p-6 md:p-10 space-y-6 overflow-y-auto flex-1">
+                                    <form onSubmit={handleSave} className="p-6 md:p-10 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                                             <div className="md:col-span-2">
                                                 <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Nome Completo</label>
@@ -434,7 +439,7 @@ export const HRDashboard: React.FC = () => {
                                                 {formData.isTeacher && tempSubject && (
                                                     <div className="text-[10px] font-black text-blue-400 uppercase bg-blue-400/10 p-3 rounded-xl border border-blue-400/20 flex items-center gap-2">
                                                         <BookOpen size={14}/> Disciplina: {tempSubject}
-                                                        <button type="button" onClick={() => setShowSubjectModal(true)} className="ml-auto underline">Alterar</button>
+                                                        <button type="button" onClick={() => setShowSubjectModal(true)} className="ml-auto underline text-[9px]">Alterar</button>
                                                     </div>
                                                 )}
 
@@ -460,6 +465,37 @@ export const HRDashboard: React.FC = () => {
                                                         ))}
                                                     </div>
                                                 </div>
+
+                                                {/* CONDITIONAL TURMAS SELECTION (NEW) */}
+                                                {(formData.educationLevels?.includes('EFAI') || formData.educationLevels?.includes('Ed. Infantil')) && (
+                                                    <div className="pt-4 border-t border-white/5 space-y-4 animate-in fade-in slide-in-from-top-2">
+                                                        <label className="block text-[10px] font-black text-blue-500 uppercase tracking-widest">Vincular Turmas EFAI / INFANTIL</label>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                            {[...INFANTIL_CLASSES, ...EFAI_CLASSES].map(clsName => (
+                                                                <label key={clsName} className={`flex items-center justify-center p-3 rounded-xl border text-[9px] font-black uppercase tracking-tighter transition-all cursor-pointer ${
+                                                                    formData.classes?.includes(clsName) 
+                                                                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg' 
+                                                                    : 'bg-black/20 border-white/5 text-gray-600 hover:text-gray-400'
+                                                                }`}>
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        className="sr-only"
+                                                                        checked={formData.classes?.includes(clsName) || false}
+                                                                        onChange={(e) => {
+                                                                            const current = formData.classes || [];
+                                                                            const updated = e.target.checked 
+                                                                                ? [...current, clsName]
+                                                                                : current.filter(c => c !== clsName);
+                                                                            setFormData({...formData, classes: updated});
+                                                                        }}
+                                                                    />
+                                                                    {clsName}
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                        <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest italic">* Selecione as turmas específicas que este docente atende.</p>
+                                                    </div>
+                                                )}
 
                                                 <div className="pt-4 border-t border-white/5">
                                                     <label className="flex items-center gap-3 cursor-pointer mb-6">
@@ -641,20 +677,59 @@ export const HRDashboard: React.FC = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {allSubjects.map(subject => {
-                                const subjectTeachers = staffList.filter(s => s.isTeacher && s.role.toUpperCase().includes(subject.toUpperCase()));
+                                // Filter logic update for Polivalente
+                                const subjectTeachers = staffList.filter(s => {
+                                    if (!s.isTeacher) return false;
+                                    const roleMatches = s.role.toUpperCase().includes(subject.toUpperCase());
+                                    // Se for Polivalente, também pode filtrar por vínculo de turma se necessário futuramente
+                                    return roleMatches;
+                                });
+
                                 return (
-                                    <div key={subject} className="bg-[#18181b] border border-white/5 rounded-[2rem] p-6 shadow-xl hover:border-red-600/30 transition-all">
+                                    <div key={subject} className="bg-[#18181b] border border-white/5 rounded-[2rem] p-6 shadow-xl hover:border-red-600/30 transition-all flex flex-col">
                                         <div className="flex items-center justify-between mb-4">
                                             <h3 className="text-sm font-black text-white uppercase tracking-tight line-clamp-1">{subject}</h3>
                                             <span className="bg-red-600/10 text-red-500 px-2 py-0.5 rounded-full text-[9px] font-black border border-red-600/20">{subjectTeachers.length}</span>
                                         </div>
-                                        <div className="space-y-3 max-h-48 overflow-y-auto custom-scrollbar">
+                                        
+                                        {/* (NEW) CONDITIONAL CLASSIFICATION FOR POLIVALENTE */}
+                                        {subject === "POLIVALENTE (INFANTIL/EFAI)" && (
+                                            <div className="mb-4 bg-blue-900/10 p-4 rounded-2xl border border-blue-500/10">
+                                                <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-3">Vínculo por Segmento</p>
+                                                <div className="space-y-4">
+                                                    {["Ed. Infantil", "EFAI"].map(segment => {
+                                                        const segmentTeachers = subjectTeachers.filter(t => t.educationLevels?.includes(segment));
+                                                        return (
+                                                            <div key={segment} className="space-y-2">
+                                                                <p className="text-[7px] font-bold text-gray-500 uppercase tracking-widest">{segment}</p>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {segmentTeachers.map(t => (
+                                                                        <div key={t.id} className="h-7 w-7 rounded-lg bg-black/40 border border-white/5 overflow-hidden" title={t.name}>
+                                                                            {t.photoUrl ? <img src={t.photoUrl} className="w-full h-full object-cover" /> : <Users size={12} className="m-1.5 text-gray-800"/>}
+                                                                        </div>
+                                                                    ))}
+                                                                    {segmentTeachers.length === 0 && <span className="text-[7px] text-gray-800 uppercase italic">Nenhum docente</span>}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-3 max-h-48 overflow-y-auto custom-scrollbar flex-1">
                                             {subjectTeachers.map(teacher => (
                                                 <div key={teacher.id} className="flex items-center gap-3 bg-black/40 p-2 rounded-xl border border-white/5">
                                                     <div className="w-6 h-6 rounded-full overflow-hidden border border-white/10 shrink-0">
                                                         {teacher.photoUrl ? <img src={teacher.photoUrl} className="w-full h-full object-cover" /> : <Users className="w-full h-full p-1 text-gray-700"/>}
                                                     </div>
-                                                    <span className="text-[10px] font-bold text-gray-300 uppercase truncate">{teacher.name}</span>
+                                                    <div className="overflow-hidden flex-1">
+                                                        <span className="text-[10px] font-bold text-gray-300 uppercase truncate block">{teacher.name}</span>
+                                                        {/* (NEW) SHOW LINKED CLASSES */}
+                                                        {teacher.classes && teacher.classes.length > 0 && (
+                                                            <p className="text-[7px] text-red-500 font-black truncate">{teacher.classes.join(" • ")}</p>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             ))}
                                             {subjectTeachers.length === 0 && (
