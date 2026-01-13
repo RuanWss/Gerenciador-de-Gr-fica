@@ -12,14 +12,15 @@ import {
     saveInfantilReport,
     listenToInfantilReports,
     deleteInfantilReport,
-    saveStudent
+    saveStudent,
+    logAttendance
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, Student, StudentOccurrence, InfantilReport } from '../types';
+import { ExamRequest, ExamStatus, Student, StudentOccurrence, InfantilReport, AttendanceLog } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, UploadCloud, List, PlusCircle, X, 
   Trash2, FileUp, Download, Calendar, Baby, Smile, 
-  FileEdit, Save, ArrowLeft, Info, CheckCircle2, Users, UserPlus, UserPlus2, Check, Clock
+  FileEdit, Save, ArrowLeft, Info, CheckCircle2, Users, UserPlus, UserPlus2, Check, Clock, UserCheck, UserX
 } from 'lucide-react';
 
 const INFANTIL_CLASSES = ["JARDIM I", "JARDIM II"];
@@ -75,7 +76,7 @@ const SKILLS_CONFIG = [
 
 export const InfantilDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'reports' | 'occurrences' | 'students_list'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'reports' | 'occurrences' | 'students_list' | 'attendance'>('requests');
   const [exams, setExams] = useState<ExamRequest[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teacherOccurrences, setTeacherOccurrences] = useState<StudentOccurrence[]>([]);
@@ -83,6 +84,10 @@ export const InfantilDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
+  // --- ATTENDANCE STATES ---
+  const [attendanceClass, setAttendanceClass] = useState('');
+  const [attendanceRecords, setAttendanceRecords] = useState<Record<string, boolean>>({});
+
   // --- EXAM FORM STATES ---
   const [examTitle, setExamTitle] = useState('');
   const [examGrade, setExamGrade] = useState('');
@@ -140,6 +145,37 @@ export const InfantilDashboard: React.FC = () => {
         }
     } catch (e) { console.error(e); }
     setIsLoading(false);
+  };
+
+  const handleSaveAttendance = async () => {
+    if (!attendanceClass) return;
+    setIsSaving(true);
+    try {
+        const today = new Date();
+        const dateString = today.toISOString().split('T')[0];
+        const classStudents = students.filter(s => s.className === attendanceClass);
+        
+        for (const student of classStudents) {
+            if (attendanceRecords[student.id] !== undefined) {
+                const log: AttendanceLog = {
+                    id: '',
+                    studentId: student.id,
+                    studentName: student.name,
+                    className: student.className,
+                    timestamp: today.getTime(),
+                    dateString,
+                    type: attendanceRecords[student.id] ? 'entry' : 'exit'
+                };
+                await logAttendance(log);
+            }
+        }
+        alert("Frequência registrada com sucesso!");
+        setActiveTab('requests');
+    } catch (e) {
+        alert("Erro ao registrar frequência.");
+    } finally {
+        setIsSaving(false);
+    }
   };
 
   const finalizeExam = async () => {
@@ -296,11 +332,85 @@ export const InfantilDashboard: React.FC = () => {
                 <button onClick={() => { setActiveTab('occurrences'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'occurrences' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
                     <Smile size={18} /> Diário de Bordo
                 </button>
+                <button onClick={() => { setActiveTab('attendance'); setIsCreatingReport(false); }} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'attendance' ? 'bg-orange-600 text-white shadow-xl shadow-orange-900/40' : 'text-orange-200/40 hover:bg-white/5 hover:text-white'}`}>
+                    <Clock size={18} /> Frequência
+                </button>
             </nav>
         </div>
         
         {/* CONTENT AREA */}
         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+            
+            {/* ATTENDANCE TAB */}
+            {activeTab === 'attendance' && (
+                <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto pb-40">
+                    <header className="mb-10">
+                        <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Diário de Frequência</h1>
+                        <p className="text-orange-200/40 font-bold uppercase text-[10px] tracking-widest">Chamada diária da Educação Infantil.</p>
+                    </header>
+                    
+                    <div className="bg-[#1c1917] border-2 border-orange-500/10 p-10 rounded-[3rem] shadow-2xl space-y-10">
+                        <div className="flex items-center gap-6">
+                            <div className="flex-1">
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Selecione a Turma</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all appearance-none"
+                                    value={attendanceClass}
+                                    onChange={(e) => {
+                                        setAttendanceClass(e.target.value);
+                                        setAttendanceRecords({});
+                                    }}
+                                >
+                                    <option value="">-- Escolha uma turma --</option>
+                                    {INFANTIL_CLASSES.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="pt-6">
+                                <span className="bg-orange-600/10 text-orange-500 border border-orange-500/20 px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-widest">
+                                    {new Date().toLocaleDateString()}
+                                </span>
+                            </div>
+                        </div>
+
+                        {attendanceClass ? (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 gap-2">
+                                    {students.filter(s => s.className === attendanceClass).sort((a,b) => a.name.localeCompare(b.name)).map(student => (
+                                        <div key={student.id} className="flex items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5 group hover:bg-black/40 transition-colors">
+                                            <span className="font-black text-white uppercase tracking-tight text-sm">{student.name}</span>
+                                            <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
+                                                <button 
+                                                    onClick={() => setAttendanceRecords({...attendanceRecords, [student.id]: true})}
+                                                    className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-2 ${attendanceRecords[student.id] === true ? 'bg-green-600 text-white shadow-lg' : 'text-gray-600 hover:text-white'}`}
+                                                >
+                                                    <UserCheck size={14}/> Presente
+                                                </button>
+                                                <button 
+                                                    onClick={() => setAttendanceRecords({...attendanceRecords, [student.id]: false})}
+                                                    className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center gap-2 ${attendanceRecords[student.id] === false ? 'bg-red-600 text-white shadow-lg' : 'text-gray-600 hover:text-white'}`}
+                                                >
+                                                    <UserX size={14}/> Ausente
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <Button onClick={handleSaveAttendance} isLoading={isSaving} className="w-full h-20 bg-orange-600 rounded-3xl font-black uppercase tracking-widest shadow-2xl shadow-orange-900/40 text-sm mt-8">
+                                    <Save size={24} className="mr-3"/> Confirmar Chamada do Dia
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="py-20 text-center border-2 border-dashed border-orange-500/10 rounded-[2.5rem] opacity-30">
+                                <Clock size={48} className="mx-auto mb-4 text-gray-500" />
+                                <p className="font-black uppercase tracking-widest text-sm text-gray-500">Selecione uma turma para carregar a lista de chamada</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'requests' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
                     <header className="mb-10">

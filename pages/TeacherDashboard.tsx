@@ -20,7 +20,7 @@ import {
     deleteClassMaterial,
     logAttendance
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, LessonPlanType, ClassMaterial, AttendanceLog } from '../types';
+import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, LessonPlanType, ClassMaterial, AttendanceLog, UserRole } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, List, PlusCircle, X, Trash2, FileUp, AlertCircle, 
@@ -131,7 +131,7 @@ export const TeacherDashboard: React.FC = () => {
         const classStudents = students.filter(s => s.className === attendanceClass);
         
         for (const student of classStudents) {
-            if (attendanceRecords[student.id]) {
+            if (attendanceRecords[student.id] !== undefined) {
                 const log: AttendanceLog = {
                     id: '',
                     studentId: student.id,
@@ -139,7 +139,7 @@ export const TeacherDashboard: React.FC = () => {
                     className: student.className,
                     timestamp: today.getTime(),
                     dateString,
-                    type: 'entry'
+                    type: attendanceRecords[student.id] ? 'entry' : 'exit'
                 };
                 await logAttendance(log);
             }
@@ -153,9 +153,17 @@ export const TeacherDashboard: React.FC = () => {
     }
   };
 
+  // Strictly filter eligible classes for the specific user
+  const getEligibleAttendanceClasses = () => {
+      if (user?.email === 'ruan.wss@gmail.com') {
+          return ["JARDIM I", "JARDIM II", "1º ANO EFAI", "2º ANO EFAI", "3º ANO EFAI", "4º ANO EFAI", "5º ANO EFAI"];
+      }
+      const eligibleGlobal = ["JARDIM I", "JARDIM II", "1º ANO EFAI", "2º ANO EFAI", "3º ANO EFAI", "4º ANO EFAI", "5º ANO EFAI"];
+      return user?.classes?.filter(c => eligibleGlobal.includes(c)) || [];
+  };
+
   const isEligibleForAttendance = () => {
-      const eligible = ["JARDIM I", "JARDIM II", "1º ANO EFAI", "2º ANO EFAI", "3º ANO EFAI", "4º ANO EFAI", "5º ANO EFAI"];
-      return user?.classes?.some(c => eligible.includes(c)) || user?.educationLevels?.some(l => ["Ed. Infantil", "EFAI"].includes(l));
+      return getEligibleAttendanceClasses().length > 0;
   };
 
   const handleSaveMaterial = async () => {
@@ -332,7 +340,7 @@ export const TeacherDashboard: React.FC = () => {
                                     }}
                                 >
                                     <option value="">-- Escolha uma turma --</option>
-                                    {["JARDIM I", "JARDIM II", "1º ANO EFAI", "2º ANO EFAI", "3º ANO EFAI", "4º ANO EFAI", "5º ANO EFAI"].map(c => (
+                                    {getEligibleAttendanceClasses().map(c => (
                                         <option key={c} value={c}>{c}</option>
                                     ))}
                                 </select>
