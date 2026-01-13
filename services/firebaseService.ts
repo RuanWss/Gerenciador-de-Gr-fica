@@ -176,12 +176,9 @@ export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) =
 };
 
 export const listenToStaffLogs = (dateString: string, callback: (logs: StaffAttendanceLog[]) => void) => {
-    // FIX: Removed order by timestamp to avoid composite index requirement
-    // Sorting can be done on the client side if necessary
     const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", dateString));
     return onSnapshot(q, (snapshot) => {
         const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog));
-        // Client-side sort to maintain chronological order
         logs.sort((a, b) => b.timestamp - a.timestamp);
         callback(logs);
     }, (error) => {
@@ -357,26 +354,28 @@ export const updateSystemConfig = async (config: SystemConfig): Promise<void> =>
 
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     try {
+        const sanitizedLog = sanitizeForFirestore(log);
         const q = query(
             collection(db, ATTENDANCE_LOGS_COLLECTION),
-            where("studentId", "==", log.studentId),
-            where("dateString", "==", log.dateString)
+            where("studentId", "==", sanitizedLog.studentId),
+            where("dateString", "==", sanitizedLog.dateString)
         );
         const snapshot = await getDocs(q);
         if (!snapshot.empty) return false;
-        await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), sanitizeForFirestore(log));
+        await addDoc(collection(db, ATTENDANCE_LOGS_COLLECTION), sanitizedLog);
         return true;
     } catch (error) {
-        console.error(error);
+        console.error("Erro ao registrar frequência:", error);
         return false;
     }
 };
 
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'success' | 'too_soon' | 'error'> => {
     try {
+        const sanitizedLog = sanitizeForFirestore(log);
         const q = query(
             collection(db, STAFF_LOGS_COLLECTION),
-            where("staffId", "==", log.staffId),
+            where("staffId", "==", sanitizedLog.staffId),
             orderBy("timestamp", "desc"),
             limit(1)
         );
@@ -386,18 +385,19 @@ export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<'succ
             const diff = Date.now() - lastLog.timestamp;
             if (diff < 120000) return 'too_soon';
         }
-        await addDoc(collection(db, STAFF_LOGS_COLLECTION), sanitizeForFirestore(log));
+        await addDoc(collection(db, STAFF_LOGS_COLLECTION), sanitizedLog);
         return 'success';
     } catch (error) {
-        console.error(error);
+        console.error("Erro ao registrar ponto do staff:", error);
         return 'error';
     }
 };
 
 export const saveStaffMember = async (staff: StaffMember): Promise<void> => {
-    const { id, ...data } = staff;
-    if (id) await setDoc(doc(db, STAFF_COLLECTION, id), sanitizeForFirestore(data));
-    else await addDoc(collection(db, STAFF_COLLECTION), sanitizeForFirestore(data));
+    const sanitized = sanitizeForFirestore(staff);
+    const { id, ...data } = sanitized;
+    if (id) await setDoc(doc(db, STAFF_COLLECTION, id), data);
+    else await addDoc(collection(db, STAFF_COLLECTION), data);
 };
 
 export const updateStaffMember = async (staff: StaffMember): Promise<void> => {
@@ -415,9 +415,10 @@ export const uploadStaffPhoto = async (file: File): Promise<string> => {
 };
 
 export const saveClassMaterial = async (material: ClassMaterial): Promise<void> => {
-    const { id, ...data } = material;
-    if (id) await setDoc(doc(db, CLASS_MATERIALS_COLLECTION, id), sanitizeForFirestore(data));
-    else await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), sanitizeForFirestore(data));
+    const sanitized = sanitizeForFirestore(material);
+    const { id, ...data } = sanitized;
+    if (id) await setDoc(doc(db, CLASS_MATERIALS_COLLECTION, id), data);
+    else await addDoc(collection(db, CLASS_MATERIALS_COLLECTION), data);
 };
 
 export const deleteClassMaterial = async (id: string): Promise<void> => {
@@ -425,9 +426,10 @@ export const deleteClassMaterial = async (id: string): Promise<void> => {
 };
 
 export const saveLibraryBook = async (book: LibraryBook): Promise<void> => {
-    const { id, ...data } = book;
-    if (id) await setDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id), sanitizeForFirestore(data));
-    else await addDoc(collection(db, LIBRARY_BOOKS_COLLECTION), sanitizeForFirestore(data));
+    const sanitized = sanitizeForFirestore(book);
+    const { id, ...data } = sanitized;
+    if (id) await setDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id), data);
+    else await addDoc(collection(db, LIBRARY_BOOKS_COLLECTION), data);
 };
 
 export const deleteLibraryBook = async (id: string): Promise<void> => {
@@ -435,10 +437,11 @@ export const deleteLibraryBook = async (id: string): Promise<void> => {
 };
 
 export const createLoan = async (loan: LibraryLoan): Promise<void> => {
+    const sanitizedLoan = sanitizeForFirestore(loan);
     const batch = writeBatch(db);
     const loanRef = doc(collection(db, LIBRARY_LOANS_COLLECTION));
-    const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
-    batch.set(loanRef, sanitizeForFirestore({ ...loan, id: loanRef.id }));
+    const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, sanitizedLoan.bookId);
+    batch.set(loanRef, { ...sanitizedLoan, id: loanRef.id });
     batch.update(bookRef, { availableQuantity: increment(-1) });
     await batch.commit();
 };
@@ -457,12 +460,13 @@ export const updateStudent = async (student: Student): Promise<void> => {
 };
 
 export const saveStudent = async (student: Student): Promise<void> => {
-    const { id, ...data } = student;
+    const sanitized = sanitizeForFirestore(student);
+    const { id, ...data } = sanitized;
     if (id) {
-        await setDoc(doc(db, STUDENTS_COLLECTION, id), sanitizeForFirestore(data));
+        await setDoc(doc(db, STUDENTS_COLLECTION, id), data);
     } else {
         const newRef = doc(collection(db, STUDENTS_COLLECTION));
-        await setDoc(newRef, sanitizeForFirestore({ ...data, id: newRef.id }));
+        await setDoc(newRef, { ...data, id: newRef.id });
     }
 };
 
@@ -471,9 +475,10 @@ export const deleteStudent = async (id: string): Promise<void> => {
 };
 
 export const saveSchoolEvent = async (event: SchoolEvent): Promise<void> => {
-    const { id, ...data } = event;
-    if (id) await setDoc(doc(db, EVENTS_COLLECTION, id), sanitizeForFirestore(data));
-    else await addDoc(collection(db, EVENTS_COLLECTION), sanitizeForFirestore(data));
+    const sanitized = sanitizeForFirestore(event);
+    const { id, ...data } = sanitized;
+    if (id) await setDoc(doc(db, EVENTS_COLLECTION, id), data);
+    else await addDoc(collection(db, EVENTS_COLLECTION), data);
 };
 
 export const deleteSchoolEvent = async (id: string): Promise<void> => {
@@ -508,12 +513,13 @@ export const updateSystemUserRoles = async (email: string, roles: UserRole[]): P
 };
 
 export const saveInfantilReport = async (report: InfantilReport): Promise<void> => {
-    const { id, ...data } = report;
+    const sanitized = sanitizeForFirestore(report);
+    const { id, ...data } = sanitized;
     if (id) {
-        await setDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id), sanitizeForFirestore(data));
+        await setDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id), data);
     } else {
         const newRef = doc(collection(db, INFANTIL_REPORTS_COLLECTION));
-        await setDoc(newRef, sanitizeForFirestore({ ...data, id: newRef.id }));
+        await setDoc(newRef, { ...data, id: newRef.id });
     }
 };
 
@@ -539,8 +545,6 @@ export const deleteInfantilReport = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id));
 };
 
-// --- PEDAGOGICAL PROJECTS (INOVA AI) ---
-
 export const getPedagogicalProjects = async (teacherId?: string): Promise<PedagogicalProject[]> => {
     const q = teacherId 
         ? query(collection(db, PEDAGOGICAL_PROJECTS_COLLECTION), where("teacherId", "==", teacherId))
@@ -550,12 +554,13 @@ export const getPedagogicalProjects = async (teacherId?: string): Promise<Pedago
 };
 
 export const savePedagogicalProject = async (project: PedagogicalProject): Promise<void> => {
-    const { id, ...data } = project;
+    const sanitized = sanitizeForFirestore(project);
+    const { id, ...data } = sanitized;
     if (id) {
-        await setDoc(doc(db, PEDAGOGICAL_PROJECTS_COLLECTION, id), sanitizeForFirestore(data));
+        await setDoc(doc(db, PEDAGOGICAL_PROJECTS_COLLECTION, id), data);
     } else {
         const newRef = doc(collection(db, PEDAGOGICAL_PROJECTS_COLLECTION));
-        await setDoc(newRef, sanitizeForFirestore({ ...data, id: newRef.id }));
+        await setDoc(newRef, { ...data, id: newRef.id });
     }
 };
 
