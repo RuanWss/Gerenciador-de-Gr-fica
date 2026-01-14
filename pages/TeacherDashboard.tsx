@@ -26,7 +26,7 @@ import {
   Plus, List, PlusCircle, X, Trash2, FileUp, AlertCircle, 
   BookOpen, Save, ArrowLeft, Heart, FileText, Eye, Clock, UploadCloud, ChevronRight,
   Layers, Wrench, Target, BookOpenCheck, BrainCircuit, Rocket, Calendar as CalendarIcon, ClipboardCheck, Sparkles,
-  CheckCircle2, FileDown, FileType, MessageSquare, Folder, UserCheck, UserX
+  CheckCircle2, FileDown, FileType, MessageSquare, Folder, UserCheck, UserX, ShieldCheck
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES } from '../constants';
 
@@ -128,11 +128,8 @@ export const TeacherDashboard: React.FC = () => {
       if (!user) return [];
       if (user.email === 'ruan.wss@gmail.com') return CLASSES;
       
-      // Se já tiver turmas cadastradas no perfil do RH, usa elas
       if (user.classes && user.classes.length > 0) return user.classes;
 
-      // Caso contrário, se for Polivalente/EFAI, libera as turmas do segmento EFAI e Infantil
-      // Isso resolve o problema de aparecer "Escolha uma turma" vazio
       const role = (user.role || '').toString().toUpperCase();
       const subject = (user.subject || '').toString().toUpperCase();
       const name = (user.name || '').toString().toUpperCase();
@@ -419,12 +416,42 @@ export const TeacherDashboard: React.FC = () => {
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-4xl mx-auto space-y-12">
                     <div className="bg-[#18181b] border-2 border-white/5 p-10 rounded-[3.5rem] shadow-2xl text-white">
                         <div className="flex items-center gap-6 mb-8"><FileType className="text-red-600" size={32} /><h3 className="text-2xl font-black uppercase tracking-tighter">Modelos Institucionais</h3></div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <a href="https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png" target="_blank" className="flex items-center justify-between p-8 bg-white/5 border border-white/10 rounded-3xl hover:bg-white/10 transition-all group">
-                                <div className="flex items-center gap-6"><div className="h-14 w-14 bg-red-600/20 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all shadow-xl"><FileDown size={28} /></div><div><span className="block font-black uppercase text-[11px] tracking-widest text-white">Cabeçalho Oficial</span><span className="block font-bold text-xs text-gray-500 uppercase">MODELO DE PROVA</span></div></div><ChevronRight size={20} className="text-gray-800" />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <a href="https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png" target="_blank" className="flex items-center justify-between p-6 bg-white/5 border border-white/10 rounded-3xl hover:bg-white/10 transition-all group">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 bg-red-600/20 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all shadow-xl">
+                                        <FileDown size={24} />
+                                    </div>
+                                    <div>
+                                        <span className="block font-black uppercase text-[10px] tracking-widest text-white leading-tight">Oficial</span>
+                                        <span className="block font-bold text-[9px] text-gray-500 uppercase tracking-tighter">PROVA</span>
+                                    </div>
+                                </div>
+                                <ChevronRight size={16} className="text-gray-800" />
                             </a>
-                            <a href="https://i.ibb.co/4ZyLcnq7/CABE-ALHO-APOSTILA.png" target="_blank" className="flex items-center justify-between p-8 bg-white/5 border border-white/10 rounded-3xl hover:bg-white/10 transition-all group">
-                                <div className="flex items-center gap-6"><div className="h-14 w-14 bg-blue-600/20 rounded-2xl flex items-center justify-center text-blue-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xl"><FileType size={28} /></div><div><span className="block font-black uppercase text-[11px] tracking-widest text-white">Cabeçalho Oficial</span><span className="block font-bold text-xs text-gray-500 uppercase">MODELO DE APOSTILA</span></div></div><ChevronRight size={20} className="text-gray-800" />
+                            <a href="https://i.ibb.co/2Y0zfZ0W/3.png" target="_blank" className="flex items-center justify-between p-6 bg-white/5 border border-white/10 rounded-3xl hover:bg-white/10 transition-all group">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 bg-blue-600/20 rounded-2xl flex items-center justify-center text-blue-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-xl">
+                                        <FileType size={24} />
+                                    </div>
+                                    <div>
+                                        <span className="block font-black uppercase text-[10px] tracking-widest text-white leading-tight">Oficial</span>
+                                        <span className="block font-bold text-[9px] text-gray-500 uppercase tracking-tighter">APOSTILA</span>
+                                    </div>
+                                </div>
+                                <ChevronRight size={16} className="text-gray-800" />
+                            </a>
+                            <a href="https://i.ibb.co/zTGFssJs/4.png" target="_blank" className="flex items-center justify-between p-6 bg-white/5 border border-white/10 rounded-3xl hover:bg-white/10 transition-all group">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 bg-green-600/20 rounded-2xl flex items-center justify-center text-green-500 group-hover:bg-green-600 group-hover:text-white transition-all shadow-xl">
+                                        <ShieldCheck size={24} />
+                                    </div>
+                                    <div>
+                                        <span className="block font-black uppercase text-[10px] tracking-widest text-white leading-tight">Kronos</span>
+                                        <span className="block font-bold text-[9px] text-gray-500 uppercase tracking-tighter">CONVÊNIO</span>
+                                    </div>
+                                </div>
+                                <ChevronRight size={16} className="text-gray-800" />
                             </a>
                         </div>
                     </div>
