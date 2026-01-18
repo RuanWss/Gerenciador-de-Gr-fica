@@ -1,8 +1,21 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize GoogleGenAI once with the API Key from environment variables
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAiClient = () => {
+  // Verificação de segurança para evitar erro "process is not defined" no navegador
+  let apiKey = '';
+  try {
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env) {
+      // @ts-ignore
+      apiKey = process.env.API_KEY || '';
+    }
+  } catch (e) {
+    console.warn("Ambiente sem process.env definido");
+  }
+  
+  return new GoogleGenAI({ apiKey });
+};
 
 export const generateStructuredQuestions = async (
   topic: string,
@@ -10,6 +23,7 @@ export const generateStructuredQuestions = async (
   quantity: number = 1
 ) => {
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Crie ${quantity} questões de múltipla escolha sobre "${topic}" para o nível "${gradeLevel}".`,
@@ -50,6 +64,7 @@ export const generateStructuredQuestions = async (
 
 export const suggestExamInstructions = async (examType: string): Promise<string> => {
     try {
+        const ai = getAiClient();
         const prompt = `Escreva instruções curtas e formais para o cabeçalho de uma prova escolar do tipo: "${examType}".`;
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
@@ -72,6 +87,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 export const analyzeAnswerSheet = async (file: File, numQuestions: number): Promise<{ studentId?: string; answers: Record<number, string> }> => {
   try {
+    const ai = getAiClient();
     const base64Data = await fileToBase64(file);
     
     const prompt = `
@@ -79,11 +95,11 @@ export const analyzeAnswerSheet = async (file: File, numQuestions: number): Prom
       Analise a imagem deste cartão-resposta escolar.
       
       INSTRUÇÕES:
-      1. Localize o QR Code no topo para identificar o Aluno/ID se possível (leia o texto próximo ou o conteúdo do código).
+      1. Localize o QR Code ou texto no topo para identificar o Aluno/ID se possível.
       2. Identifique as marcas preenchidas para cada uma das ${numQuestions} questões.
       3. Se uma questão não tiver marcação clara, retorne "" (vazio).
       4. Retorne APENAS um objeto JSON com:
-         - "studentId": string com o ID do aluno se identificado no QR Code ou cabeçalho.
+         - "studentId": string com o ID ou Nome do aluno se identificado.
          - "answers": objeto onde a chave é o número da questão (1 a ${numQuestions}) e o valor é a letra (A, B, C, D ou E).
     `;
 

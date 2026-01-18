@@ -124,7 +124,6 @@ export interface StaffMember {
   isAdmin?: boolean;
   weeklyClasses?: number;
   educationLevels?: string[];
-  // Fix: Added classes property to interface
   classes?: string[];
 }
 
@@ -180,7 +179,6 @@ export interface LessonPlan {
   resources?: string;
   evaluation?: string;
   homework?: string;
-  // Campos detalhados para Planejamento Bimestral
   justification?: string;
   semesterContents?: string;
   cognitiveSkills?: string;
@@ -195,15 +193,14 @@ export interface LessonPlan {
   didacticResources?: string;
   evaluationStrategies?: string;
   references?: string;
-  // Campos para Projeto Inova AI
   projectTheme?: string;
   guidingQuestion?: string;
   projectObjective?: string;
-  expectedResults?: string[]; // Array de resultados selecionados
+  expectedResults?: string[]; 
   finalProductType?: string;
   finalProductDescription?: string;
-  projectSteps?: string[]; // Checklist de etapas concluídas
-  timeline?: Record<string, string>; // Datas para cada etapa
+  projectSteps?: string[]; 
+  timeline?: Record<string, string>; 
   projectResources?: string;
   aiTools?: string;
   aiPurpose?: string[];
@@ -294,20 +291,25 @@ export interface StaffAttendanceLog {
 
 export interface AnswerKey {
   id: string;
-  examId: string;
+  examTitle: string;
   subject: string;
   className: string;
-  title: string;
-  answers: Record<number, string>;
+  numQuestions: number;
+  answers: Record<number, string>; // {1: 'A', 2: 'B'}
+  createdAt: number;
 }
 
 export interface StudentCorrection {
   id: string;
+  answerKeyId: string;
   studentId: string;
   studentName: string;
-  answerKeyId: string;
+  studentClass: string;
   score: number;
+  totalQuestions: number;
   answers: Record<number, string>;
+  correctAnswers: number;
+  timestamp: number;
 }
 
 export interface SchoolClass {

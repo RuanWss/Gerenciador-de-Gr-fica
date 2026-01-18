@@ -1,8 +1,8 @@
-// DO NOT use namespaced firebase imports; use scoped packages for modular SDK.
-import { initializeApp } from '@firebase/app';
+
+import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
-import { getStorage } from '@firebase/storage';
+import { getStorage } from 'firebase/storage';
 
 // Estas são as credenciais do seu projeto Firebase
 export const firebaseConfig = {

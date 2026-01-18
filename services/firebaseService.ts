@@ -1,6 +1,6 @@
 
 import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
-import { initializeApp, deleteApp } from '@firebase/app';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { 
     getAuth, 
     createUserWithEmailAndPassword, 
@@ -12,7 +12,7 @@ import {
     query, where, orderBy, onSnapshot, setDoc, limit, increment, writeBatch,
     startAt, endAt
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from '@firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
@@ -50,6 +50,38 @@ const sanitizeForFirestore = (obj: any) => {
     }));
 };
 
+// --- GABARITOS E CORREÇÕES ---
+export const saveAnswerKey = async (key: AnswerKey): Promise<string> => {
+    const { id, ...data } = key;
+    if (id) {
+        await setDoc(doc(db, ANSWER_KEYS_COLLECTION, id), sanitizeForFirestore(data));
+        return id;
+    } else {
+        const docRef = await addDoc(collection(db, ANSWER_KEYS_COLLECTION), sanitizeForFirestore(data));
+        return docRef.id;
+    }
+};
+
+export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
+    const snapshot = await getDocs(query(collection(db, ANSWER_KEYS_COLLECTION), orderBy('createdAt', 'desc')));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
+};
+
+export const deleteAnswerKey = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, ANSWER_KEYS_COLLECTION, id));
+};
+
+export const saveCorrection = async (correction: StudentCorrection): Promise<void> => {
+    await addDoc(collection(db, CORRECTIONS_COLLECTION), sanitizeForFirestore(correction));
+};
+
+export const getCorrectionsByGabarito = async (answerKeyId: string): Promise<StudentCorrection[]> => {
+    const q = query(collection(db, CORRECTIONS_COLLECTION), where("answerKeyId", "==", answerKeyId), orderBy("timestamp", "desc"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StudentCorrection));
+};
+
+// --- GENNERA SYNC ---
 export const syncAllDataWithGennera = async (onProgress?: (msg: string) => void): Promise<void> => {
     try {
         if (onProgress) onProgress("Conectando ao Gateway...");

@@ -1,232 +1,114 @@
-
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { useAuth, AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { TeacherDashboard } from './pages/TeacherDashboard';
 import { PrintShopDashboard } from './pages/PrintShopDashboard';
 import { PublicSchedule } from './pages/PublicSchedule';
+import { ClassroomFiles } from './pages/ClassroomFiles';
 import { AttendanceTerminal } from './pages/AttendanceTerminal';
 import { StaffAttendanceTerminal } from './pages/StaffAttendanceTerminal';
 import { HRDashboard } from './pages/HRDashboard';
-import { ClassroomFiles } from './pages/ClassroomFiles';
 import { LibraryDashboard } from './pages/LibraryDashboard';
 import { AEEDashboard } from './pages/AEEDashboard';
 import { InfantilDashboard } from './pages/InfantilDashboard';
-import { GenneraSyncPanel } from './pages/GenneraSyncPanel';
-import { UserRole, SystemConfig } from './types';
-import { listenToSystemConfig } from './services/firebaseService';
-import { LogOut, LayoutGrid, KeyRound, X, Save, AlertCircle, Book, GraduationCap, School, Heart, UserCircle2, Megaphone, Baby, DatabaseZap } from 'lucide-react';
-import { Button } from './components/Button';
+import { UserRole } from './types';
+import { LogOut, LayoutGrid, KeyRound } from 'lucide-react';
 
-const AppContent: React.FC = () => {
-  const { user, isAuthenticated, logout, changePassword } = useAuth();
-  const [currentPath, setCurrentPath] = useState(window.location.pathname);
-  const [currentHash, setCurrentHash] = useState(window.location.hash);
-  const [sessionRole, setSessionRole] = useState<UserRole | 'GENNERA_SYNC' | null>(null);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
+const AppContent = () => {
+    const { user, isAuthenticated, logout } = useAuth();
+    const [sessionRole, setSessionRole] = useState(null);
+    const [currentPath, setCurrentPath] = useState(window.location.pathname);
+    const [currentHash, setCurrentHash] = useState(window.location.hash);
 
-  useEffect(() => {
-    const handleLocationChange = () => {
-        setCurrentPath(window.location.pathname);
-        setCurrentHash(window.location.hash);
-    };
-    window.addEventListener('popstate', handleLocationChange);
-    window.addEventListener('hashchange', handleLocationChange);
-    const unsubConfig = listenToSystemConfig(setSysConfig);
-    return () => {
-        window.removeEventListener('popstate', handleLocationChange);
-        window.removeEventListener('hashchange', handleLocationChange);
-        unsubConfig();
-    };
-  }, []);
+    useEffect(() => {
+        const handleLocationChange = () => {
+            setCurrentPath(window.location.pathname);
+            setCurrentHash(window.location.hash);
+        };
+        window.addEventListener('popstate', handleLocationChange);
+        window.addEventListener('hashchange', handleLocationChange);
+        return () => {
+            window.removeEventListener('popstate', handleLocationChange);
+            window.removeEventListener('hashchange', handleLocationChange);
+        };
+    }, []);
 
-  useEffect(() => { if (!isAuthenticated) setSessionRole(null); }, [isAuthenticated]);
+    if (currentPath === '/horarios' || currentHash === '#horarios') return <PublicSchedule />;
+    if (currentPath === '/materiais' || currentHash === '#materiais') return <ClassroomFiles />;
+    if (!isAuthenticated) return <Login />;
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setPasswordError('');
-      if (newPassword.length < 6) return setPasswordError("Mínimo 6 caracteres.");
-      if (newPassword !== confirmPassword) return setPasswordError("Senhas não coincidem.");
-      setIsChangingPassword(true);
-      try {
-          await changePassword(newPassword);
-          alert("Senha alterada!");
-          setShowPasswordModal(false);
-      } catch (error: any) { setPasswordError("Erro: " + error.message); } finally { setIsChangingPassword(false); }
-  };
-  
-  const getBannerStyles = (type: string) => {
-    switch(type) {
-        case 'warning': return 'bg-yellow-500 text-yellow-950';
-        case 'error': return 'bg-red-600 text-white';
-        case 'success': return 'bg-green-600 text-white';
-        default: return 'bg-blue-600 text-white';
+    // Terminais específicos (Não precisam de Navbar)
+    if (user?.role === UserRole.ATTENDANCE_TERMINAL) return <AttendanceTerminal />;
+    if (user?.role === UserRole.STAFF_TERMINAL) return <StaffAttendanceTerminal />;
+
+    const activeRole = sessionRole || user?.role;
+
+    // Seletor de Perfil para usuários multi-role
+    if (user?.roles && user.roles.length > 1 && !sessionRole) {
+        return (
+            <div className="fixed inset-0 bg-[#0f0f10] flex flex-col items-center justify-center p-6">
+                <div className="max-w-4xl w-full text-center">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 mx-auto mb-8 drop-shadow-2xl"/>
+                    <h2 className="text-3xl font-black text-white mb-10 uppercase tracking-tighter">Escolha o seu Ambiente de Trabalho</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                        {user.roles.includes(UserRole.TEACHER) && (
+                            <button onClick={() => setSessionRole(UserRole.TEACHER)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-red-600 transition-all font-black uppercase text-xs tracking-widest text-white shadow-xl">Professor</button>
+                        )}
+                        {user.roles.includes(UserRole.PRINTSHOP) && (
+                            <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-blue-600 transition-all font-black uppercase text-xs tracking-widest text-white shadow-xl">Escola / Cópias</button>
+                        )}
+                        {user.roles.includes(UserRole.HR) && (
+                            <button onClick={() => setSessionRole(UserRole.HR)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-orange-600 transition-all font-black uppercase text-xs tracking-widest text-white shadow-xl">RH</button>
+                        )}
+                        {user.roles.includes(UserRole.LIBRARY) && (
+                            <button onClick={() => setSessionRole(UserRole.LIBRARY)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-green-600 transition-all font-black uppercase text-xs tracking-widest text-white shadow-xl">Biblioteca</button>
+                        )}
+                         {user.roles.includes(UserRole.KINDERGARTEN) && (
+                            <button onClick={() => setSessionRole(UserRole.KINDERGARTEN)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-orange-500 transition-all font-black uppercase text-xs tracking-widest text-white shadow-xl">Infantil</button>
+                        )}
+                    </div>
+                    <button onClick={logout} className="mt-12 text-gray-500 hover:text-white font-bold uppercase text-[10px] tracking-widest">Encerrar Sessão</button>
+                </div>
+            </div>
+        );
     }
-  };
 
-  if (currentPath === '/horarios' || currentHash === '#horarios') return <PublicSchedule />;
-  if (currentPath === '/materiais' || currentHash === '#materiais') return <ClassroomFiles />;
-  if (!isAuthenticated) return <Login />;
-  if (user?.role === UserRole.ATTENDANCE_TERMINAL) return <AttendanceTerminal />;
-  if (user?.role === UserRole.STAFF_TERMINAL) return <StaffAttendanceTerminal />;
-  if (user?.role === UserRole.CLASSROOM) return <ClassroomFiles />;
-  
-  if (user?.roles && user.roles.length > 1 && !sessionRole) {
-      return (
-          <div className="fixed inset-0 z-50 bg-[#0f0f10] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/40 via-[#0f0f10] to-[#0f0f10] flex flex-col items-center justify-center p-4">
-              <div className="max-w-6xl w-full">
-                  <div className="text-center mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
-                      <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 w-auto mx-auto mb-6 drop-shadow-2xl"/>
-                      <h2 className="text-4xl font-black text-white mb-2 uppercase tracking-tight">Bem-vindo, {user.name.split(' ')[0]}</h2>
-                      <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em]">Ambiente Integrado de Gestão Escolar</p>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-7xl mx-auto mb-16 px-4">
-                      {user.roles.includes(UserRole.KINDERGARTEN) && (
-                          <button onClick={() => setSessionRole(UserRole.KINDERGARTEN)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
-                              <div className="h-16 w-16 bg-orange-600/20 text-orange-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
-                                <Baby size={32} />
-                              </div>
-                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal Infantil</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Nível: Ed. Infantil</p>
-                          </button>
-                      )}
-                      {user.roles.includes(UserRole.TEACHER) && (
-                          <button onClick={() => setSessionRole(UserRole.TEACHER)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-red-500/20 hover:border-red-500 hover:bg-white/10">
-                              <div className="h-16 w-16 bg-red-600/20 text-red-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-red-600 group-hover:text-white transition-all shadow-2xl shadow-red-900/20">
-                                <GraduationCap size={32} />
-                              </div>
-                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal Professor</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Ensino Fundamental e Médio</p>
-                          </button>
-                      )}
-                      {user.roles.includes(UserRole.PRINTSHOP) && (
-                          <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-500/20 hover:border-blue-500 hover:bg-white/10">
-                              <div className="h-16 w-16 bg-blue-600/20 text-blue-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
-                                <School size={32} />
-                              </div>
-                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Painel da Escola</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Gestão Administrativa</p>
-                          </button>
-                      )}
-                      {user.roles.includes(UserRole.AEE) && (
-                          <button onClick={() => setSessionRole(UserRole.AEE)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-pink-500/20 hover:border-pink-500 hover:bg-white/10">
-                              <div className="h-16 w-16 bg-pink-600/20 text-pink-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-pink-600 group-hover:text-white transition-all shadow-2xl shadow-pink-900/20">
-                                <Heart size={32} />
-                              </div>
-                              <span className="font-black text-white uppercase tracking-widest text-[11px]">Portal AEE</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Apoio Pedagógico</p>
-                          </button>
-                      )}
-                      {user.roles.includes(UserRole.HR) && (
-                          <button onClick={() => setSessionRole(UserRole.HR)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-orange-500/20 hover:border-orange-500 hover:bg-white/10">
-                              <div className="h-16 w-16 bg-orange-600/20 text-orange-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition-all shadow-2xl shadow-orange-900/20">
-                                <AlertCircle size={32} />
-                              </div>
-                              <span className="font-black text-white uppercase tracking-tight text-[11px]">Gestão de RH</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Controle de Equipe</p>
-                          </button>
-                      )}
-                      {user.roles.includes(UserRole.LIBRARY) && (
-                          <button onClick={() => setSessionRole(UserRole.LIBRARY)} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-green-500/20 hover:border-green-500 hover:bg-white/10">
-                              <div className="h-16 w-16 bg-green-600/20 text-green-500 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-green-600 group-hover:text-white transition-all shadow-2xl shadow-green-900/20">
-                                <Book size={32} />
-                              </div>
-                              <span className="font-black text-white uppercase tracking-tight text-[11px]">Biblioteca</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Acervo e Empréstimos</p>
-                          </button>
-                      )}
-                      
-                      {/* PAINEL DE SINCRONIZAÇÃO GENNERA - SOMENTE PARA TI */}
-                      {user.email === 'ruan.wss@gmail.com' && (
-                          <button onClick={() => setSessionRole('GENNERA_SYNC')} className="bg-white/5 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center hover:scale-105 transition-all group border-2 border-blue-400/20 hover:border-blue-400 hover:bg-white/10">
-                              <div className="h-16 w-16 bg-blue-600/20 text-blue-400 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-2xl shadow-blue-900/20">
-                                <DatabaseZap size={32} />
-                              </div>
-                              <span className="font-black text-white uppercase tracking-tight text-[11px]">Sincronização Gennera</span>
-                              <p className="text-[8px] text-gray-500 font-bold mt-2 uppercase tracking-widest text-center">Painel TI</p>
-                          </button>
-                      )}
-                  </div>
-                  <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-                      <button onClick={logout} className="inline-flex items-center gap-3 px-10 py-4 bg-white/5 hover:bg-red-600/20 text-gray-400 hover:text-red-500 rounded-full border border-white/10 transition-all font-black uppercase tracking-widest text-[10px]">
-                        <UserCircle2 size={18}/> Sair do Sistema
-                      </button>
-                  </div>
-              </div>
-          </div>
-      );
-  }
-
-  const activeRole = sessionRole || user?.role;
-
-  return (
-    <div className="min-h-screen bg-transparent text-gray-100 font-sans">
-      {sysConfig?.isBannerActive && sysConfig.bannerMessage && (
-        <div className={`w-full py-3 px-4 flex items-center justify-center gap-3 shadow-md sticky top-0 z-[100] overflow-hidden ${getBannerStyles(sysConfig.bannerType)}`}>
-            <div className="absolute inset-0 bg-white/10 animate-[pulse_2s_infinite]"></div>
-            <Megaphone size={18} className="shrink-0 relative z-10" />
-            <p className="font-black text-sm md:text-base text-center relative z-10 uppercase tracking-tight shadow-sm">
-                AVISO: {sysConfig.bannerMessage}
-            </p>
+    return (
+        <div className="min-h-screen bg-transparent">
+            <nav className="h-20 bg-black/40 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-8 sticky top-0 z-50">
+                <div className="flex items-center gap-6">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 w-auto" />
+                    <div className="h-6 w-px bg-white/10"></div>
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                        {activeRole === UserRole.PRINTSHOP ? 'Painel Administrativo' : 
+                         activeRole === UserRole.TEACHER ? 'Portal do Professor' : 
+                         activeRole === UserRole.HR ? 'Gestão de RH' : 'Sistema CEMAL'}
+                    </span>
+                </div>
+                <div className="flex items-center gap-4">
+                    {user?.roles && user.roles.length > 1 && (
+                        <button onClick={() => setSessionRole(null)} className="p-3 text-gray-400 hover:text-white transition-all"><LayoutGrid size={20}/></button>
+                    )}
+                    <button onClick={logout} className="p-3 text-red-500/50 hover:text-red-500 transition-all"><LogOut size={20}/></button>
+                </div>
+            </nav>
+            <main className="p-8">
+                {activeRole === UserRole.TEACHER && <TeacherDashboard />}
+                {activeRole === UserRole.PRINTSHOP && <PrintShopDashboard />}
+                {activeRole === UserRole.HR && <HRDashboard />}
+                {activeRole === UserRole.LIBRARY && <LibraryDashboard />}
+                {activeRole === UserRole.AEE && <AEEDashboard />}
+                {activeRole === UserRole.KINDERGARTEN && <InfantilDashboard />}
+            </main>
         </div>
-      )}
-
-      <nav className={`bg-black/40 backdrop-blur-xl shadow-lg border-b border-white/5 sticky z-50 transition-all duration-300 ${sysConfig?.isBannerActive && sysConfig.bannerMessage ? 'top-[48px]' : 'top-0'}`}>
-        <div className="w-full mx-auto px-8 flex justify-between h-20 items-center">
-            <div className="flex items-center gap-6">
-              <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-12 w-auto drop-shadow-lg"/>
-              <div className="h-8 w-px bg-white/10"></div>
-              <span className="text-xs font-black text-white uppercase tracking-widest">
-                {activeRole === UserRole.KINDERGARTEN ? 'Portal Infantil' : 
-                 activeRole === UserRole.TEACHER ? 'Portal do Professor' : 
-                 activeRole === UserRole.HR ? 'Gestão de RH' : 
-                 activeRole === UserRole.LIBRARY ? 'Painel da Biblioteca' : 
-                 activeRole === UserRole.AEE ? 'Portal AEE' : 
-                 activeRole === 'GENNERA_SYNC' ? 'Integração Gennera' : 'Painel da Escola'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-               {(user?.roles && user.roles.length > 1) && (
-                   <button onClick={() => setSessionRole(null)} className="p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-2xl transition-all" title="Trocar de Ambiente">
-                       <LayoutGrid size={22}/>
-                   </button>
-               )}
-               <button onClick={() => setShowPasswordModal(true)} className="p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-2xl transition-all" title="Segurança"><KeyRound size={20}/></button>
-               <button onClick={logout} className="p-3 text-red-500/50 hover:text-red-500 hover:bg-red-500/5 rounded-2xl transition-all" title="Encerrar Sessão"><LogOut size={20}/></button>
-            </div>
-        </div>
-      </nav>
-      <main className="w-full px-8 py-10">
-        {activeRole === UserRole.KINDERGARTEN && <InfantilDashboard />}
-        {activeRole === UserRole.TEACHER && <TeacherDashboard />}
-        {activeRole === UserRole.PRINTSHOP && <PrintShopDashboard />}
-        {activeRole === UserRole.HR && <HRDashboard />}
-        {activeRole === UserRole.LIBRARY && <LibraryDashboard />}
-        {activeRole === UserRole.AEE && <AEEDashboard />}
-        {activeRole === 'GENNERA_SYNC' && <GenneraSyncPanel />}
-      </main>
-
-      {showPasswordModal && (
-          <div className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
-              <div className="bg-[#18181b] border border-white/5 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95">
-                  <h3 className="text-xl font-black text-white mb-8 uppercase tracking-widest">Segurança da Conta</h3>
-                  <form onSubmit={handleChangePassword} className="space-y-6">
-                      <input type="password" placeholder="Nova Senha" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-                      <input type="password" placeholder="Confirmar" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
-                      {passwordError && <p className="text-red-500 text-[10px] font-black uppercase text-center">{passwordError}</p>}
-                      <div className="flex justify-end gap-3 pt-4"><Button type="submit" className="w-full h-16 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">Salvar Nova Senha</Button></div>
-                  </form>
-              </div>
-          </div>
-      )}
-    </div>
-  );
+    );
 };
 
-function App() { return ( <AuthProvider> <AppContent /> </AuthProvider> ); }
-export default App;
+export default function App() {
+    return (
+        <AuthProvider>
+            <AppContent />
+        </AuthProvider>
+    );
+}

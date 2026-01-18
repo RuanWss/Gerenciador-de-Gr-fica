@@ -55,6 +55,8 @@ export const TeacherDashboard: React.FC = () => {
 
   // --- PEI FORM STATES ---
   const [showPeiForm, setShowPeiForm] = useState(false);
+  const [showPeiView, setShowPeiView] = useState(false);
+  const [selectedPei, setSelectedPei] = useState<PEIDocument | null>(null);
   const [newPei, setNewPei] = useState<Partial<PEIDocument>>({
       studentId: '', studentName: '', subject: user?.subject || '', period: '',
       essentialCompetencies: '', selectedContents: '', didacticResources: '', evaluation: ''
@@ -306,8 +308,16 @@ export const TeacherDashboard: React.FC = () => {
                                     <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[100px]" value={newPei.essentialCompetencies} onChange={e => setNewPei({...newPei, essentialCompetencies: e.target.value})} />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Adaptação de Conteúdo / Estratégias Didáticas</label>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Conteúdos Selecionados</label>
                                     <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[100px]" value={newPei.selectedContents} onChange={e => setNewPei({...newPei, selectedContents: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Recursos Didáticos</label>
+                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[100px]" value={newPei.didacticResources} onChange={e => setNewPei({...newPei, didacticResources: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Avaliação</label>
+                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[100px]" value={newPei.evaluation} onChange={e => setNewPei({...newPei, evaluation: e.target.value})} />
                                 </div>
                             </div>
                             <Button onClick={async () => {
@@ -329,10 +339,66 @@ export const TeacherDashboard: React.FC = () => {
                                         <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">{pei.period} • {pei.subject}</p>
                                     </div>
                                 </div>
-                                <button onClick={async () => { if(confirm("Excluir?")) await deletePEIDocument(pei.id).then(fetchData); }} className="p-3 text-gray-800 hover:text-red-500 bg-white/5 rounded-xl transition-all"><Trash2 size={20}/></button>
+                                <div className="flex gap-2">
+                                    <button onClick={() => { setSelectedPei(pei); setShowPeiView(true); }} className="p-3 text-gray-400 hover:text-white bg-white/5 rounded-xl transition-all" title="Ver Detalhes"><Eye size={20}/></button>
+                                    <button onClick={async () => { if(confirm("Excluir?")) await deletePEIDocument(pei.id).then(fetchData); }} className="p-3 text-gray-800 hover:text-red-500 bg-white/5 rounded-xl transition-all"><Trash2 size={20}/></button>
+                                </div>
                             </div>
                         ))}
                     </div>
+
+                    {showPeiView && selectedPei && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                            <div className="bg-[#18181b] border-2 border-white/5 w-full max-w-4xl max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                                <div className="p-8 border-b border-white/5 bg-black/20 flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                            <Heart size={24} className="text-red-600"/> Planejamento PEI
+                                        </h3>
+                                        <p className="text-sm text-gray-400 font-bold uppercase tracking-widest mt-1">
+                                            {selectedPei.studentName} • {selectedPei.period}
+                                        </p>
+                                    </div>
+                                    <button onClick={() => setShowPeiView(false)} className="text-gray-500 hover:text-white transition-colors"><X size={32}/></button>
+                                </div>
+                                
+                                <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                        <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                                            <h4 className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <Target size={14}/> Habilidades e Competências
+                                            </h4>
+                                            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">{selectedPei.essentialCompetencies || 'Não informado.'}</p>
+                                        </div>
+                                        <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                                            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <BookOpenCheck size={14}/> Adaptação de Conteúdo
+                                            </h4>
+                                            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">{selectedPei.selectedContents || 'Não informado.'}</p>
+                                        </div>
+                                        <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                                            <h4 className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <Wrench size={14}/> Recursos Didáticos
+                                            </h4>
+                                            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">{selectedPei.didacticResources || 'Não informado.'}</p>
+                                        </div>
+                                        <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                                            <h4 className="text-[10px] font-black text-yellow-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <ClipboardCheck size={14}/> Avaliação
+                                            </h4>
+                                            <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">{selectedPei.evaluation || 'Não informado.'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="p-6 border-t border-white/5 bg-black/20 flex justify-end">
+                                    <Button onClick={() => setShowPeiView(false)} className="px-8 h-12 bg-white/10 hover:bg-white/20 text-white font-black uppercase text-[10px] tracking-widest rounded-xl">
+                                        Fechar Visualização
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
