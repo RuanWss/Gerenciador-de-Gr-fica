@@ -361,7 +361,19 @@ export const TeacherDashboard: React.FC = () => {
                         <div className="space-y-10">
                             <input className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 text-lg transition-all" placeholder="Título do Material" value={examTitle} onChange={e => setExamTitle(e.target.value)} />
                             <div className="grid grid-cols-2 gap-10">
-                                <select className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none appearance-none focus:border-red-600 text-lg" value={examGrade} onChange={e => setExamGrade(e.target.value)}><option value="">-- Turma --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none appearance-none focus:border-red-600 text-lg" 
+                                    value={examGrade} 
+                                    onChange={e => {
+                                        const selectedClass = e.target.value;
+                                        setExamGrade(selectedClass);
+                                        const count = students.filter(s => s.className === selectedClass).length;
+                                        if (count > 0) setPrintQty(count);
+                                    }}
+                                >
+                                    <option value="">-- Turma --</option>
+                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
                                 <input type="number" className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-6 text-white font-bold outline-none focus:border-red-600 text-lg" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
                             </div>
                             <textarea className="w-full bg-black/40 border border-white/10 rounded-[1.5rem] p-8 text-white font-medium text-base outline-none focus:border-red-600 transition-all min-h-[140px]" value={printInstructions} onChange={e => setPrintInstructions(e.target.value)} placeholder="Instruções da Impressão..." />

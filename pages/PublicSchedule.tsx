@@ -1,8 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Maximize2, Monitor } from 'lucide-react';
+import { Maximize2, Monitor, Volume2, VolumeX } from 'lucide-react';
+
+// Sons para os alertas
+const SOUND_SHORT = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; // Ding discreto
+const SOUND_LONG = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3"; // Sino de escola (Longer)
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -49,11 +53,22 @@ export const PublicSchedule: React.FC = () => {
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    
+    // Audio Refs
+    const [audioEnabled, setAudioEnabled] = useState(true);
+    const lastSlotIdRef = useRef<string | null>(null);
+    const audioShortRef = useRef<HTMLAudioElement | null>(null);
+    const audioLongRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
         if (!isAuthorized) return;
         const unsubscribeSchedule = listenToSchedule(setSchedule);
         const unsubscribeConfig = listenToSystemConfig(setSysConfig);
+        
+        // Initialize Audio
+        audioShortRef.current = new Audio(SOUND_SHORT);
+        audioLongRef.current = new Audio(SOUND_LONG);
+
         return () => {
             unsubscribeSchedule();
             unsubscribeConfig();
@@ -65,13 +80,50 @@ export const PublicSchedule: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
+    // Logic to determine Shift and Play Alarm on Slot Change
     useEffect(() => {
         const now = currentTime;
         const totalMinutes = now.getHours() * 60 + now.getMinutes();
-        if (totalMinutes >= 420 && totalMinutes <= 750) setCurrentShift('morning');
-        else if (totalMinutes >= 780 && totalMinutes <= 1260) setCurrentShift('afternoon');
-        else setCurrentShift('morning'); // Default to morning for display if off-hours
-    }, [currentTime]);
+        
+        // Shift Logic
+        let newShift: 'morning' | 'afternoon' | 'off' = 'morning';
+        if (totalMinutes >= 420 && totalMinutes <= 750) newShift = 'morning'; // 07:00 - 12:30
+        else if (totalMinutes >= 780 && totalMinutes <= 1260) newShift = 'afternoon'; // 13:00 - 21:00
+        setCurrentShift(newShift);
+
+        // Slot Logic
+        const activeSlots = newShift === 'morning' ? MORNING_SLOTS : newShift === 'afternoon' ? AFTERNOON_SLOTS : [];
+        const currentSlot = activeSlots.find(s => {
+            const [hS, mS] = s.start.split(':').map(Number);
+            const [hE, mE] = s.end.split(':').map(Number);
+            const startMins = hS * 60 + mS;
+            const endMins = hE * 60 + mE;
+            return totalMinutes >= startMins && totalMinutes < endMins;
+        });
+
+        const currentId = currentSlot ? currentSlot.id : 'free';
+
+        // Check for transition
+        if (lastSlotIdRef.current !== null && lastSlotIdRef.current !== currentId && audioEnabled) {
+            
+            // Determine transition type for sound
+            const prevSlot = activeSlots.find(s => s.id === lastSlotIdRef.current);
+            
+            const isEnteringBreak = currentSlot?.type === 'break';
+            const isLeavingBreak = prevSlot?.type === 'break';
+
+            if (isEnteringBreak || isLeavingBreak) {
+                // Intervalo (Inicio ou Fim) -> Som Longo
+                audioLongRef.current?.play().catch(e => console.log("Audio block:", e));
+            } else if (currentId !== 'free') {
+                // Troca de aula normal -> Som Discreto
+                audioShortRef.current?.play().catch(e => console.log("Audio block:", e));
+            }
+        }
+
+        lastSlotIdRef.current = currentId;
+
+    }, [currentTime, audioEnabled]);
 
     const toggleFullscreen = () => {
         if (!document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -87,6 +139,10 @@ export const PublicSchedule: React.FC = () => {
             if (newPin === DEFAULT_PIN) {
                 setIsAuthorized(true);
                 sessionStorage.setItem('monitor_auth', 'true');
+                // Tenta desbloquear o audio context no clique
+                const a = new Audio(SOUND_SHORT);
+                a.volume = 0;
+                a.play().catch(() => {});
             } else {
                 setPinError(true);
                 setTimeout(() => { setPin(''); setPinError(false); }, 1000);
@@ -212,6 +268,9 @@ export const PublicSchedule: React.FC = () => {
 
             {/* Floating Controls */}
             <div className="fixed right-8 bottom-8 z-50 flex gap-4 opacity-0 hover:opacity-100 transition-opacity duration-500">
+                <button onClick={() => setAudioEnabled(!audioEnabled)} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
+                    {audioEnabled ? <Volume2 size={18}/> : <VolumeX size={18}/>}
+                </button>
                 <button onClick={() => window.location.reload()} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
                     <Monitor size={18}/>
                 </button>

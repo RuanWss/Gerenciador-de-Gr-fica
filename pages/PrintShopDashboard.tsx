@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
     getExams, 
@@ -5,20 +6,76 @@ import {
     getStudents, 
     listenToSystemConfig, 
     updateSystemConfig,
-    syncAllDataWithGennera
+    listenToSchedule,
+    saveScheduleEntry,
+    deleteScheduleEntry,
+    listenToStaffMembers
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
     ExamStatus, 
     Student, 
-    SystemConfig 
+    SystemConfig,
+    ScheduleEntry,
+    TimeSlot,
+    StaffMember
 } from '../types';
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
-    ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download
+    ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
+    DatabaseZap, CalendarClock, Trash2, Edit, Monitor, GraduationCap
 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { CLASSES } from '../constants';
+import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
+import { GenneraSyncPanel } from './GenneraSyncPanel';
+
+// --- CONFIGURAÇÃO DE HORÁRIOS (Espelhado do PublicSchedule) ---
+const MORNING_SLOTS: TimeSlot[] = [
+    { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
+    { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
+    { id: 'mb1', start: '09:00', end: '09:20', type: 'break', label: 'INTERVALO', shift: 'morning' },
+    { id: 'm3', start: '09:20', end: '10:10', type: 'class', label: '3º Horário', shift: 'morning' },
+    { id: 'm4', start: '10:10', end: '11:00', type: 'class', label: '4º Horário', shift: 'morning' },
+    { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
+];
+
+const MORNING_SLOTS_EFAI: TimeSlot[] = [
+    { id: 'm1', start: '07:30', end: '08:25', type: 'class', label: '1º Horário', shift: 'morning' },
+    { id: 'm2', start: '08:25', end: '09:20', type: 'class', label: '2º Horário', shift: 'morning' },
+    { id: 'mb1', start: '09:20', end: '09:40', type: 'break', label: 'INTERVALO', shift: 'morning' },
+    { id: 'm3', start: '09:40', end: '10:35', type: 'class', label: '3º Horário', shift: 'morning' },
+    { id: 'm4', start: '10:35', end: '11:30', type: 'class', label: '4º Horário', shift: 'morning' },
+];
+
+const AFTERNOON_SLOTS: TimeSlot[] = [
+    { id: 'a1', start: '13:00', end: '13:50', type: 'class', label: '1º Horário', shift: 'afternoon' },
+    { id: 'a2', start: '13:50', end: '14:40', type: 'class', label: '2º Horário', shift: 'afternoon' },
+    { id: 'a3', start: '14:40', end: '15:30', type: 'class', label: '3º Horário', shift: 'afternoon' },
+    { id: 'ab1', start: '15:30', end: '16:00', type: 'break', label: 'INTERVALO', shift: 'afternoon' },
+    { id: 'a4', start: '16:00', end: '16:50', type: 'class', label: '4º Horário', shift: 'afternoon' },
+    { id: 'a5', start: '16:50', end: '17:40', type: 'class', label: '5º Horário', shift: 'afternoon' },
+    { id: 'a6', start: '17:40', end: '18:30', type: 'class', label: '6º Horário', shift: 'afternoon' },
+    { id: 'a7', start: '18:30', end: '19:20', type: 'class', label: '7º Horário', shift: 'afternoon' },
+    { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
+];
+
+const EFAI_CLASSES_LIST = EFAI_CLASSES.map(c => ({
+    id: c.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    name: c
+}));
+
+const MORNING_CLASSES_LIST = [
+    { id: '6efaf', name: '6º EFAF' },
+    { id: '7efaf', name: '7º EFAF' },
+    { id: '8efaf', name: '8º EFAF' },
+    { id: '9efaf', name: '9º EFAF' },
+];
+
+const AFTERNOON_CLASSES_LIST = [
+    { id: '1em', name: '1ª SÉRIE EM' },
+    { id: '2em', name: '2ª SÉRIE EM' },
+    { id: '3em', name: '3ª SÉRIE EM' },
+];
 
 const StatCard: React.FC<{ title: string; value: number; icon: React.ElementType; color: string }> = ({ title, value, icon: Icon, color }) => (
     <div className="bg-[#18181b] border border-white/5 p-6 rounded-[2rem] shadow-lg flex items-center gap-6">
@@ -51,19 +108,27 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 };
 
 export const PrintShopDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'config'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'sync' | 'schedule' | 'config'>('exams');
     const [isLoading, setIsLoading] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [syncMsg, setSyncMsg] = useState('');
 
+    // Data States
     const [exams, setExams] = useState<ExamRequest[]>([]);
     const [examSearch, setExamSearch] = useState('');
-
     const [students, setStudents] = useState<Student[]>([]);
+    const [staffList, setStaffList] = useState<StaffMember[]>([]);
+    
+    // Config States
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [configBannerMsg, setConfigBannerMsg] = useState('');
     const [configBannerType, setConfigBannerType] = useState<'info' | 'warning' | 'error' | 'success'>('info');
     const [configIsBannerActive, setConfigIsBannerActive] = useState(false);
+
+    // Schedule States
+    const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+    const [scheduleDay, setScheduleDay] = useState(new Date().getDay() || 1);
+    const [scheduleLevel, setScheduleLevel] = useState<'EFAI' | 'EFAF' | 'EM'>('EFAF');
+    const [editingSlot, setEditingSlot] = useState<{classId: string, slotId: string} | null>(null);
+    const [editForm, setEditForm] = useState({ subject: '', professor: '' });
 
     useEffect(() => {
         const fetchInitial = async () => {
@@ -86,8 +151,14 @@ export const PrintShopDashboard: React.FC = () => {
             setConfigBannerType(cfg.bannerType || 'info');
             setConfigIsBannerActive(cfg.isBannerActive || false);
         });
-        return () => unsubConfig();
+
+        const unsubSchedule = listenToSchedule(setSchedule);
+        const unsubStaff = listenToStaffMembers(setStaffList);
+
+        return () => { unsubConfig(); unsubSchedule(); unsubStaff(); };
     }, []);
+
+    // --- HANDLERS ---
 
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
@@ -104,18 +175,41 @@ export const PrintShopDashboard: React.FC = () => {
         alert("Configurações salvas!");
     };
 
-    const handleSyncGennera = async () => {
-        if (!confirm("Sincronizar dados com Gennera?")) return;
-        setIsSyncing(true);
-        try {
-            await syncAllDataWithGennera((msg) => setSyncMsg(msg));
-            const allStudents = await getStudents();
-            setStudents(allStudents);
-        } catch (e) { console.error(e); } finally {
-            setIsSyncing(false);
-            setSyncMsg('');
+    const handleSaveSchedule = async () => {
+        if (!editingSlot) return;
+        
+        // Find existing entry ID if any
+        const existingEntry = schedule.find(s => 
+            s.dayOfWeek === scheduleDay && 
+            s.classId === editingSlot.classId && 
+            s.slotId === editingSlot.slotId
+        );
+
+        if (!editForm.subject && !editForm.professor) {
+            // Delete if empty
+            if (existingEntry) await deleteScheduleEntry(existingEntry.id);
+        } else {
+            // Save/Update
+            const entry: ScheduleEntry = {
+                id: existingEntry?.id || '',
+                dayOfWeek: scheduleDay,
+                classId: editingSlot.classId,
+                className: [...EFAI_CLASSES_LIST, ...MORNING_CLASSES_LIST, ...AFTERNOON_CLASSES_LIST].find(c => c.id === editingSlot.classId)?.name || '',
+                slotId: editingSlot.slotId,
+                subject: editForm.subject,
+                professor: editForm.professor
+            };
+            await saveScheduleEntry(entry);
         }
+        setEditingSlot(null);
+        setEditForm({ subject: '', professor: '' });
     };
+
+    const getScheduleEntry = (classId: string, slotId: string) => {
+        return schedule.find(s => s.dayOfWeek === scheduleDay && s.classId === classId && s.slotId === slotId);
+    };
+
+    // --- FILTERS & STATS ---
 
     const filteredExams = exams.filter(e => 
         String(e.title || '').toLowerCase().includes(examSearch.toLowerCase()) || 
@@ -128,14 +222,35 @@ export const PrintShopDashboard: React.FC = () => {
     const today = new Date().toDateString();
     const completedToday = exams.filter(e => e.status === ExamStatus.COMPLETED && new Date(e.createdAt).toDateString() === today).length;
 
-    const SidebarItem = ({ id, label, icon: Icon }: { id: string, label: string, icon: any }) => (
+    const SidebarItem = ({ id, label, icon: Icon }: { id: any, label: string, icon: any }) => (
         <button
-            onClick={() => setActiveTab(id as any)}
+            onClick={() => setActiveTab(id)}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black text-xs uppercase tracking-widest mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
         >
             <Icon size={18} /> <span>{label}</span>
         </button>
     );
+
+    // Schedule Helpers
+    let activeClasses = MORNING_CLASSES_LIST;
+    let activeSlots = MORNING_SLOTS;
+    let activeShiftLabel = 'Turno Matutino (Fundamental II)';
+    let ActiveShiftIcon = Clock;
+    let activeShiftColor = 'text-yellow-500';
+
+    if (scheduleLevel === 'EFAI') {
+        activeClasses = EFAI_CLASSES_LIST;
+        activeSlots = MORNING_SLOTS_EFAI;
+        activeShiftLabel = 'Turno Matutino (Fundamental I)';
+    } else if (scheduleLevel === 'EM') {
+        activeClasses = AFTERNOON_CLASSES_LIST;
+        activeSlots = AFTERNOON_SLOTS;
+        activeShiftLabel = 'Turno Vespertino (Ensino Médio)';
+        activeShiftColor = 'text-orange-500';
+    }
+
+    const availableTeachers = staffList.filter(s => s.isTeacher).map(s => s.name).sort();
+    const availableSubjects = scheduleLevel === 'EM' ? EM_SUBJECTS : EFAF_SUBJECTS;
 
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8">
@@ -144,11 +259,15 @@ export const PrintShopDashboard: React.FC = () => {
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-6 ml-2">Escola & Cópias</p>
                     <SidebarItem id="exams" label="Fila de Impressão" icon={Printer} />
                     <SidebarItem id="students" label="Base de Alunos" icon={Users} />
+                    <SidebarItem id="schedule" label="Gestão de Horários" icon={CalendarClock} />
+                    <SidebarItem id="sync" label="Integração Gennera" icon={DatabaseZap} />
                     <SidebarItem id="config" label="Sistema" icon={Settings} />
                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-12 bg-transparent custom-scrollbar">
+                
+                {/* --- EXAMS TAB --- */}
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-12">
@@ -175,7 +294,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
                                         <tr>
                                             <th className="p-6">Data</th>
-                                            <th className="p-6">Professor / Material</th>
+                                            <th className="p-6">Detalhes da Solicitação</th>
                                             <th className="p-6">Turma / Qtd</th>
                                             <th className="p-6">Status</th>
                                             <th className="p-6 text-right">Ações</th>
@@ -184,19 +303,60 @@ export const PrintShopDashboard: React.FC = () => {
                                     <tbody className="divide-y divide-white/5">
                                         {filteredExams.map(exam => (
                                             <tr key={exam.id} className="hover:bg-white/[0.02] group">
-                                                <td className="p-6 text-sm text-gray-500 font-bold">{new Date(exam.createdAt).toLocaleDateString()}</td>
-                                                <td className="p-6">
-                                                    <p className="font-black text-white uppercase tracking-tight">{String(exam.title || '')}</p>
-                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Prof. {String(exam.teacherName || '')}</p>
+                                                <td className="p-6 text-sm text-gray-500 font-bold align-top w-32">{new Date(exam.createdAt).toLocaleDateString()}</td>
+                                                <td className="p-6 align-top">
+                                                    <div className="flex flex-col gap-4">
+                                                        <div>
+                                                            <p className="font-black text-white uppercase tracking-tight text-lg leading-tight">{String(exam.title || '')}</p>
+                                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Prof. {String(exam.teacherName || '')}</p>
+                                                        </div>
+
+                                                        {/* Observações */}
+                                                        {exam.instructions && exam.instructions !== 'Sem instruções' && (
+                                                            <div className="bg-yellow-500/5 border border-yellow-500/20 p-4 rounded-xl relative">
+                                                                <span className="text-[9px] font-black text-yellow-600 uppercase tracking-widest block mb-2">Observações do Professor:</span>
+                                                                <p className="text-xs text-gray-300 leading-relaxed font-medium italic">"{exam.instructions}"</p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Arquivos */}
+                                                        {exam.fileUrls && exam.fileUrls.length > 0 && (
+                                                            <div className="space-y-2">
+                                                                <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">Materiais para Impressão:</p>
+                                                                <div className="grid gap-2">
+                                                                    {exam.fileUrls.map((url, idx) => (
+                                                                        <div key={idx} className="flex items-center justify-between bg-[#0f0f10] border border-white/5 p-3 rounded-xl hover:border-white/10 transition-all group">
+                                                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                                                <div className="h-8 w-8 bg-white/5 rounded-lg flex items-center justify-center text-red-500 shrink-0">
+                                                                                    <FileText size={16}/>
+                                                                                </div>
+                                                                                <span className="text-[10px] font-bold text-gray-400 truncate uppercase">
+                                                                                    {exam.fileNames?.[idx] || `Arquivo ${idx + 1}`}
+                                                                                </span>
+                                                                            </div>
+                                                                            <a 
+                                                                                href={url} 
+                                                                                target="_blank" 
+                                                                                rel="noopener noreferrer"
+                                                                                className="h-8 w-8 flex items-center justify-center bg-white/5 hover:bg-red-600 text-gray-400 hover:text-white rounded-lg transition-all"
+                                                                                title="Baixar para Impressão"
+                                                                            >
+                                                                                <Download size={14}/>
+                                                                            </a>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </td>
-                                                <td className="p-6">
+                                                <td className="p-6 align-top">
                                                     <span className="bg-white/10 px-3 py-1 rounded-full text-[10px] font-black text-gray-400 uppercase border border-white/5">{String(exam.gradeLevel || '')}</span>
                                                     <span className="ml-4 text-red-500 font-black text-lg">{exam.quantity}x</span>
                                                 </td>
-                                                <td className="p-6"><StatusBadge status={exam.status} /></td>
-                                                <td className="p-6 text-right">
+                                                <td className="p-6 align-top"><StatusBadge status={exam.status} /></td>
+                                                <td className="p-6 text-right align-top">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        <a href={exam.fileUrls?.[0]} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center h-10 w-10 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white transition-all"><Download size={18}/></a>
                                                         {exam.status === ExamStatus.PENDING && <Button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.IN_PROGRESS)} className="h-10 px-4 text-xs font-black uppercase tracking-widest !bg-blue-600 hover:!bg-blue-700">Produzir</Button>}
                                                         {exam.status === ExamStatus.IN_PROGRESS && <Button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.READY)} className="h-10 px-4 text-xs font-black uppercase tracking-widest !bg-purple-600 hover:!bg-purple-700">Finalizar</Button>}
                                                         {exam.status === ExamStatus.READY && <Button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.COMPLETED)} className="h-10 px-4 text-xs font-black uppercase tracking-widest !bg-green-600 hover:!bg-green-700">Entregar</Button>}
@@ -210,18 +370,147 @@ export const PrintShopDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
+
+                {/* --- SCHEDULE TAB --- */}
+                {activeTab === 'schedule' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Gestão de Horários</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Edição do quadro exibido na TV</p>
+                            </div>
+                            
+                            <div className="flex flex-col gap-4 items-end">
+                                {/* LEVEL SELECTOR */}
+                                <div className="flex bg-[#18181b] p-1 rounded-2xl border border-white/10">
+                                    <button onClick={() => setScheduleLevel('EFAI')} className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scheduleLevel === 'EFAI' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>
+                                        Fund. I (EFAI)
+                                    </button>
+                                    <button onClick={() => setScheduleLevel('EFAF')} className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scheduleLevel === 'EFAF' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>
+                                        Fund. II (EFAF)
+                                    </button>
+                                    <button onClick={() => setScheduleLevel('EM')} className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scheduleLevel === 'EM' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>
+                                        Ensino Médio
+                                    </button>
+                                </div>
+
+                                {/* DAY SELECTOR */}
+                                <div className="flex bg-[#18181b] p-1 rounded-xl border border-white/10">
+                                    {['SEG', 'TER', 'QUA', 'QUI', 'SEX'].map((d, i) => (
+                                        <button 
+                                            key={i} 
+                                            onClick={() => setScheduleDay(i + 1)}
+                                            className={`px-6 py-3 rounded-lg text-xs font-black transition-all ${scheduleDay === i + 1 ? 'bg-white text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                                        >
+                                            {d}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </header>
+
+                        <div className="space-y-12 pb-20">
+                            <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl relative">
+                                <div className="p-6 bg-black/20 border-b border-white/5 flex justify-between items-center">
+                                    <h3 className={`text-lg font-black text-white uppercase tracking-widest flex items-center gap-3`}>
+                                        <ActiveShiftIcon size={20} className={activeShiftColor}/> {activeShiftLabel}
+                                    </h3>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="bg-black/30 border-b border-white/5">
+                                                <th className="p-4 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest w-32">Horário</th>
+                                                {activeClasses.map(cls => (
+                                                    <th key={cls.id} className="p-4 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest border-l border-white/5">{cls.name}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {activeSlots.map(slot => (
+                                                <tr key={slot.id} className={slot.type === 'break' ? 'bg-white/[0.02]' : ''}>
+                                                    <td className="p-4 text-xs font-bold text-gray-400 border-r border-white/5">
+                                                        <span className="block text-white font-mono">{slot.start} - {slot.end}</span>
+                                                        <span className="text-[9px] uppercase tracking-wider opacity-50">{slot.label}</span>
+                                                    </td>
+                                                    {slot.type === 'break' ? (
+                                                        <td colSpan={activeClasses.length} className="p-4 text-center text-xs font-black text-yellow-600 uppercase tracking-[0.5em] opacity-50">Intervalo</td>
+                                                    ) : (
+                                                        activeClasses.map(cls => {
+                                                            const entry = getScheduleEntry(cls.id, slot.id);
+                                                            const isEditing = editingSlot?.classId === cls.id && editingSlot?.slotId === slot.id;
+                                                            
+                                                            return (
+                                                                <td key={cls.id + slot.id} className="p-2 border-l border-white/5 relative group h-24 align-middle">
+                                                                    {isEditing ? (
+                                                                        <div className="absolute inset-0 bg-[#0f0f10] z-20 flex flex-col p-3 gap-2 shadow-2xl border-2 border-red-600 animate-in zoom-in-95">
+                                                                            <input 
+                                                                                list="subjects-list"
+                                                                                autoFocus 
+                                                                                className="bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-red-500 font-bold uppercase placeholder-gray-500" 
+                                                                                placeholder="Matéria" 
+                                                                                value={editForm.subject} 
+                                                                                onChange={e => setEditForm({...editForm, subject: e.target.value})} 
+                                                                            />
+                                                                            <datalist id="subjects-list">
+                                                                                {availableSubjects.map(s => <option key={s} value={s} />)}
+                                                                            </datalist>
+
+                                                                            <input 
+                                                                                list="teachers-list"
+                                                                                className="bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-[10px] text-gray-300 outline-none focus:border-red-500 uppercase placeholder-gray-500" 
+                                                                                placeholder="Professor" 
+                                                                                value={editForm.professor} 
+                                                                                onChange={e => setEditForm({...editForm, professor: e.target.value})} 
+                                                                            />
+                                                                            <datalist id="teachers-list">
+                                                                                {availableTeachers.map(t => <option key={t} value={t} />)}
+                                                                            </datalist>
+
+                                                                            <div className="flex gap-2 mt-auto">
+                                                                                <button onClick={handleSaveSchedule} className="flex-1 bg-green-600 rounded-lg py-1.5 text-[10px] font-black text-white hover:bg-green-700 transition-colors uppercase tracking-widest">Salvar</button>
+                                                                                <button onClick={() => setEditingSlot(null)} className="flex-1 bg-red-600 rounded-lg py-1.5 text-[10px] font-black text-white hover:bg-red-700 transition-colors uppercase tracking-widest">Cancelar</button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div 
+                                                                            onClick={() => {
+                                                                                setEditingSlot({ classId: cls.id, slotId: slot.id });
+                                                                                setEditForm({ subject: entry?.subject || '', professor: entry?.professor || '' });
+                                                                            }}
+                                                                            className="w-full h-full rounded-xl hover:bg-white/5 cursor-pointer flex flex-col items-center justify-center transition-all p-2 group-hover:shadow-inner"
+                                                                        >
+                                                                            {entry ? (
+                                                                                <>
+                                                                                    <span className="text-xs font-black text-white uppercase text-center leading-tight line-clamp-2">{entry.subject}</span>
+                                                                                    <span className="text-[9px] font-bold text-gray-500 uppercase mt-1 truncate max-w-full">{entry.professor}</span>
+                                                                                </>
+                                                                            ) : (
+                                                                                <span className="text-[9px] text-gray-700 font-black uppercase opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity"><Edit size={10}/> Editar</span>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                            );
+                                                        })
+                                                    )}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                 {/* --- STUDENTS TAB --- */}
                  {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
                             <div>
                                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Base de Alunos</h1>
-                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Sincronização com ERP Gennera</p>
-                            </div>
-                            <div className="flex items-center gap-6">
-                                {isSyncing && <p className="text-[9px] font-black text-blue-400 animate-pulse uppercase tracking-[0.2em]">{syncMsg}</p>}
-                                <button onClick={handleSyncGennera} disabled={isSyncing} className="flex items-center gap-3 px-8 py-5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-2xl shadow-blue-900/40 transition-all">
-                                    <RefreshCw size={20} className={isSyncing ? 'animate-spin' : ''} /> Sincronizar Alunos
-                                </button>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Visão geral das matrículas</p>
                             </div>
                         </header>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
@@ -234,6 +523,11 @@ export const PrintShopDashboard: React.FC = () => {
                         </div>
                     </div>
                 )}
+
+                {/* --- SYNC TAB (RESTAURADA) --- */}
+                {activeTab === 'sync' && <GenneraSyncPanel />}
+
+                 {/* --- CONFIG TAB --- */}
                  {activeTab === 'config' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto">
                          <header className="mb-12">
