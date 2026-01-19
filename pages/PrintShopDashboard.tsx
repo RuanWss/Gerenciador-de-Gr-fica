@@ -115,6 +115,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [exams, setExams] = useState<ExamRequest[]>([]);
     const [examSearch, setExamSearch] = useState('');
     const [students, setStudents] = useState<Student[]>([]);
+    const [studentSearch, setStudentSearch] = useState('');
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     
     // Config States
@@ -507,19 +508,72 @@ export const PrintShopDashboard: React.FC = () => {
                  {/* --- STUDENTS TAB --- */}
                  {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+                        <header className="mb-8 flex flex-col md:flex-row justify-between items-end gap-6">
                             <div>
                                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Base de Alunos</h1>
-                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Visão geral das matrículas</p>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Gestão de matrículas e enturmação</p>
+                            </div>
+                            <div className="relative w-full md:w-96">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar aluno por nome ou turma..." 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" 
+                                    value={studentSearch} 
+                                    onChange={e => setStudentSearch(e.target.value)} 
+                                />
                             </div>
                         </header>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-                            {CLASSES.slice(0, 8).map(cls => (
-                                <div key={cls} className="p-8 rounded-[2.5rem] border bg-[#18181b] border-white/5 text-gray-500 shadow-xl">
-                                    <h3 className="text-xs font-black mb-3 uppercase tracking-widest text-white">{cls}</h3>
-                                    <span className="bg-black/40 px-3 py-1 rounded-full text-[10px] font-mono border border-white/5">{students.filter(s => s.className === cls).length} Matrículas</span>
+
+                        {/* Estatísticas Rápidas */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-8">
+                            {CLASSES.map(cls => (
+                                <div key={cls} className="p-6 rounded-[2rem] border bg-[#18181b] border-white/5 text-gray-500 shadow-lg">
+                                    <h3 className="text-[10px] font-black mb-2 uppercase tracking-widest text-white truncate" title={cls}>{cls}</h3>
+                                    <span className="bg-black/40 px-3 py-1 rounded-full text-[10px] font-mono border border-white/5 text-gray-400">{students.filter(s => s.className === cls).length}</span>
                                 </div>
                             ))}
+                        </div>
+
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl flex flex-col h-[calc(100vh-320px)]">
+                            <div className="p-6 bg-black/20 border-b border-white/5 flex justify-between items-center shrink-0">
+                                <h3 className="text-lg font-black text-white uppercase tracking-widest">Listagem Geral</h3>
+                                <span className="bg-white/5 px-4 py-1 rounded-full text-[10px] font-black text-gray-400 border border-white/5">{students.filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()) || s.className.toLowerCase().includes(studentSearch.toLowerCase())).length} Alunos</span>
+                            </div>
+                            <div className="overflow-y-auto custom-scrollbar p-0">
+                                <table className="w-full text-left">
+                                    <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-[0.2em] sticky top-0 z-10 backdrop-blur-xl">
+                                        <tr>
+                                            <th className="p-6">Aluno</th>
+                                            <th className="p-6">Turma</th>
+                                            <th className="p-6 text-right">Matrícula</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {students
+                                            .filter(s => String(s.name || '').toLowerCase().includes(studentSearch.toLowerCase()) || String(s.className || '').toLowerCase().includes(studentSearch.toLowerCase()))
+                                            .sort((a,b) => (a.name || '').localeCompare(b.name || ''))
+                                            .map(student => (
+                                            <tr key={student.id} className="hover:bg-white/[0.02] group transition-colors">
+                                                <td className="p-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-800 to-black border border-white/10 flex items-center justify-center font-black text-gray-500 text-xs shrink-0">
+                                                            {String(student.name || '').charAt(0)}
+                                                        </div>
+                                                        <span className="font-bold text-white text-sm uppercase tracking-tight">{String(student.name || '')}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-6">
+                                                    <span className="bg-white/5 border border-white/5 px-3 py-1.5 rounded-lg text-[10px] font-black text-gray-300 uppercase tracking-widest">{String(student.className || '')}</span>
+                                                </td>
+                                                <td className="p-6 text-right">
+                                                    <span className="font-mono text-xs text-gray-600 group-hover:text-gray-400 transition-colors">{student.id}</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
