@@ -7,7 +7,7 @@ import { Wifi, WifiOff, Clock, Calendar, Volume2, VolumeX, Maximize2 } from 'luc
 // --- CONFIGURAÇÃO DE SONS ---
 const SOUND_SCHOOL_BELL = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3";
 
-// --- CONFIGURAÇÃO DE HORÁRIOS (Matutino) ---
+// --- CONFIGURAÇÃO DE HORÁRIOS (Matutino - Sincronizado) ---
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
     { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
@@ -17,7 +17,7 @@ const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
 ];
 
-// --- CONFIGURAÇÃO DE HORÁRIOS (Vespertino) ---
+// --- CONFIGURAÇÃO DE HORÁRIOS (Vespertino - Sincronizado Completo) ---
 const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a1', start: '13:00', end: '13:50', type: 'class', label: '1º Horário', shift: 'afternoon' },
     { id: 'a2', start: '13:50', end: '14:40', type: 'class', label: '2º Horário', shift: 'afternoon' },
@@ -25,9 +25,12 @@ const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'ab1', start: '15:30', end: '16:00', type: 'break', label: 'INTERVALO', shift: 'afternoon' },
     { id: 'a4', start: '16:00', end: '16:50', type: 'class', label: '4º Horário', shift: 'afternoon' },
     { id: 'a5', start: '16:50', end: '17:40', type: 'class', label: '5º Horário', shift: 'afternoon' },
+    { id: 'a6', start: '17:40', end: '18:30', type: 'class', label: '6º Horário', shift: 'afternoon' },
+    { id: 'a7', start: '18:30', end: '19:20', type: 'class', label: '7º Horário', shift: 'afternoon' },
+    { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
 ];
 
-// --- TURMAS POR TURNO ---
+// --- TURMAS POR TURNO (IDs Rigorosamente Iguais ao Dashboard) ---
 const MORNING_CLASSES = [
     { id: '6efaf', name: '6º EFAF' },
     { id: '7efaf', name: '7º EFAF' },
@@ -75,7 +78,7 @@ export const PublicSchedule: React.FC = () => {
         if (!isAuthorized) return;
         const unsubSchedule = listenToSchedule((data) => {
             console.log("🔥 TV: Recebido atualização de horários:", data.length);
-            setSchedule([...data]); // Força re-render
+            setSchedule([...data]);
             setConnectionStatus(true);
         });
         const unsubConfig = listenToSystemConfig(setSysConfig);
@@ -92,9 +95,9 @@ export const PublicSchedule: React.FC = () => {
     const dashboardData = useMemo(() => {
         const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
         
-        // 1. Determina Turno
+        // 1. Determina Turno (12:40 PM como corte)
         let currentShift: 'morning' | 'afternoon' = 'morning';
-        if (nowMins >= 760) currentShift = 'afternoon'; // Após 12:40 vira tarde
+        if (nowMins >= 760) currentShift = 'afternoon'; 
 
         // 2. Seleciona Configuração Baseado no Turno
         const activeClasses = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
@@ -119,11 +122,6 @@ export const PublicSchedule: React.FC = () => {
                 s.dayOfWeek === dayOfWeek && 
                 s.slotId === currentSlot?.id
             );
-
-            // Fallback: Se não tem aula neste minuto exato, tenta achar a próxima do turno ou algo para não ficar vazio
-            if (!entry && !currentSlot) {
-                 // Fora de horário de aula (recreio ou antes/depois), mostra "Aguardando" ou a primeira aula
-            }
 
             return {
                 classId: cls.id,
