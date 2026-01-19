@@ -74,14 +74,12 @@ export const PublicSchedule: React.FC = () => {
     useEffect(() => {
         if (!isAuthorized) return;
         
-        // Listen to schedule changes
         const unsubscribeSchedule = listenToSchedule((data) => {
-            console.log("TV Received Schedule Update:", data.length, "entries");
-            setSchedule([...data]); // Create new array to ensure re-render
+            console.log("TV Sync: Data updated", data.length, "items");
+            setSchedule([...data]);
             setConnectionStatus(true);
         });
 
-        // Listen to system configs
         const unsubscribeConfig = listenToSystemConfig(setSysConfig);
         
         return () => {
@@ -107,7 +105,7 @@ export const PublicSchedule: React.FC = () => {
         
         if (newShift !== currentShift) setCurrentShift(newShift);
 
-        const activeSlots = newShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+        const activeSlots = newShift === 'afternoon' ? AFTERNOON_SLOTS : MORNING_SLOTS;
         const currentSlot = activeSlots.find(s => {
             const start = timeToMins(s.start);
             const end = timeToMins(s.end);
@@ -144,8 +142,10 @@ export const PublicSchedule: React.FC = () => {
     // Calculate current display data
     const displayData = useMemo(() => {
         const rawDay = currentTime.getDay();
+        // Force Monday if it's weekend for easier management visualization
         const dayOfWeek = (rawDay === 0 || rawDay === 6) ? 1 : rawDay;
-        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+        
+        const slots = currentShift === 'afternoon' ? AFTERNOON_SLOTS : MORNING_SLOTS;
         const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
         
         const currentSlotIndex = slots.findIndex(s => {
@@ -157,11 +157,12 @@ export const PublicSchedule: React.FC = () => {
         const currentSlot = currentSlotIndex !== -1 ? slots[currentSlotIndex] : null;
         const nextSlot = currentSlotIndex !== -1 && currentSlotIndex + 1 < slots.length ? slots[currentSlotIndex + 1] : null;
 
-        const classes = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
+        const classes = currentShift === 'afternoon' ? AFTERNOON_CLASSES : MORNING_CLASSES;
 
         return classes.map(cls => {
+            // CRITICAL FIX: Ensure precise matching between schedule entries and class identifiers
             const currentEntry = schedule.find(s => 
-                s.classId === cls.id && 
+                String(s.classId).toLowerCase().trim() === String(cls.id).toLowerCase().trim() && 
                 s.slotId === (currentSlot?.id || 'none') && 
                 s.dayOfWeek === dayOfWeek
             );
@@ -172,7 +173,7 @@ export const PublicSchedule: React.FC = () => {
                     nextEntry = { subject: 'INTERVALO', professor: '', start: nextSlot.start };
                 } else {
                     const entry = schedule.find(s => 
-                        s.classId === cls.id && 
+                        String(s.classId).toLowerCase().trim() === String(cls.id).toLowerCase().trim() && 
                         s.slotId === nextSlot.id && 
                         s.dayOfWeek === dayOfWeek
                     );
@@ -253,6 +254,7 @@ export const PublicSchedule: React.FC = () => {
                                 ) : (
                                     <div className="opacity-30">
                                         <p className="text-white font-black uppercase text-3xl tracking-widest select-none">LIVRE</p>
+                                        {currentSlot && <p className="text-[9px] text-gray-500 font-bold uppercase mt-2">Sem aula: {currentSlot.label}</p>}
                                     </div>
                                 )}
                             </div>
