@@ -95,22 +95,6 @@ export interface StudentOccurrence {
   reportedBy: string;
 }
 
-export interface ExtraClassRecord {
-  professor: string;
-  subject: string;
-  className: string;
-}
-
-export interface DailySchoolLog {
-  id: string;
-  date: string;
-  adminAttendance: Record<string, { present: boolean; shifts: string[] }>;
-  teacherAttendance: Record<string, { present: boolean; substitute?: string }>;
-  extraClasses?: ExtraClassRecord[];
-  generalObservations: string;
-  updatedAt: number;
-}
-
 export interface StaffMember {
   id: string;
   name: string;
@@ -133,11 +117,6 @@ export interface SystemConfig {
   isBannerActive: boolean;
   tvStart?: string;
   tvEnd?: string;
-  whatsappInstance?: string; 
-  whatsappApiKey?: string;   
-  whatsappBaseUrl?: string;  
-  printShopNumber?: string;   
-  enableAutomations?: boolean;
 }
 
 export interface ScheduleEntry {
@@ -161,52 +140,20 @@ export interface AttendanceLog {
   type?: 'entry' | 'exit';
 }
 
-export type LessonPlanType = 'daily' | 'semester' | 'project';
-
 export interface LessonPlan {
   id: string;
   teacherId: string;
   teacherName: string;
-  type: LessonPlanType;
   className: string;
   subject: string;
   createdAt: number;
   topic?: string;
-  period?: string;
-  date?: string;
   content?: string;
-  methodology?: string;
-  resources?: string;
-  evaluation?: string;
-  homework?: string;
-  justification?: string;
-  semesterContents?: string;
-  cognitiveSkills?: string;
-  socialEmotionalSkills?: string;
-  didacticStrategies?: string;
-  activitiesPre?: string;
-  activitiesAuto?: string;
-  activitiesCoop?: string;
-  activitiesCompl?: string;
-  educationalPractices?: string;
-  educationalSpaces?: string;
-  didacticResources?: string;
-  evaluationStrategies?: string;
-  references?: string;
-  projectTheme?: string;
-  guidingQuestion?: string;
-  projectObjective?: string;
-  expectedResults?: string[]; 
-  finalProductType?: string;
-  finalProductDescription?: string;
-  projectSteps?: string[]; 
-  timeline?: Record<string, string>; 
-  projectResources?: string;
-  aiTools?: string;
-  aiPurpose?: string[];
-  aiCareTaken?: string;
-  evidenceTypes?: string[];
+  type?: string;
 }
+
+// Added LessonPlanType to resolve Page error
+export type LessonPlanType = string;
 
 export interface SchoolEvent {
   id: string;
@@ -289,29 +236,6 @@ export interface StaffAttendanceLog {
   dateString: string;
 }
 
-export interface AnswerKey {
-  id: string;
-  examTitle: string;
-  subject: string;
-  className: string;
-  numQuestions: number;
-  answers: Record<number, string>; // {1: 'A', 2: 'B'}
-  createdAt: number;
-}
-
-export interface StudentCorrection {
-  id: string;
-  answerKeyId: string;
-  studentId: string;
-  studentName: string;
-  studentClass: string;
-  score: number;
-  totalQuestions: number;
-  answers: Record<number, string>;
-  correctAnswers: number;
-  timestamp: number;
-}
-
 export interface SchoolClass {
   id: string;
   name: string;
@@ -332,33 +256,42 @@ export interface InfantilReport {
   descriptiveText: Record<string, string>;
 }
 
-export interface PedagogicalProject {
-    id: string;
-    teacherId: string;
-    teacherName: string;
+// Added missing interfaces to resolve firebaseService and HRDashboard errors
+export interface AnswerKey {
+  id: string;
+  examId: string;
+  teacherId: string;
+  subject: string;
+  createdAt: number;
+  questions: any[];
+}
+
+export interface StudentCorrection {
+  id: string;
+  answerKeyId: string;
+  studentId: string;
+  studentName: string;
+  score: number;
+  timestamp: number;
+  answers: any;
+}
+
+export interface DailySchoolLog {
+  id: string;
+  date: string;
+  teacherAttendance: Record<string, { present: boolean; substitute?: string }>;
+  extraClasses?: Array<{
+    professor: string;
+    subject: string;
     className: string;
-    theme: string;
-    guidingQuestion: string;
-    objective: string;
-    expectedResults: string[];
-    finalProduct: string;
-    finalProductDescription: string;
-    steps: string[];
-    timeline: {
-        start: string;
-        diagnosis: string;
-        planning: string;
-        handsOn: string[];
-        socialization: string;
-        evaluation: string;
-    };
-    resources: string;
-    aiUsage: {
-        tools: string;
-        purpose: string[];
-        careTaken: string;
-    };
-    evidence: string[];
-    createdAt: number;
-    updatedAt: number;
+  }>;
+}
+
+export interface PedagogicalProject {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  title: string;
+  description: string;
+  createdAt: number;
 }

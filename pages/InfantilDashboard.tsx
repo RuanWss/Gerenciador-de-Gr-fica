@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -303,7 +302,7 @@ export const InfantilDashboard: React.FC = () => {
     setIsCreatingReport(true);
   };
 
-  const listStudents = students.filter(s => s.className === selectedListClass).sort((a,b) => a.name.localeCompare(b.name));
+  const listStudents = students.filter(s => s.className === selectedListClass).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 
   return (
     <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
@@ -377,9 +376,9 @@ export const InfantilDashboard: React.FC = () => {
                         {attendanceClass ? (
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 gap-2">
-                                    {students.filter(s => s.className === attendanceClass).sort((a,b) => a.name.localeCompare(b.name)).map(student => (
+                                    {students.filter(s => s.className === attendanceClass).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(student => (
                                         <div key={student.id} className="flex items-center justify-between p-5 bg-black/20 rounded-2xl border border-white/5 group hover:bg-black/40 transition-colors">
-                                            <span className="font-black text-white uppercase tracking-tight text-sm">{student.name}</span>
+                                            <span className="font-black text-white uppercase tracking-tight text-sm">{String(student.name || '')}</span>
                                             <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
                                                 <button 
                                                     onClick={() => setAttendanceRecords({...attendanceRecords, [student.id]: true})}
@@ -426,8 +425,8 @@ export const InfantilDashboard: React.FC = () => {
                                 {exams.length > 0 ? exams.map(e => (
                                     <tr key={e.id} className="hover:bg-white/[0.02] transition-colors group">
                                         <td className="p-8 text-sm text-gray-500 font-bold">{new Date(e.createdAt).toLocaleDateString()}</td>
-                                        <td className="p-8 font-black text-white uppercase tracking-tight">{e.title}</td>
-                                        <td className="p-8"><span className="bg-orange-500/10 border border-orange-500/20 px-3 py-1 rounded-full text-[10px] font-black text-orange-400 uppercase">{e.gradeLevel}</span></td>
+                                        <td className="p-8 font-black text-white uppercase tracking-tight">{String(e.title || '')}</td>
+                                        <td className="p-8"><span className="bg-orange-500/10 border border-orange-500/20 px-3 py-1 rounded-full text-[10px] font-black text-orange-400 uppercase">{String(e.gradeLevel || '')}</span></td>
                                         <td className="p-8">
                                             <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
                                                 e.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
@@ -493,12 +492,12 @@ export const InfantilDashboard: React.FC = () => {
                                         <td className="p-8">
                                             <div className="flex items-center gap-4">
                                                 <div className="h-10 w-10 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center font-black text-orange-500 text-xs">
-                                                    {student.name.charAt(0)}
+                                                    {String(student.name || '').charAt(0)}
                                                 </div>
-                                                <span className="font-black text-white uppercase tracking-tight">{student.name}</span>
+                                                <span className="font-black text-white uppercase tracking-tight">{String(student.name || '')}</span>
                                             </div>
                                         </td>
-                                        <td className="p-8 text-sm text-gray-500 font-mono uppercase tracking-widest">{student.id}</td>
+                                        <td className="p-8 text-sm text-gray-500 font-mono uppercase tracking-widest">{String(student.id || '')}</td>
                                         <td className="p-8 text-center">
                                             <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-4 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Ativo</span>
                                         </td>
@@ -577,9 +576,9 @@ export const InfantilDashboard: React.FC = () => {
                                     <div className="p-4 bg-orange-500/10 text-orange-500 rounded-2xl"><FileEdit size={24}/></div>
                                     <button onClick={async () => { if(confirm("Excluir parecer?")) await deleteInfantilReport(report.id); }} className="text-gray-800 hover:text-red-500 transition-colors p-2"><Trash2 size={20}/></button>
                                 </div>
-                                <h3 className="text-xl font-black text-white mb-1 uppercase tracking-tight truncate">{report.studentName}</h3>
+                                <h3 className="text-xl font-black text-white mb-1 uppercase tracking-tight truncate">{String(report.studentName || '')}</h3>
                                 <div className="flex flex-col gap-1 mb-6">
-                                  <p className="text-xs text-orange-500 font-black uppercase tracking-widest">{report.className}</p>
+                                  <p className="text-xs text-orange-500 font-black uppercase tracking-widest">{String(report.className || '')}</p>
                                   <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest flex items-center gap-2"><Clock size={10}/> {report.bimester || '1º BIMESTRE'}</p>
                                 </div>
                                 <div className="mt-auto pt-6 border-t border-white/5 flex gap-2">
@@ -670,6 +669,7 @@ export const InfantilDashboard: React.FC = () => {
                                                                 {['I', 'ED', 'CA'].map(score => (
                                                                     <button 
                                                                         key={score}
+                                                                        type="button"
                                                                         onClick={() => setReportScores({...reportScores, [obj.code]: score as any})}
                                                                         className={`h-10 w-14 rounded-xl border font-black text-[10px] transition-all ${reportScores[obj.code] === score ? 'bg-orange-600 border-orange-500 text-white shadow-lg' : 'bg-black/40 border-white/5 text-gray-700 hover:text-gray-400'}`}
                                                                     >
@@ -701,7 +701,7 @@ export const InfantilDashboard: React.FC = () => {
                             <div className="flex items-center gap-4 text-gray-500 text-xs font-bold">
                                 <CheckCircle2 size={20} className="text-green-500"/> Todos os campos preenchidos serão salvos.
                             </div>
-                            <Button onClick={handleSaveInfantilReport} isLoading={isSaving} className="bg-orange-600 h-20 px-12 rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-2xl shadow-orange-900/40">
+                            <Button type="button" onClick={handleSaveInfantilReport} isLoading={isSaving} className="bg-orange-600 h-20 px-12 rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-2xl shadow-orange-900/40">
                                 <Save size={24} className="mr-3"/> Finalizar Parecer
                             </Button>
                         </div>
@@ -723,13 +723,13 @@ export const InfantilDashboard: React.FC = () => {
                             <div key={occ.id} className="bg-[#1c1917] border border-orange-500/10 p-10 rounded-[3rem] shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center relative group hover:border-orange-500/30 transition-all">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-4 mb-4">
-                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border tracking-widest ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-orange-500/10 text-orange-500 border-orange-500/20'}`}>{occ.category}</span>
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border tracking-widest ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-orange-500/10 text-orange-500 border-orange-500/20'}`}>{String(occ.category || '')}</span>
                                         <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest">{new Date(occ.timestamp).toLocaleDateString()}</span>
                                     </div>
-                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">{occ.studentName}</h3>
-                                    <p className="text-xs text-orange-500 font-black uppercase tracking-widest mb-6">{occ.studentClass}</p>
+                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">{String(occ.studentName || '')}</h3>
+                                    <p className="text-xs text-orange-500 font-black uppercase tracking-widest mb-6">{String(occ.studentClass || '')}</p>
                                     <div className="bg-black/30 p-8 rounded-[2rem] text-orange-100/70 text-lg italic border border-white/5 leading-relaxed">
-                                        "{occ.description}"
+                                        "{String(occ.description || '')}"
                                     </div>
                                 </div>
                                 <button onClick={async () => { if(confirm("Excluir este registro?")) await deleteOccurrence(occ.id); }} className="absolute top-10 right-10 text-gray-800 hover:text-red-500 transition-colors p-3 bg-white/5 rounded-xl"><Trash2 size={24}/></button>

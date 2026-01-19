@@ -5,7 +5,7 @@ import { listenToStaffMembers, logStaffAttendance } from '../services/firebaseSe
 import { StaffMember, StaffAttendanceLog } from '../types';
 import { CheckCircle, AlertTriangle, Clock, Loader2, Scan, Database, Settings, XCircle, Maximize, Minimize, UserCheck, RefreshCw } from 'lucide-react';
 // @ts-ignore
-import * as faceapi from 'face-api.js';
+import * as faceapi from '@vladmandic/face-api';
 
 export const StaffAttendanceTerminal: React.FC = () => {
     const { logout } = useAuth();
@@ -47,7 +47,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
     // 2. Load AI Models (Ultra Lightweight)
     useEffect(() => {
         const loadModels = async () => {
-            const faceApi = (faceapi as any).default || faceapi;
+            // @ts-ignore
+            const faceApi = faceapi;
 
             if (!faceApi || !faceApi.nets) return;
 
@@ -96,7 +97,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
     }, [modelsLoaded, staff]);
 
     const processStaffFaces = async (staffList: StaffMember[]) => {
-        const faceApi = (faceapi as any).default || faceapi;
+        // @ts-ignore
+        const faceApi = faceapi;
         
         // Filtra staff válido (com foto)
         const validStaff = staffList.filter(s => s.photoUrl);
@@ -227,7 +229,8 @@ export const StaffAttendanceTerminal: React.FC = () => {
     useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        const faceApi = (faceapi as any).default || faceapi;
+        // @ts-ignore
+        const faceApi = faceapi;
 
         if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0) return;
 

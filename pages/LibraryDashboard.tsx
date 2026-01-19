@@ -57,9 +57,9 @@ export const LibraryDashboard: React.FC = () => {
 
     // Filters
     const filteredBooks = books.filter(b => 
-        b.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        b.author.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.isbn?.includes(searchTerm)
+        String(b.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        String(b.author || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(b.isbn || '').includes(searchTerm)
     );
 
     const activeLoans = loans.filter(l => l.status === 'active' || l.status === 'late').sort((a,b) => b.loanDate.localeCompare(a.loanDate));
@@ -270,9 +270,9 @@ export const LibraryDashboard: React.FC = () => {
                                             <Book size={24} />
                                         </div>
                                         <div>
-                                            <h3 className="font-bold text-white text-lg">{book.title}</h3>
-                                            <p className="text-sm text-gray-400">{book.author} • <span className="text-gray-500">{book.category}</span></p>
-                                            {book.isbn && <p className="text-xs text-gray-600 font-mono">ISBN: {book.isbn}</p>}
+                                            <h3 className="font-bold text-white text-lg">{String(book.title || '')}</h3>
+                                            <p className="text-sm text-gray-400">{String(book.author || '')} • <span className="text-gray-500">{String(book.category || '')}</span></p>
+                                            {book.isbn && <p className="text-xs text-gray-600 font-mono">ISBN: {String(book.isbn)}</p>}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-6">
@@ -320,9 +320,9 @@ export const LibraryDashboard: React.FC = () => {
                                             <div key={loan.id} className={`p-4 rounded-lg border ${isLate ? 'bg-red-950/20 border-red-900/50' : 'bg-gray-900/50 border-gray-800'}`}>
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div>
-                                                        <h4 className="font-bold text-white text-sm">{loan.bookTitle}</h4>
-                                                        <p className="text-xs text-gray-400 flex items-center gap-1 mt-1"><User size={10}/> {loan.studentName}</p>
-                                                        <p className="text-[10px] text-gray-500">{loan.studentClass}</p>
+                                                        <h4 className="font-bold text-white text-sm">{String(loan.bookTitle || '')}</h4>
+                                                        <p className="text-xs text-gray-400 flex items-center gap-1 mt-1"><User size={10}/> {String(loan.studentName || '')}</p>
+                                                        <p className="text-[10px] text-gray-500">{String(loan.studentClass || '')}</p>
                                                     </div>
                                                     {isLate && <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded font-bold uppercase">Atrasado</span>}
                                                 </div>
@@ -356,8 +356,8 @@ export const LibraryDashboard: React.FC = () => {
                                     {historyLoans.map(loan => (
                                         <div key={loan.id} className="p-3 rounded-lg border border-gray-800 bg-gray-900/30 flex justify-between items-center opacity-70 hover:opacity-100 transition-opacity">
                                             <div>
-                                                <h4 className="font-bold text-gray-300 text-sm">{loan.bookTitle}</h4>
-                                                <p className="text-xs text-gray-500">{loan.studentName}</p>
+                                                <h4 className="font-bold text-gray-300 text-sm">{String(loan.bookTitle || '')}</h4>
+                                                <p className="text-xs text-gray-500">{String(loan.studentName || '')}</p>
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-[10px] text-green-500 flex items-center gap-1 justify-end"><CheckCircle size={10}/> Devolvido</span>

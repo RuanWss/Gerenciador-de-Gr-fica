@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
     saveStaffMember, 
@@ -81,7 +80,7 @@ export const HRDashboard: React.FC = () => {
 
     useEffect(() => {
         const unsub = listenToStaffMembers((data) => {
-            setStaffList(data.sort((a, b) => a.name.localeCompare(b.name)));
+            setStaffList(data.sort((a, b) => (a.name || '').localeCompare(b.name || '')));
         });
         return () => unsub();
     }, []);
@@ -134,7 +133,7 @@ export const HRDashboard: React.FC = () => {
         setCreateLogin(!!staff.email);
         setPhotoFile(null);
         setPhotoPreview(staff.photoUrl || null);
-        setTempSubject(staff.role.includes('PROFESSOR DE ') ? staff.role.replace('PROFESSOR DE ', '').replace('PROFESSORA DE ', '') : '');
+        setTempSubject((staff.role || '').includes('PROFESSOR DE ') ? (staff.role || '').replace('PROFESSOR DE ', '').replace('PROFESSORA DE ', '') : '');
         setShowForm(true);
     };
 
@@ -240,7 +239,7 @@ export const HRDashboard: React.FC = () => {
             ...logs.map(log => {
                 const date = new Date(log.timestamp);
                 const time = date.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
-                return [`"${log.dateString}"`, `"${time}"`, `"${log.staffName}"`, `"${log.staffRole}"`, `"PONTO"`].join(",");
+                return [`"${log.dateString}"`, `"${time}"`, `"${log.staffName || ''}"`, `"${log.staffRole || ''}"`, `"PONTO"`].join(",");
             })
         ].join("\n");
 
@@ -266,11 +265,11 @@ export const HRDashboard: React.FC = () => {
         const absenceRows = monthlyLogs.flatMap(log => 
             (Object.entries(log.teacherAttendance) as [string, { present: boolean; substitute?: string }][])
                 .filter(([_, att]) => !att.present)
-                .map(([name, att]) => `<tr><td>${log.date}</td><td>${name}</td><td>${att.substitute || '-'}</td></tr>`)
+                .map(([name, att]) => `<tr><td>${log.date || ''}</td><td>${name || ''}</td><td>${att.substitute || '-'}</td></tr>`)
         ).join('');
 
         const extraRows = monthlyLogs.flatMap(log => 
-            (log.extraClasses || []).map(ex => `<tr><td>${log.date}</td><td>${ex.professor}</td><td>${ex.subject}</td><td>${ex.className}</td></tr>`)
+            (log.extraClasses || []).map(ex => `<tr><td>${log.date || ''}</td><td>${ex.professor || ''}</td><td>${ex.subject || ''}</td><td>${ex.className || ''}</td></tr>`)
         ).join('');
 
         printWindow.document.write(`
@@ -316,7 +315,7 @@ export const HRDashboard: React.FC = () => {
         printWindow.document.close();
     };
 
-    const filteredStaff = staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.role.toLowerCase().includes(search.toLowerCase()));
+    const filteredStaff = staffList.filter(s => String(s.name || '').toLowerCase().includes(search.toLowerCase()) || String(s.role || '').toLowerCase().includes(search.toLowerCase()));
 
     const totalMonthlyAbsences = monthlyLogs.reduce((acc, log) => {
         return acc + (Object.values(log.teacherAttendance) as { present: boolean; substitute?: string }[]).filter(att => !att.present).length;
@@ -327,6 +326,40 @@ export const HRDashboard: React.FC = () => {
     }, 0);
 
     const allSubjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS, ...customSubjects])).sort();
+
+    const absenceRows = monthlyLogs.flatMap(log => 
+        (Object.entries(log.teacherAttendance) as [string, { present: boolean; substitute?: string }][])
+            .filter(([_, att]) => !att.present)
+            .map(([name, att]) => (
+                <tr key={log.date + name} className="hover:bg-white/[0.02]">
+                    <td className="p-8 text-xs font-bold text-gray-500">{new Date(log.date + 'T12:00:00').toLocaleDateString()}</td>
+                    <td className="p-8 font-black text-white uppercase text-sm">{String(name || '')}</td>
+                    <td className="p-8">
+                        {att.substitute ? (
+                            <div className="flex items-center gap-3 text-green-500">
+                                <ArrowRight size={14}/>
+                                <span className="font-black text-xs uppercase tracking-widest">{String(att.substitute || '')}</span>
+                            </div>
+                        ) : (
+                            <span className="text-gray-700 text-xs font-bold uppercase italic">Sem substituição</span>
+                        )}
+                    </td>
+                </tr>
+            ))
+    );
+
+    const extraClassRows = monthlyLogs.flatMap(log => 
+        (log.extraClasses || []).map((ex, i) => (
+            <tr key={log.date + ex.professor + i} className="hover:bg-white/[0.02]">
+                <td className="p-8 text-xs font-bold text-gray-500">{new Date(log.date + 'T12:00:00').toLocaleDateString()}</td>
+                <td className="p-8 font-black text-white uppercase text-sm">{String(ex.professor || '')}</td>
+                <td className="p-8 text-gray-400 font-bold uppercase text-xs tracking-widest">{String(ex.subject || '')}</td>
+                <td className="p-8">
+                    <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest">{String(ex.className || '')}</span>
+                </td>
+            </tr>
+        ))
+    );
 
     return (
         <div className="flex flex-col md:flex-row h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
@@ -556,7 +589,7 @@ export const HRDashboard: React.FC = () => {
                                         <Button 
                                             onClick={() => {
                                                 if (tempSubject) {
-                                                    const genderPrefix = formData.role?.includes('PROFESSORA') ? 'PROFESSORA DE ' : 'PROFESSOR DE ';
+                                                    const genderPrefix = (formData.role || '').includes('PROFESSORA') ? 'PROFESSORA DE ' : 'PROFESSOR DE ';
                                                     setFormData({...formData, role: `${genderPrefix}${tempSubject}`, isTeacher: true});
                                                     setShowSubjectModal(false);
                                                 } else {
@@ -608,13 +641,13 @@ export const HRDashboard: React.FC = () => {
                                                             {staff.photoUrl ? <img src={staff.photoUrl} className="w-full h-full object-cover" /> : <Users className="w-full h-full p-3 text-gray-700"/>}
                                                         </div>
                                                         <div className="overflow-hidden">
-                                                            <p className="font-black text-white uppercase tracking-tight text-sm truncate">{staff.name}</p>
+                                                            <p className="font-black text-white uppercase tracking-tight text-sm truncate">{String(staff.name || '')}</p>
                                                             <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">{staff.workPeriod === 'morning' ? 'Matutino' : staff.workPeriod === 'afternoon' ? 'Vespertino' : 'Integral'}</p>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td className="p-6 md:p-8">
-                                                    <span className="text-gray-400 font-bold uppercase text-xs tracking-widest">{staff.role}</span>
+                                                    <span className="text-gray-400 font-bold uppercase text-xs tracking-widest">{String(staff.role || '')}</span>
                                                     {staff.isTeacher && <span className="ml-3 text-[9px] bg-blue-600/10 text-blue-500 px-2 py-0.5 rounded-full font-black border border-blue-600/20">TEACHER</span>}
                                                 </td>
                                                 <td className="p-6 md:p-8">
@@ -677,22 +710,19 @@ export const HRDashboard: React.FC = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {allSubjects.map(subject => {
-                                // Filter logic update for Polivalente
                                 const subjectTeachers = staffList.filter(s => {
                                     if (!s.isTeacher) return false;
-                                    const roleMatches = s.role.toUpperCase().includes(subject.toUpperCase());
-                                    // Se for Polivalente, também pode filtrar por vínculo de turma se necessário futuramente
+                                    const roleMatches = (s.role || '').toUpperCase().includes(subject.toUpperCase());
                                     return roleMatches;
                                 });
 
                                 return (
                                     <div key={subject} className="bg-[#18181b] border border-white/5 rounded-[2rem] p-6 shadow-xl hover:border-red-600/30 transition-all flex flex-col">
                                         <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-sm font-black text-white uppercase tracking-tight line-clamp-1">{subject}</h3>
+                                            <h3 className="text-sm font-black text-white uppercase tracking-tight line-clamp-1">{String(subject || '')}</h3>
                                             <span className="bg-red-600/10 text-red-500 px-2 py-0.5 rounded-full text-[9px] font-black border border-red-600/20">{subjectTeachers.length}</span>
                                         </div>
                                         
-                                        {/* (NEW) CONDITIONAL CLASSIFICATION FOR POLIVALENTE */}
                                         {subject === "POLIVALENTE (INFANTIL/EFAI)" && (
                                             <div className="mb-4 bg-blue-900/10 p-4 rounded-2xl border border-blue-500/10">
                                                 <p className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-3">Vínculo por Segmento</p>
@@ -704,7 +734,7 @@ export const HRDashboard: React.FC = () => {
                                                                 <p className="text-[7px] font-bold text-gray-500 uppercase tracking-widest">{segment}</p>
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {segmentTeachers.map(t => (
-                                                                        <div key={t.id} className="h-7 w-7 rounded-lg bg-black/40 border border-white/5 overflow-hidden" title={t.name}>
+                                                                        <div key={t.id} className="h-7 w-7 rounded-lg bg-black/40 border border-white/5 overflow-hidden" title={String(t.name || '')}>
                                                                             {t.photoUrl ? <img src={t.photoUrl} className="w-full h-full object-cover" /> : <Users size={12} className="m-1.5 text-gray-800"/>}
                                                                         </div>
                                                                     ))}
@@ -724,10 +754,9 @@ export const HRDashboard: React.FC = () => {
                                                         {teacher.photoUrl ? <img src={teacher.photoUrl} className="w-full h-full object-cover" /> : <Users className="w-full h-full p-1 text-gray-700"/>}
                                                     </div>
                                                     <div className="overflow-hidden flex-1">
-                                                        <span className="text-[10px] font-bold text-gray-300 uppercase truncate block">{teacher.name}</span>
-                                                        {/* (NEW) SHOW LINKED CLASSES */}
-                                                        {teacher.classes && teacher.classes.length > 0 && (
-                                                            <p className="text-[7px] text-red-500 font-black truncate">{teacher.classes.join(" • ")}</p>
+                                                        <span className="text-[10px] font-bold text-gray-300 uppercase truncate block">{String(teacher.name || '')}</span>
+                                                        {(teacher.classes || []).length > 0 && (
+                                                            <p className="text-[7px] text-red-500 font-black truncate">{(teacher.classes || []).join(" • ")}</p>
                                                         )}
                                                     </div>
                                                 </div>
@@ -787,10 +816,10 @@ export const HRDashboard: React.FC = () => {
                                                          <div className="w-10 h-10 rounded-full bg-black/40 border border-white/5 overflow-hidden">
                                                             {log.staffPhotoUrl ? <img src={log.staffPhotoUrl} className="w-full h-full object-cover" /> : <Users className="w-full h-full p-2 text-gray-700"/>}
                                                         </div>
-                                                        <span className="font-black text-white uppercase tracking-tight text-sm">{log.staffName}</span>
+                                                        <span className="font-black text-white uppercase tracking-tight text-sm">{String(log.staffName || '')}</span>
                                                     </div>
                                                 </td>
-                                                <td className="p-8 text-gray-500 font-bold uppercase text-xs tracking-widest">{log.staffRole}</td>
+                                                <td className="p-8 text-gray-500 font-bold uppercase text-xs tracking-widest">{String(log.staffRole || '')}</td>
                                                 <td className="p-8 text-center">
                                                     <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
                                                         <UserCheck size={12} className="inline mr-2 -mt-0.5"/> Confirmado
@@ -855,27 +884,7 @@ export const HRDashboard: React.FC = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/5">
-                                                {monthlyLogs.flatMap(log => 
-                                                    (Object.entries(log.teacherAttendance) as [string, { present: boolean; substitute?: string }][])
-                                                        .filter(([_, att]) => !att.present)
-                                                        .map(([name, att]) => (
-                                                            <tr key={log.date + name} className="hover:bg-white/[0.02]">
-                                                                <td className="p-8 text-xs font-bold text-gray-500">{new Date(log.date + 'T12:00:00').toLocaleDateString()}</td>
-                                                                <td className="p-8 font-black text-white uppercase text-sm">{name}</td>
-                                                                <td className="p-8">
-                                                                    {att.substitute ? (
-                                                                        <div className="flex items-center gap-3 text-green-500">
-                                                                            <ArrowRight size={14}/>
-                                                                            <span className="font-black text-xs uppercase tracking-widest">{att.substitute}</span>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <span className="text-gray-700 text-xs font-bold uppercase italic">Sem substituição</span>
-                                                                    )}
-                                                                </td>
-                                                            </tr>
-                                                        ))
-                                                )}
-                                                {monthlyLogs.length === 0 && (
+                                                {absenceRows.length > 0 ? absenceRows : (
                                                     <tr><td colSpan={3} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Sem ausências para este mês</td></tr>
                                                 )}
                                             </tbody>
@@ -898,19 +907,7 @@ export const HRDashboard: React.FC = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/5">
-                                                {monthlyLogs.flatMap(log => 
-                                                    (log.extraClasses || []).map((ex, i) => (
-                                                        <tr key={log.date + ex.professor + i} className="hover:bg-white/[0.02]">
-                                                            <td className="p-8 text-xs font-bold text-gray-500">{new Date(log.date + 'T12:00:00').toLocaleDateString()}</td>
-                                                            <td className="p-8 font-black text-white uppercase text-sm">{ex.professor}</td>
-                                                            <td className="p-8 text-gray-400 font-bold uppercase text-xs tracking-widest">{ex.subject}</td>
-                                                            <td className="p-8">
-                                                                <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest">{ex.className}</span>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                                {monthlyLogs.length === 0 && (
+                                                {extraClassRows.length > 0 ? extraClassRows : (
                                                     <tr><td colSpan={4} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Sem horas extras para este mês</td></tr>
                                                 )}
                                             </tbody>

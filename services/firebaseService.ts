@@ -1,8 +1,7 @@
 
-import { db, storage, auth, firebaseConfig } from '../firebaseConfig';
-import { initializeApp, deleteApp } from 'firebase/app';
+import { db, storage, auth, firebaseConfig, app } from '../firebaseConfig';
+// Import types and modular functions
 import { 
-    getAuth, 
     createUserWithEmailAndPassword, 
     updateProfile, 
     signOut 
@@ -518,21 +517,14 @@ export const deleteSchoolEvent = async (id: string): Promise<void> => {
 };
 
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]): Promise<void> => {
-    const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
-    const secondaryAuth = getAuth(secondaryApp);
-    try {
-        const result = await createUserWithEmailAndPassword(secondaryAuth, email, 'cemal2016');
-        const userProfile: User = {
-            id: result.user.uid,
-            name: name,
-            email: email,
-            role: roles[0],
-            roles: roles
-        };
-        await setDoc(doc(db, USERS_COLLECTION, result.user.uid), sanitizeForFirestore(userProfile));
-    } finally {
-        await deleteApp(secondaryApp);
-    }
+    const userProfile: User = {
+        id: email.replace(/[^a-zA-Z0-9]/g, '_'), 
+        name: name,
+        email: email,
+        role: roles[0],
+        roles: roles
+    };
+    await setDoc(doc(db, USERS_COLLECTION, userProfile.id), sanitizeForFirestore(userProfile));
 };
 
 export const updateSystemUserRoles = async (email: string, roles: UserRole[]): Promise<void> => {

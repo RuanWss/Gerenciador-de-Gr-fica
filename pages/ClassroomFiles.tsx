@@ -272,7 +272,7 @@ export const ClassroomFiles: React.FC = () => {
                                                 </div>
                                                 <div>
                                                     <h3 className={`text-sm font-bold text-white mt-4 line-clamp-2 uppercase leading-tight group-hover:text-brand-500 transition-colors ${subject === 'COORDENAÇÃO' ? 'text-blue-400' : ''}`}>
-                                                        {subject}
+                                                        {String(subject || '')}
                                                     </h3>
                                                     <p className="text-[10px] text-gray-500 mt-1 font-mono">{count} arquivos</p>
                                                 </div>
@@ -286,7 +286,7 @@ export const ClassroomFiles: React.FC = () => {
                             {selectedSubject && (
                                 <div className="animate-in fade-in slide-in-from-right-4">
                                     <h2 className="text-xl font-bold text-brand-500 mb-6 flex items-center gap-2 uppercase">
-                                        <Folder className={selectedSubject === 'COORDENAÇÃO' ? 'text-blue-500' : 'text-yellow-500'} /> {selectedSubject}
+                                        <Folder className={selectedSubject === 'COORDENAÇÃO' ? 'text-blue-500' : 'text-yellow-500'} /> {String(selectedSubject || '')}
                                     </h2>
 
                                     {filteredMaterials.length === 0 ? (
@@ -316,12 +316,12 @@ export const ClassroomFiles: React.FC = () => {
                                                         </span>
                                                     </div>
 
-                                                    <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 leading-tight" title={file.title}>
-                                                        {file.title}
+                                                    <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 leading-tight" title={String(file.title || '')}>
+                                                        {String(file.title || '')}
                                                     </h3>
                                                     <p className="text-xs text-gray-400 mb-6 flex items-center gap-1">
                                                         <span className={`w-1.5 h-1.5 rounded-full ${file.teacherName === 'Coordenação' ? 'bg-blue-500' : 'bg-brand-500'}`}></span>
-                                                        {file.teacherName === 'Coordenação' ? 'Setor Coordenação' : `Prof. ${file.teacherName}`}
+                                                        {file.teacherName === 'Coordenação' ? 'Setor Coordenação' : `Prof. ${String(file.teacherName || '')}`}
                                                     </p>
 
                                                     <a 

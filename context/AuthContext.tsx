@@ -23,125 +23,141 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// FIX: Export custom hook to consume the auth context.
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // ACESSO MASTER - COORDENADOR DE TI
-        if (firebaseUser.email === 'ruan.wss@gmail.com') {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Ruan Santos',
-                email: firebaseUser.email,
-                role: UserRole.PRINTSHOP,
-                roles: [
-                    UserRole.TEACHER, 
-                    UserRole.PRINTSHOP, 
-                    UserRole.HR, 
-                    UserRole.AEE, 
-                    UserRole.KINDERGARTEN, 
-                    UserRole.LIBRARY
-                ],
-                subject: 'TI',
-                classes: []
-              });
+      try {
+        if (firebaseUser) {
+          // ACESSO MASTER - COORDENADOR DE TI
+          if (firebaseUser.email === 'ruan.wss@gmail.com') {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Ruan Santos',
+                  email: firebaseUser.email,
+                  role: UserRole.PRINTSHOP,
+                  roles: [
+                      UserRole.TEACHER, 
+                      UserRole.PRINTSHOP, 
+                      UserRole.HR, 
+                      UserRole.AEE, 
+                      UserRole.KINDERGARTEN, 
+                      UserRole.LIBRARY
+                  ],
+                  subject: 'TI',
+                  classes: []
+                });
+          }
+          else if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Terminal de Frequência',
+                  email: firebaseUser.email,
+                  role: UserRole.ATTENDANCE_TERMINAL,
+                  subject: '',
+                  classes: []
+                });
+          }
+          else if (firebaseUser.email === 'pontoequipecemal@ceprofmal.com') {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Terminal de Ponto',
+                  email: firebaseUser.email,
+                  role: UserRole.STAFF_TERMINAL,
+                  subject: '',
+                  classes: []
+                });
+          }
+          else if (firebaseUser.email === 'rh@ceprofmal.com') {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Recursos Humanos',
+                  email: firebaseUser.email,
+                  role: UserRole.HR,
+                  subject: '',
+                  classes: []
+                });
+          }
+          else if (firebaseUser.email === 'cemal.salas@ceprofmal.com') {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Arquivos da Turma',
+                  email: firebaseUser.email,
+                  role: UserRole.CLASSROOM,
+                  subject: '',
+                  classes: []
+                });
+          }
+          else if (firebaseUser.email === 'cemalaee@hotmail.com') {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Professor AEE',
+                  email: firebaseUser.email,
+                  role: UserRole.AEE,
+                  subject: 'AEE',
+                  classes: []
+                });
+          }
+          else if (firebaseUser.email === 'loyseferr.biblio@gmail.com') {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Bibliotecária',
+                  email: firebaseUser.email,
+                  role: UserRole.LIBRARY,
+                  roles: [UserRole.LIBRARY, UserRole.TEACHER],
+                  subject: '',
+                  classes: []
+                });
+          }
+          else if (
+               firebaseUser.uid === 'QX1GxorHhxU3jPUVXAJVLRndb7E2' || 
+               firebaseUser.email === 'graficacemal@gmail.com'
+             ) {
+               setUser({
+                  id: firebaseUser.uid,
+                  name: 'Central de Cópias',
+                  email: firebaseUser.email || 'graficacemal@gmail.com',
+                  role: UserRole.PRINTSHOP,
+                  subject: '',
+                  classes: []
+                });
+          }
+          else {
+              const userProfile = await getUserProfile(firebaseUser.uid);
+              if (userProfile) {
+                setUser(userProfile);
+              } else {
+                setUser({
+                  id: firebaseUser.uid,
+                  name: firebaseUser.displayName || 'Professor',
+                  email: firebaseUser.email || '',
+                  role: UserRole.TEACHER, 
+                  subject: '',
+                  classes: []
+                });
+              }
+          }
+        } else {
+          setUser(null);
         }
-        else if (firebaseUser.email === 'frequencia.cemal@ceprofmal.com') {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Terminal de Frequência',
-                email: firebaseUser.email,
-                role: UserRole.ATTENDANCE_TERMINAL,
-                subject: '',
-                classes: []
-              });
-        }
-        else if (firebaseUser.email === 'pontoequipecemal@ceprofmal.com') {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Terminal de Ponto',
-                email: firebaseUser.email,
-                role: UserRole.STAFF_TERMINAL,
-                subject: '',
-                classes: []
-              });
-        }
-        else if (firebaseUser.email === 'rh@ceprofmal.com') {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Recursos Humanos',
-                email: firebaseUser.email,
-                role: UserRole.HR,
-                subject: '',
-                classes: []
-              });
-        }
-        else if (firebaseUser.email === 'cemal.salas@ceprofmal.com') {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Arquivos da Turma',
-                email: firebaseUser.email,
-                role: UserRole.CLASSROOM,
-                subject: '',
-                classes: []
-              });
-        }
-        else if (firebaseUser.email === 'cemalaee@hotmail.com') {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Professor AEE',
-                email: firebaseUser.email,
-                role: UserRole.AEE,
-                subject: 'AEE',
-                classes: []
-              });
-        }
-        else if (firebaseUser.email === 'loyseferr.biblio@gmail.com') {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Bibliotecária',
-                email: firebaseUser.email,
-                role: UserRole.LIBRARY,
-                roles: [UserRole.LIBRARY, UserRole.TEACHER],
-                subject: '',
-                classes: []
-              });
-        }
-        else if (
-             firebaseUser.uid === 'QX1GxorHhxU3jPUVXAJVLRndb7E2' || 
-             firebaseUser.email === 'graficacemal@gmail.com'
-           ) {
-             setUser({
-                id: firebaseUser.uid,
-                name: 'Central de Cópias',
-                email: firebaseUser.email || 'graficacemal@gmail.com',
-                role: UserRole.PRINTSHOP,
-                subject: '',
-                classes: []
-              });
-        }
-        else {
-            const userProfile = await getUserProfile(firebaseUser.uid);
-            if (userProfile) {
-              setUser(userProfile);
-            } else {
-              setUser({
-                id: firebaseUser.uid,
-                name: firebaseUser.displayName || 'Professor',
-                email: firebaseUser.email || '',
-                role: UserRole.TEACHER, 
-                subject: '',
-                classes: []
-              });
-            }
-        }
-      } else {
+      } catch (error) {
+        console.error("Authentication error:", error);
         setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -172,35 +188,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
           }
       }
+      console.error("Login error:", error);
       return false;
     }
   };
 
-  const logout = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Erro no logout", error);
-    }
+  const logout = () => {
+    signOut(auth);
   };
 
   const changePassword = async (newPassword: string) => {
     if (auth.currentUser) {
       await updatePassword(auth.currentUser, newPassword);
     } else {
-      throw new Error("Usuário não autenticado");
+      throw new Error("No user is currently signed in.");
     }
   };
 
+  // FIX: The AuthProvider component must return a JSX element (the context provider).
   return (
     <AuthContext.Provider value={{ user, login, logout, changePassword, isAuthenticated: !!user, loading }}>
-      {!loading && children}
+        {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
 };

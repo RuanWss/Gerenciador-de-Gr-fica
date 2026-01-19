@@ -88,14 +88,14 @@ export const AEEDashboard: React.FC = () => {
     };
 
     const filteredStudents = students.filter(s => 
-        s.name.toLowerCase().includes(search.toLowerCase()) || 
-        s.className.toLowerCase().includes(search.toLowerCase())
+        String(s.name || '').toLowerCase().includes(search.toLowerCase()) || 
+        String(s.className || '').toLowerCase().includes(search.toLowerCase())
     );
 
     const filteredPeis = allPeis.filter(p => 
-        p.studentName.toLowerCase().includes(search.toLowerCase()) ||
-        p.teacherName.toLowerCase().includes(search.toLowerCase()) ||
-        p.subject.toLowerCase().includes(search.toLowerCase())
+        String(p.studentName || '').toLowerCase().includes(search.toLowerCase()) ||
+        String(p.teacherName || '').toLowerCase().includes(search.toLowerCase()) ||
+        String(p.subject || '').toLowerCase().includes(search.toLowerCase())
     );
 
     return (
@@ -134,8 +134,8 @@ export const AEEDashboard: React.FC = () => {
                                     {student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover"/> : <Users className="p-3 text-gray-700 w-full h-full"/>}
                                 </div>
                                 <div className="overflow-hidden">
-                                    <h3 className="font-bold text-white truncate text-lg leading-tight">{student.name}</h3>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{student.className}</p>
+                                    <h3 className="font-bold text-white truncate text-lg leading-tight">{String(student.name || '')}</h3>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{String(student.className || '')}</p>
                                 </div>
                             </div>
 
@@ -148,7 +148,7 @@ export const AEEDashboard: React.FC = () => {
                                 {student.motherName && (
                                     <div className="flex items-center gap-2 text-xs text-gray-400">
                                         <UserCircle size={14} className="text-gray-600"/>
-                                        <span className="truncate"><b>Mãe:</b> {student.motherName}</span>
+                                        <span className="truncate"><b>Mãe:</b> {String(student.motherName || '')}</span>
                                     </div>
                                 )}
 
@@ -195,11 +195,11 @@ export const AEEDashboard: React.FC = () => {
                             {filteredPeis.map(pei => (
                                 <tr key={pei.id} className="hover:bg-gray-50 transition-colors group">
                                     <td className="p-6">
-                                        <p className="font-bold text-gray-800">{pei.studentName}</p>
+                                        <p className="font-bold text-gray-800">{String(pei.studentName || '')}</p>
                                     </td>
                                     <td className="p-6">
-                                        <p className="font-bold text-gray-700 text-sm">{pei.teacherName}</p>
-                                        <p className="text-[10px] font-black text-red-600 uppercase tracking-tighter">{pei.subject}</p>
+                                        <p className="font-bold text-gray-700 text-sm">{String(pei.teacherName || '')}</p>
+                                        <p className="text-[10px] font-black text-red-600 uppercase tracking-tighter">{String(pei.subject || '')}</p>
                                     </td>
                                     <td className="p-6 text-xs text-gray-500 font-medium">
                                         {new Date(pei.updatedAt).toLocaleDateString()} {new Date(pei.updatedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
@@ -226,7 +226,7 @@ export const AEEDashboard: React.FC = () => {
                         <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <div>
                                 <h3 className="text-2xl font-black text-gray-800 tracking-tight uppercase">Prontuário de Atendimento</h3>
-                                <p className="text-sm text-gray-500 font-bold">{selectedStudent.name}</p>
+                                <p className="text-sm text-gray-500 font-bold">{String(selectedStudent.name || '')}</p>
                             </div>
                             <button onClick={() => setShowEdit(false)} className="text-gray-400 hover:text-gray-900 transition-colors"><X size={32}/></button>
                         </div>
@@ -305,7 +305,7 @@ export const AEEDashboard: React.FC = () => {
                         <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                             <div>
                                 <h3 className="text-2xl font-black text-gray-800 tracking-tight uppercase flex items-center gap-3"><Heart size={24} className="text-red-600"/> Planejamento PEI</h3>
-                                <p className="text-sm text-gray-500 font-bold">{selectedPei.studentName} • Disciplina: {selectedPei.subject} • {selectedPei.period || '1º Bimestre'}</p>
+                                <p className="text-sm text-gray-500 font-bold">{String(selectedPei.studentName || '')} • Disciplina: {String(selectedPei.subject || '')} • {selectedPei.period || '1º Bimestre'}</p>
                             </div>
                             <button onClick={() => setShowPeiView(false)} className="text-gray-400 hover:text-red-600 transition-colors"><X size={32}/></button>
                         </div>

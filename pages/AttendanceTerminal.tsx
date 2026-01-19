@@ -5,7 +5,7 @@ import { listenToStudents, logAttendance } from '../services/firebaseService';
 import { Student, AttendanceLog } from '../types';
 import { CheckCircle, AlertTriangle, Clock, LogOut, Loader2, Scan, Wifi, Zap, User, Ban, ShieldAlert, Database, RefreshCw, Maximize, Minimize } from 'lucide-react';
 // @ts-ignore
-import * as faceapi from 'face-api.js';
+import * as faceapi from '@vladmandic/face-api';
 
 const CLASSES_CONFIG = [
     { id: '6efaf', name: '6º ANO EFAF', shift: 'morning' },
@@ -48,7 +48,8 @@ export const AttendanceTerminal: React.FC = () => {
 
     useEffect(() => {
         const loadModels = async () => {
-            const faceApi = (faceapi as any).default || faceapi;
+            // @ts-ignore
+            const faceApi = faceapi;
             if (!faceApi || !faceApi.nets) return;
 
             // OTIMIZAÇÃO: Verifica se TODOS os modelos necessários (Tiny Detector, Tiny Landmarks, Recognition) 
@@ -100,7 +101,8 @@ export const AttendanceTerminal: React.FC = () => {
     }, [modelsLoaded, students]);
 
     const processStudentFaces = async (studentList: Student[]) => {
-        const faceApi = (faceapi as any).default || faceapi;
+        // @ts-ignore
+        const faceApi = faceapi;
         
         const validStudents = studentList.filter(s => s.photoUrl);
         const toProcess = validStudents.filter(s => {
@@ -181,7 +183,8 @@ export const AttendanceTerminal: React.FC = () => {
     useEffect(() => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        const faceApi = (faceapi as any).default || faceapi;
+        // @ts-ignore
+        const faceApi = faceapi;
 
         if (!video || !canvas || !modelsLoaded || !isVideoReady || labeledDescriptors.length === 0) return;
 

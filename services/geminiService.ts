@@ -1,20 +1,9 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
+// Initialize the Gemini API client using the required named parameter
 const getAiClient = () => {
-  // Verificação de segurança para evitar erro "process is not defined" no navegador
-  let apiKey = '';
-  try {
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
-      // @ts-ignore
-      apiKey = process.env.API_KEY || '';
-    }
-  } catch (e) {
-    console.warn("Ambiente sem process.env definido");
-  }
-  
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 };
 
 export const generateStructuredQuestions = async (
@@ -55,6 +44,7 @@ export const generateStructuredQuestions = async (
       }
     });
 
+    // Access the text property directly on the response object
     return JSON.parse(response.text || "[]");
   } catch (error) {
     console.error("Error calling Gemini:", error);
@@ -70,70 +60,9 @@ export const suggestExamInstructions = async (examType: string): Promise<string>
             model: 'gemini-3-flash-preview',
             contents: prompt
         });
+        // Access the text property directly on the response object
         return response.text || "Leia atentamente as questões antes de responder. Utilize caneta azul ou preta.";
     } catch (error) {
         return "Leia atentamente as questões antes de responder. Utilize caneta azul ou preta.";
     }
 }
-
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.onerror = error => reject(error);
-  });
-};
-
-export const analyzeAnswerSheet = async (file: File, numQuestions: number): Promise<{ studentId?: string; answers: Record<number, string> }> => {
-  try {
-    const ai = getAiClient();
-    const base64Data = await fileToBase64(file);
-    
-    const prompt = `
-      Você é um sistema de OMR (Optical Mark Recognition) de alta precisão.
-      Analise a imagem deste cartão-resposta escolar.
-      
-      INSTRUÇÕES:
-      1. Localize o QR Code ou texto no topo para identificar o Aluno/ID se possível.
-      2. Identifique as marcas preenchidas para cada uma das ${numQuestions} questões.
-      3. Se uma questão não tiver marcação clara, retorne "" (vazio).
-      4. Retorne APENAS um objeto JSON com:
-         - "studentId": string com o ID ou Nome do aluno se identificado.
-         - "answers": objeto onde a chave é o número da questão (1 a ${numQuestions}) e o valor é a letra (A, B, C, D ou E).
-    `;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: { 
-        parts: [
-          { inlineData: { mimeType: file.type, data: base64Data } }, 
-          { text: prompt }
-        ] 
-      },
-      config: { 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            studentId: { type: Type.STRING },
-            answers: {
-              type: Type.OBJECT,
-              additionalProperties: { type: Type.STRING }
-            }
-          }
-        },
-        temperature: 0.1
-      }
-    });
-
-    const result = JSON.parse(response.text || "{}");
-    return {
-        studentId: result.studentId,
-        answers: result.answers || {}
-    };
-  } catch (error) {
-    console.error("Erro no processamento OMR:", error);
-    return { answers: {} };
-  }
-};
