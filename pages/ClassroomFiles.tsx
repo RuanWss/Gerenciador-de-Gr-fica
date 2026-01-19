@@ -1,35 +1,10 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { listenToClassMaterials } from '../services/firebaseService';
 import { ClassMaterial } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle, ArrowLeft, Folder, Lock, LogIn, LogOut } from 'lucide-react';
-
-const CLASSES_LIST = [
-    { id: '6efaf', name: '6º ANO EFAF' },
-    { id: '7efaf', name: '7º ANO EFAF' },
-    { id: '8efaf', name: '8º ANO EFAF' },
-    { id: '9efaf', name: '9º ANO EFAF' },
-    { id: '1em', name: '1ª SÉRIE EM' },
-    { id: '2em', name: '2ª SÉRIE EM' },
-    { id: '3em', name: '3ª SÉRIE EM' },
-];
-
-const EFAF_SUBJECTS = [
-    "COORDENAÇÃO", "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
-    "MATEMÁTICA", "MATEMÁTICA II", "BIOLOGIA", "LÍNGUA ESTRANGEIRA MODERNA - INGLÊS", 
-    "REDAÇÃO", "FILOSOFIA", "QUÍMICA", "PROJETO DE VIDA", "EDUCAÇÃO FINANCEIRA", 
-    "PENSAMENTO COMPUTACIONAL", "FÍSICA", "DINÂMICAS DE LEITURA"
-];
-
-const EM_SUBJECTS = [
-    "COORDENAÇÃO", "LÍNGUA PORTUGUESA", "ARTE", "EDUCAÇÃO FÍSICA", "HISTÓRIA", "GEOGRAFIA", 
-    "SOCIOLOGIA", "FILOSOFIA", "BIOLOGIA", "FÍSICA", "QUÍMICA", "MATEMÁTICA", 
-    "LITERATURA", "PRODUÇÃO TEXTUAL", "LÍNGUA ESTRANGEIRA MODERNA - INGLÊS", 
-    "MATEMÁTICA II", "BIOLOGIA II", "QUÍMICA II", 
-    "ELETIVA 03: EMPREENDEDORISMO CRIATIVO", "ELETIVA 04: PROJETO DE VIDA", 
-    "ITINERÁRIO FORMATIVO"
-];
 
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
@@ -48,18 +23,25 @@ export const ClassroomFiles: React.FC = () => {
     const isFirstLoad = useRef(true);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
+    // Filtra apenas turmas do Fundamental II e Médio para esta visualização
+    const availableClasses = useMemo(() => {
+        return CLASSES.filter(c => c.includes('EFAF') || c.includes('EM') || c.includes('SÉRIE'));
+    }, []);
+
     // Determina a lista de disciplinas com base na turma selecionada
-    const currentSubjectsList = React.useMemo(() => {
+    const currentSubjectsList = useMemo(() => {
         if (!selectedClassName) return [];
-        if (selectedClassName.includes('SÉRIE')) return EM_SUBJECTS;
+        if (selectedClassName.includes('SÉRIE') || selectedClassName.includes('EM')) return EM_SUBJECTS;
         return EFAF_SUBJECTS;
     }, [selectedClassName]);
 
     useEffect(() => {
         // Carregar seleção salva
         const savedClass = localStorage.getItem('classroom_selected_class');
-        if (savedClass) setSelectedClassName(savedClass);
-    }, []);
+        if (savedClass && availableClasses.includes(savedClass)) {
+            setSelectedClassName(savedClass);
+        }
+    }, [availableClasses]);
 
     useEffect(() => {
         if (!selectedClassName) return;
@@ -132,10 +114,8 @@ export const ClassroomFiles: React.FC = () => {
     };
 
     // Filtra os materiais para a pasta selecionada
-    const filteredMaterials = React.useMemo(() => {
+    const filteredMaterials = useMemo(() => {
         if (!selectedSubject) return [];
-        // Filtra arquivos que batem com a disciplina exata OU arquivos sem disciplina que vão para uma pasta "Geral" (se implementado)
-        // Por hora, strict match
         return materials.filter(m => m.subject === selectedSubject);
     }, [materials, selectedSubject]);
 
@@ -167,8 +147,8 @@ export const ClassroomFiles: React.FC = () => {
                             className="bg-transparent text-white font-bold text-lg outline-none cursor-pointer min-w-[200px]"
                         >
                             <option value="" className="text-gray-500">-- Selecione --</option>
-                            {CLASSES_LIST.map(c => (
-                                <option key={c.id} value={c.name} className="bg-gray-900">{c.name}</option>
+                            {availableClasses.map(c => (
+                                <option key={c} value={c} className="bg-gray-900">{c}</option>
                             ))}
                         </select>
                     </div>
