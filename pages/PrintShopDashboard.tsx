@@ -10,7 +10,8 @@ import {
     saveScheduleEntry,
     deleteScheduleEntry,
     listenToStaffMembers,
-    listenToAttendanceLogs
+    listenToAttendanceLogs,
+    listenToOccurrences
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -20,12 +21,13 @@ import {
     ScheduleEntry,
     TimeSlot,
     StaffMember,
-    AttendanceLog
+    AttendanceLog,
+    StudentOccurrence
 } from '../types';
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
     ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
-    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio
+    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio, BookOpen, AlertTriangle
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -110,7 +112,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 };
 
 export const PrintShopDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'sync' | 'schedule' | 'config'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'sync' | 'schedule' | 'config' | 'occurrences'>('exams');
     const [isLoading, setIsLoading] = useState(false);
 
     // Data States
@@ -121,6 +123,8 @@ export const PrintShopDashboard: React.FC = () => {
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
     const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
     const [selectedClassFilter, setSelectedClassFilter] = useState<string | null>(null);
+    const [occurrences, setOccurrences] = useState<StudentOccurrence[]>([]);
+    const [occurrenceSearch, setOccurrenceSearch] = useState('');
     
     // Config States
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
@@ -160,6 +164,7 @@ export const PrintShopDashboard: React.FC = () => {
 
         const unsubSchedule = listenToSchedule(setSchedule);
         const unsubStaff = listenToStaffMembers(setStaffList);
+        const unsubOccurrences = listenToOccurrences(setOccurrences);
 
         // Listen to today's attendance
         const today = new Date().toISOString().split('T')[0];
@@ -167,7 +172,7 @@ export const PrintShopDashboard: React.FC = () => {
             setAttendanceLogs(logs);
         });
 
-        return () => { unsubConfig(); unsubSchedule(); unsubStaff(); unsubAttendance(); };
+        return () => { unsubConfig(); unsubSchedule(); unsubStaff(); unsubAttendance(); unsubOccurrences(); };
     }, []);
 
     // --- HANDLERS ---
@@ -287,6 +292,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-6 ml-2">Escola & Cópias</p>
                     <SidebarItem id="exams" label="Fila de Impressão" icon={Printer} />
                     <SidebarItem id="students" label="Base de Alunos" icon={Users} />
+                    <SidebarItem id="occurrences" label="Livro de Ocorrências" icon={BookOpen} />
                     <SidebarItem id="schedule" label="Gestão de Horários" icon={CalendarClock} />
                     <SidebarItem id="sync" label="Integração Gennera" icon={Database} />
                     <SidebarItem id="config" label="Sistema" icon={Settings} />
@@ -660,6 +666,83 @@ export const PrintShopDashboard: React.FC = () => {
                                                 </td>
                                             </tr>
                                         ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- OCCURRENCES TAB (NEW) --- */}
+                {activeTab === 'occurrences' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Livro de Ocorrências</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Diário de bordo geral dos professores</p>
+                            </div>
+                            <div className="relative w-full md:w-96">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar por aluno ou professor..." 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" 
+                                    value={occurrenceSearch} 
+                                    onChange={e => setOccurrenceSearch(e.target.value)} 
+                                />
+                            </div>
+                        </header>
+
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
+                                        <tr>
+                                            <th className="p-8">Data</th>
+                                            <th className="p-8">Aluno</th>
+                                            <th className="p-8">Ocorrência</th>
+                                            <th className="p-8">Descrição</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {occurrences
+                                            .filter(occ => 
+                                                String(occ.studentName || '').toLowerCase().includes(occurrenceSearch.toLowerCase()) || 
+                                                String(occ.reportedBy || '').toLowerCase().includes(occurrenceSearch.toLowerCase())
+                                            )
+                                            .map(occ => (
+                                            <tr key={occ.id} className="hover:bg-white/[0.02] group align-top">
+                                                <td className="p-8 text-xs font-bold text-gray-500 w-32">{new Date(occ.timestamp).toLocaleDateString()}</td>
+                                                <td className="p-8">
+                                                    <div>
+                                                        <p className="font-black text-white uppercase tracking-tight text-sm">{String(occ.studentName || '')}</p>
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">{String(occ.studentClass || '')}</p>
+                                                    </div>
+                                                </td>
+                                                <td className="p-8">
+                                                    <div className="flex flex-col gap-2">
+                                                        <span className={`self-start px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                                                            occ.category === 'indisciplina' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 
+                                                            occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
+                                                            'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                                                        }`}>
+                                                            {occ.category}
+                                                        </span>
+                                                        <span className="text-[9px] font-bold text-gray-600 uppercase tracking-widest flex items-center gap-1">
+                                                            <Edit size={10}/> {occ.reportedBy}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-8">
+                                                    <p className="text-xs text-gray-300 italic leading-relaxed bg-black/20 p-4 rounded-xl border border-white/5">
+                                                        "{occ.description}"
+                                                    </p>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {occurrences.length === 0 && (
+                                            <tr><td colSpan={4} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Nenhuma ocorrência registrada</td></tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
