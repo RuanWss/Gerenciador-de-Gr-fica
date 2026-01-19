@@ -65,6 +65,15 @@ export const TeacherDashboard: React.FC = () => {
   const [materialClass, setMaterialClass] = useState('');
   const [materialFile, setMaterialFile] = useState<File | null>(null);
 
+  // Occurrence State
+  const [showOccurrenceModal, setShowOccurrenceModal] = useState(false);
+  const [occurrenceClass, setOccurrenceClass] = useState('');
+  const [occurrenceForm, setOccurrenceForm] = useState({
+      studentId: '',
+      category: 'indisciplina',
+      description: ''
+  });
+
   useEffect(() => {
     fetchData();
   }, [user, activeTab]);
@@ -199,6 +208,42 @@ export const TeacherDashboard: React.FC = () => {
         alert("Erro ao registrar frequência.");
     } finally {
         setIsSaving(false);
+    }
+  };
+
+  const handleSaveOccurrence = async () => {
+    if (!occurrenceForm.studentId || !occurrenceForm.description) return alert("Preencha todos os campos.");
+    
+    setIsSaving(true);
+    try {
+        const student = students.find(s => s.id === occurrenceForm.studentId);
+        await saveOccurrence({
+            id: '',
+            studentId: occurrenceForm.studentId,
+            studentName: student?.name || '',
+            studentClass: student?.className || '',
+            category: occurrenceForm.category as any,
+            severity: 'low',
+            description: occurrenceForm.description,
+            date: new Date().toISOString().split('T')[0],
+            timestamp: Date.now(),
+            reportedBy: user?.name || ''
+        });
+        alert("Ocorrência registrada.");
+        setShowOccurrenceModal(false);
+        setOccurrenceForm({ studentId: '', category: 'indisciplina', description: '' });
+        setOccurrenceClass('');
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao salvar.");
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  const handleDeleteOccurrence = async (id: string) => {
+    if(confirm("Excluir ocorrência?")) {
+        await deleteOccurrence(id);
     }
   };
 
@@ -500,6 +545,130 @@ export const TeacherDashboard: React.FC = () => {
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'occurrences' && (
+                <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto">
+                    {/* Header */}
+                    <header className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
+                        <div>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Ocorrências</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Registro de comportamento e observações</p>
+                        </div>
+                        <Button onClick={() => setShowOccurrenceModal(true)} className="bg-red-600 h-16 px-8 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
+                            <PlusCircle size={20} className="mr-2"/> Nova Ocorrência
+                        </Button>
+                    </header>
+
+                    {/* List */}
+                    <div className="space-y-6">
+                        {teacherOccurrences.length === 0 ? (
+                            <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
+                                <AlertCircle size={48} className="mx-auto mb-4 text-gray-500" />
+                                <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhuma ocorrência registrada</p>
+                            </div>
+                        ) : (
+                            teacherOccurrences.map(occ => (
+                                <div key={occ.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl relative group hover:border-red-600/30 transition-all">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                                        <div>
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                                                    occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
+                                                    occ.category === 'indisciplina' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 
+                                                    'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                                                }`}>
+                                                    {occ.category}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">{new Date(occ.timestamp).toLocaleDateString()}</span>
+                                            </div>
+                                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">{occ.studentName}</h3>
+                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{occ.studentClass}</p>
+                                        </div>
+                                        <button onClick={() => handleDeleteOccurrence(occ.id)} className="p-3 bg-white/5 hover:bg-red-600 text-gray-400 hover:text-white rounded-xl transition-all absolute top-8 right-8">
+                                            <Trash2 size={20}/>
+                                        </button>
+                                    </div>
+                                    <div className="bg-black/30 p-6 rounded-3xl border border-white/5 text-gray-300 italic text-sm leading-relaxed">
+                                        "{occ.description}"
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Modal */}
+                    {showOccurrenceModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                            <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95">
+                                <div className="flex justify-between items-center mb-8">
+                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight">Nova Ocorrência</h3>
+                                    <button onClick={() => setShowOccurrenceModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
+                                </div>
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Turma</label>
+                                        <select
+                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                            value={occurrenceClass}
+                                            onChange={e => {
+                                                setOccurrenceClass(e.target.value);
+                                                setOccurrenceForm(prev => ({ ...prev, studentId: '' }));
+                                            }}
+                                        >
+                                            <option value="">Selecione a Turma...</option>
+                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Aluno</label>
+                                        <select 
+                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none disabled:opacity-50"
+                                            value={occurrenceForm.studentId}
+                                            onChange={e => setOccurrenceForm({...occurrenceForm, studentId: e.target.value})}
+                                            disabled={!occurrenceClass}
+                                        >
+                                            <option value="">{occurrenceClass ? 'Selecione o Aluno...' : 'Selecione a Turma primeiro'}</option>
+                                            {students
+                                                .filter(s => s.className === occurrenceClass)
+                                                .sort((a,b) => (a.name || '').localeCompare(b.name || ''))
+                                                .map(s => (
+                                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Categoria</label>
+                                        <select 
+                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                            value={occurrenceForm.category}
+                                            onChange={e => setOccurrenceForm({...occurrenceForm, category: e.target.value})}
+                                        >
+                                            <option value="indisciplina">Indisciplina</option>
+                                            <option value="atraso">Atraso</option>
+                                            <option value="desempenho">Desempenho</option>
+                                            <option value="uniforme">Uniforme</option>
+                                            <option value="elogio">Elogio</option>
+                                            <option value="outros">Outros</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Descrição</label>
+                                        <textarea 
+                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[120px]"
+                                            placeholder="Descreva o ocorrido..."
+                                            value={occurrenceForm.description}
+                                            onChange={e => setOccurrenceForm({...occurrenceForm, description: e.target.value})}
+                                        />
+                                    </div>
+                                    <Button onClick={handleSaveOccurrence} isLoading={isSaving} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20">
+                                        Registrar
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
