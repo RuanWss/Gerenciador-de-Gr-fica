@@ -14,7 +14,7 @@ import { LibraryDashboard } from './pages/LibraryDashboard';
 import { AEEDashboard } from './pages/AEEDashboard';
 import { InfantilDashboard } from './pages/InfantilDashboard';
 import { UserRole } from './types';
-import { LogOut, LayoutGrid } from 'lucide-react';
+import { LogOut, LayoutGrid, Heart, BookOpen, Baby, GraduationCap, Printer, Users } from 'lucide-react';
 
 const AppContent = () => {
     const { user, isAuthenticated, logout, loading } = useAuth();
@@ -52,21 +52,50 @@ const AppContent = () => {
     if (user?.roles && user.roles.length > 1 && !sessionRole) {
         return (
             <div className="fixed inset-0 bg-[#0f0f10] flex flex-col items-center justify-center p-6">
-                <div className="max-w-4xl w-full text-center">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 mx-auto mb-8 drop-shadow-2xl"/>
-                    <h2 className="text-3xl font-black text-white mb-10 uppercase tracking-tighter">Escolha o seu Ambiente</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="max-w-5xl w-full text-center">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 mx-auto mb-10 drop-shadow-2xl" alt="Logo"/>
+                    <h2 className="text-3xl font-black text-white mb-12 uppercase tracking-tighter">Escolha o seu Ambiente</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                         {user.roles.includes(UserRole.TEACHER) && (
-                            <button onClick={() => setSessionRole(UserRole.TEACHER)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-red-600 transition-all font-black uppercase text-xs text-white shadow-xl">Professor</button>
+                            <button onClick={() => setSessionRole(UserRole.TEACHER)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-red-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
+                                <GraduationCap size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
+                                <span className="font-black uppercase text-xs text-white tracking-widest">Professor</span>
+                            </button>
                         )}
                         {user.roles.includes(UserRole.PRINTSHOP) && (
-                            <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-blue-600 transition-all font-black uppercase text-xs text-white shadow-xl">Escola / Cópias</button>
+                            <button onClick={() => setSessionRole(UserRole.PRINTSHOP)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-blue-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
+                                <Printer size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
+                                <span className="font-black uppercase text-xs text-white tracking-widest">Escola / Cópias</span>
+                            </button>
                         )}
                         {user.roles.includes(UserRole.HR) && (
-                            <button onClick={() => setSessionRole(UserRole.HR)} className="bg-white/5 border border-white/10 p-8 rounded-[2rem] hover:bg-orange-600 transition-all font-black uppercase text-xs text-white shadow-xl">RH</button>
+                            <button onClick={() => setSessionRole(UserRole.HR)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-green-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
+                                <Users size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
+                                <span className="font-black uppercase text-xs text-white tracking-widest">RH</span>
+                            </button>
+                        )}
+                        {user.roles.includes(UserRole.AEE) && (
+                            <button onClick={() => setSessionRole(UserRole.AEE)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-purple-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
+                                <Heart size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
+                                <span className="font-black uppercase text-xs text-white tracking-widest">AEE / Inclusão</span>
+                            </button>
+                        )}
+                        {user.roles.includes(UserRole.LIBRARY) && (
+                            <button onClick={() => setSessionRole(UserRole.LIBRARY)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-yellow-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
+                                <BookOpen size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
+                                <span className="font-black uppercase text-xs text-white tracking-widest">Biblioteca</span>
+                            </button>
+                        )}
+                        {user.roles.includes(UserRole.KINDERGARTEN) && (
+                            <button onClick={() => setSessionRole(UserRole.KINDERGARTEN)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-orange-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
+                                <Baby size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
+                                <span className="font-black uppercase text-xs text-white tracking-widest">Infantil</span>
+                            </button>
                         )}
                     </div>
-                    <button onClick={logout} className="mt-12 text-gray-500 hover:text-white font-bold uppercase text-[10px] tracking-widest">Encerrar Sessão</button>
+                    <button onClick={logout} className="mt-16 text-gray-500 hover:text-white font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 mx-auto">
+                        <LogOut size={16}/> Encerrar Sessão
+                    </button>
                 </div>
             </div>
         );
@@ -76,18 +105,26 @@ const AppContent = () => {
         <div className="min-h-screen">
             <nav className="h-20 bg-black/40 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-8 sticky top-0 z-50">
                 <div className="flex items-center gap-6">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 w-auto" />
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 w-auto" alt="Logo"/>
                     <div className="h-6 w-px bg-white/10"></div>
                     <span className="text-[10px] font-black text-white uppercase tracking-widest">
                         {activeRole === UserRole.PRINTSHOP ? 'Painel Administrativo' : 
-                         activeRole === UserRole.TEACHER ? 'Portal do Professor' : 'Sistema CEMAL'}
+                         activeRole === UserRole.TEACHER ? 'Portal do Professor' : 
+                         activeRole === UserRole.AEE ? 'Atendimento Educacional Especializado' :
+                         activeRole === UserRole.HR ? 'Recursos Humanos' :
+                         activeRole === UserRole.LIBRARY ? 'Biblioteca' :
+                         activeRole === UserRole.KINDERGARTEN ? 'Portal Infantil' : 'Sistema CEMAL'}
                     </span>
                 </div>
                 <div className="flex items-center gap-4">
                     {user?.roles && user.roles.length > 1 && (
-                        <button onClick={() => setSessionRole(null)} className="p-3 text-gray-400 hover:text-white transition-all"><LayoutGrid size={20}/></button>
+                        <button onClick={() => setSessionRole(null)} className="p-3 text-gray-400 hover:text-white transition-all bg-white/5 rounded-xl border border-white/5" title="Trocar Perfil">
+                            <LayoutGrid size={20}/>
+                        </button>
                     )}
-                    <button onClick={logout} className="p-3 text-red-500/50 hover:text-red-500 transition-all"><LogOut size={20}/></button>
+                    <button onClick={logout} className="p-3 text-red-500/50 hover:text-red-500 transition-all bg-white/5 rounded-xl border border-white/5" title="Sair">
+                        <LogOut size={20}/>
+                    </button>
                 </div>
             </nav>
             <main className="p-8">

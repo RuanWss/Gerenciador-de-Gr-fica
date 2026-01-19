@@ -13,7 +13,10 @@ import {
     listenToAttendanceLogs,
     listenToOccurrences,
     listenToStudents, // ADDED: Real-time listener
-    listenToExams // ADDED: Real-time listener
+    listenToExams, // ADDED: Real-time listener
+    updateStudent,
+    deleteStudent,
+    uploadStudentPhoto
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -29,7 +32,7 @@ import {
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
     ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
-    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio, BookOpen, AlertTriangle
+    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio, BookOpen, AlertTriangle, Camera, User
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -146,6 +149,12 @@ export const PrintShopDashboard: React.FC = () => {
     const [editForm, setEditForm] = useState({ subject: '', professor: '' });
     const [isSyncingTV, setIsSyncingTV] = useState(false);
 
+    // Student Edit Modal State
+    const [showStudentModal, setShowStudentModal] = useState(false);
+    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+    const [studentPhoto, setStudentPhoto] = useState<File | null>(null);
+    const [isSavingStudent, setIsSavingStudent] = useState(false);
+
     useEffect(() => {
         setIsLoading(true);
         
@@ -247,6 +256,44 @@ export const PrintShopDashboard: React.FC = () => {
         setEditForm({ subject: '', professor: '' });
     };
 
+    const handleEditStudent = (student: Student) => {
+        setEditingStudent(student);
+        setStudentPhoto(null);
+        setShowStudentModal(true);
+    };
+
+    const handleDeleteStudent = async (id: string) => {
+        if(confirm("Tem certeza que deseja remover este aluno do sistema? Esta ação não pode ser desfeita.")) {
+            await deleteStudent(id);
+        }
+    };
+
+    const handleSaveStudentData = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if(!editingStudent) return;
+        
+        setIsSavingStudent(true);
+        try {
+            let photoUrl = editingStudent.photoUrl;
+            if(studentPhoto) {
+                photoUrl = await uploadStudentPhoto(studentPhoto, editingStudent.name);
+            }
+            
+            await updateStudent({
+                ...editingStudent,
+                photoUrl
+            });
+            setShowStudentModal(false);
+            setEditingStudent(null);
+            alert("Dados do aluno atualizados com sucesso!");
+        } catch(error) {
+            console.error(error);
+            alert("Erro ao atualizar aluno.");
+        } finally {
+            setIsSavingStudent(false);
+        }
+    };
+
     const getScheduleEntry = (classId: string, slotId: string) => {
         return schedule.find(s => s.dayOfWeek === scheduleDay && s.classId === classId && s.slotId === slotId);
     };
@@ -310,6 +357,7 @@ export const PrintShopDashboard: React.FC = () => {
                 {/* --- EXAMS TAB --- */}
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
+                        {/* ... (Exams content remains same) ... */}
                         <header className="mb-12">
                             <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Central de Cópias</h1>
                             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Solicitações de professores em tempo real</p>
@@ -402,6 +450,7 @@ export const PrintShopDashboard: React.FC = () => {
                 {/* --- SCHEDULE TAB --- */}
                 {activeTab === 'schedule' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
+                        {/* ... (Schedule content remains same) ... */}
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
                             <div>
                                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Gestão de Horários</h1>
@@ -518,13 +567,19 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                             <div className="overflow-y-auto custom-scrollbar p-0">
                                 <table className="w-full text-left">
-                                    <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-[0.2em] sticky top-0 z-10 backdrop-blur-xl"><tr><th className="p-6">Aluno</th><th className="p-6">Turma</th><th className="p-6 text-right">Matrícula</th></tr></thead>
+                                    <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-[0.2em] sticky top-0 z-10 backdrop-blur-xl"><tr><th className="p-6">Aluno</th><th className="p-6">Turma</th><th className="p-6">Matrícula</th><th className="p-6 text-right">Ações</th></tr></thead>
                                     <tbody className="divide-y divide-white/5">
                                         {students.filter(s => { const matchesSearch = String(s.name || '').toLowerCase().includes(studentSearch.toLowerCase()) || String(s.className || '').toLowerCase().includes(studentSearch.toLowerCase()); const matchesClass = selectedClassFilter ? s.className === selectedClassFilter : true; return matchesSearch && matchesClass; }).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(student => (
                                             <tr key={student.id} className="hover:bg-white/[0.02] group transition-colors">
                                                 <td className="p-6"><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-800 to-black border border-white/10 flex items-center justify-center font-black text-gray-500 text-xs shrink-0">{String(student.name || '').charAt(0)}</div><span className="font-bold text-white text-sm uppercase tracking-tight">{String(student.name || '')}</span></div></td>
                                                 <td className="p-6"><span className="bg-white/5 border border-white/5 px-3 py-1.5 rounded-lg text-[10px] font-black text-gray-300 uppercase tracking-widest">{String(student.className || '')}</span></td>
-                                                <td className="p-6 text-right"><span className="font-mono text-xs text-gray-600 group-hover:text-gray-400 transition-colors">{student.id}</span></td>
+                                                <td className="p-6"><span className="font-mono text-xs text-gray-500">{student.id}</span></td>
+                                                <td className="p-6 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button onClick={(e) => { e.stopPropagation(); handleEditStudent(student); }} className="p-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all" title="Editar Matrícula"><Edit size={16} /></button>
+                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteStudent(student.id); }} className="p-2 bg-white/5 hover:bg-red-600/20 text-gray-400 hover:text-red-500 rounded-lg transition-all" title="Excluir Aluno"><Trash2 size={16} /></button>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -583,6 +638,76 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* --- STUDENT EDIT MODAL --- */}
+            {showStudentModal && editingStudent && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Editar Matrícula</h3>
+                            <button onClick={() => setShowStudentModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
+                        </div>
+                        <form onSubmit={handleSaveStudentData} className="space-y-6">
+                            {/* INFO CARD */}
+                            <div className="bg-white/5 rounded-2xl p-6 border border-white/5 space-y-2">
+                                <h4 className="text-white font-black uppercase text-lg leading-tight">{editingStudent.name}</h4>
+                                <div className="flex gap-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                                    <span>ID: {editingStudent.id}</span>
+                                    <span>•</span>
+                                    <span>{editingStudent.className}</span>
+                                </div>
+                            </div>
+
+                            {/* PHOTO UPLOAD */}
+                            <div className="space-y-3">
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest">Foto Biometria Facial</label>
+                                <div className="flex items-center gap-6">
+                                    <div className="w-20 h-20 rounded-full bg-black/40 border-2 border-dashed border-white/10 overflow-hidden flex items-center justify-center shrink-0">
+                                        {studentPhoto ? (
+                                            <img src={URL.createObjectURL(studentPhoto)} className="w-full h-full object-cover" />
+                                        ) : editingStudent.photoUrl ? (
+                                            <img src={editingStudent.photoUrl} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <User size={32} className="text-gray-700"/>
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-center gap-2 text-xs font-bold text-gray-300 hover:text-white transition-all w-full mb-2">
+                                            <Camera size={16}/> Selecionar Foto
+                                            <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files && setStudentPhoto(e.target.files[0])} />
+                                        </label>
+                                        <p className="text-[9px] text-gray-600 font-bold uppercase tracking-widest text-center">Formato JPG/PNG - Rosto visível</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* AEE TOGGLE */}
+                            <div className="space-y-3 pt-2 border-t border-white/5">
+                                <label className="flex items-center justify-between cursor-pointer group bg-black/20 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg ${editingStudent.isAEE ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-500'}`}>
+                                            <AlertTriangle size={20}/>
+                                        </div>
+                                        <div>
+                                            <span className={`block text-xs font-black uppercase tracking-widest ${editingStudent.isAEE ? 'text-blue-400' : 'text-gray-400'}`}>Atendimento AEE</span>
+                                            <span className="text-[9px] text-gray-600 font-bold uppercase">Necessidades Especiais</span>
+                                        </div>
+                                    </div>
+                                    <div className="relative">
+                                        <input type="checkbox" className="sr-only" checked={editingStudent.isAEE || false} onChange={e => setEditingStudent({...editingStudent, isAEE: e.target.checked})} />
+                                        <div className={`w-10 h-6 rounded-full transition-colors ${editingStudent.isAEE ? 'bg-blue-600' : 'bg-gray-700'}`}></div>
+                                        <div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${editingStudent.isAEE ? 'translate-x-4' : ''}`}></div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <Button type="submit" isLoading={isSavingStudent} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20 mt-4">
+                                <Save size={18} className="mr-2"/> Salvar Alterações
+                            </Button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
