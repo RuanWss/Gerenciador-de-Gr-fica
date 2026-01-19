@@ -9,7 +9,8 @@ import {
     listenToSchedule,
     saveScheduleEntry,
     deleteScheduleEntry,
-    listenToStaffMembers
+    listenToStaffMembers,
+    listenToAttendanceLogs
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -18,7 +19,8 @@ import {
     SystemConfig,
     ScheduleEntry,
     TimeSlot,
-    StaffMember
+    StaffMember,
+    AttendanceLog
 } from '../types';
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
@@ -117,6 +119,8 @@ export const PrintShopDashboard: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [studentSearch, setStudentSearch] = useState('');
     const [staffList, setStaffList] = useState<StaffMember[]>([]);
+    const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+    const [selectedClassFilter, setSelectedClassFilter] = useState<string | null>(null);
     
     // Config States
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
@@ -157,7 +161,13 @@ export const PrintShopDashboard: React.FC = () => {
         const unsubSchedule = listenToSchedule(setSchedule);
         const unsubStaff = listenToStaffMembers(setStaffList);
 
-        return () => { unsubConfig(); unsubSchedule(); unsubStaff(); };
+        // Listen to today's attendance
+        const today = new Date().toISOString().split('T')[0];
+        const unsubAttendance = listenToAttendanceLogs(today, (logs) => {
+            setAttendanceLogs(logs);
+        });
+
+        return () => { unsubConfig(); unsubSchedule(); unsubStaff(); unsubAttendance(); };
     }, []);
 
     // --- HANDLERS ---
@@ -547,20 +557,73 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                         </header>
 
-                        {/* Estatísticas Rápidas */}
+                        {/* Class Statistics Grid with Attendance */}
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-8">
-                            {CLASSES.map(cls => (
-                                <div key={cls} className="p-6 rounded-[2rem] border bg-[#18181b] border-white/5 text-gray-500 shadow-lg">
-                                    <h3 className="text-[10px] font-black mb-2 uppercase tracking-widest text-white truncate" title={cls}>{cls}</h3>
-                                    <span className="bg-black/40 px-3 py-1 rounded-full text-[10px] font-mono border border-white/5 text-gray-400">{students.filter(s => s.className === cls).length}</span>
-                                </div>
-                            ))}
+                            {CLASSES.map(cls => {
+                                const classStudents = students.filter(s => s.className === cls);
+                                const totalStudents = classStudents.length;
+                                // Use Set for unique student count (prevents duplicate checks for same student)
+                                const uniquePresentStudents = new Set(
+                                    attendanceLogs
+                                        .filter(log => log.className === cls)
+                                        .map(log => log.studentId)
+                                );
+                                const presentCount = uniquePresentStudents.size;
+                                
+                                return (
+                                    <div 
+                                        key={cls} 
+                                        onClick={() => setSelectedClassFilter(selectedClassFilter === cls ? null : cls)}
+                                        className={`p-6 rounded-[2rem] border transition-all cursor-pointer group relative overflow-hidden flex flex-col justify-between ${
+                                            selectedClassFilter === cls 
+                                            ? 'bg-red-600 border-red-500 shadow-xl shadow-red-900/40 scale-105 z-10' 
+                                            : 'bg-[#18181b] border-white/5 hover:border-white/10 hover:bg-[#202022]'
+                                        }`}
+                                    >
+                                        <h3 className={`text-[10px] font-black mb-4 uppercase tracking-widest truncate ${selectedClassFilter === cls ? 'text-white' : 'text-gray-400 group-hover:text-white'}`} title={cls}>{cls}</h3>
+                                        
+                                        <div className="flex justify-between items-end mb-4">
+                                            <div>
+                                                <p className={`text-3xl font-black ${selectedClassFilter === cls ? 'text-white' : 'text-white'}`}>{totalStudents}</p>
+                                                <p className={`text-[8px] font-bold uppercase tracking-wider ${selectedClassFilter === cls ? 'text-red-200' : 'text-gray-600'}`}>Matriculados</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className={`text-xl font-black ${selectedClassFilter === cls ? 'text-white' : 'text-green-500'}`}>{presentCount}</p>
+                                                <p className={`text-[8px] font-bold uppercase tracking-wider ${selectedClassFilter === cls ? 'text-red-200' : 'text-gray-600'}`}>Presentes</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Attendance Progress Bar */}
+                                        <div className="h-1 w-full bg-black/20 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`h-full transition-all duration-500 ${selectedClassFilter === cls ? 'bg-white' : 'bg-green-500'}`}
+                                                style={{ width: `${totalStudents > 0 ? (presentCount / totalStudents) * 100 : 0}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl flex flex-col h-[calc(100vh-320px)]">
                             <div className="p-6 bg-black/20 border-b border-white/5 flex justify-between items-center shrink-0">
-                                <h3 className="text-lg font-black text-white uppercase tracking-widest">Listagem Geral</h3>
-                                <span className="bg-white/5 px-4 py-1 rounded-full text-[10px] font-black text-gray-400 border border-white/5">{students.filter(s => s.name.toLowerCase().includes(studentSearch.toLowerCase()) || s.className.toLowerCase().includes(studentSearch.toLowerCase())).length} Alunos</span>
+                                <h3 className="text-lg font-black text-white uppercase tracking-widest">
+                                    {selectedClassFilter ? `Listagem - ${selectedClassFilter}` : 'Listagem Geral'}
+                                </h3>
+                                <div className="flex gap-2">
+                                    {selectedClassFilter && (
+                                        <button onClick={() => setSelectedClassFilter(null)} className="bg-red-600/10 text-red-500 px-4 py-1 rounded-full text-[10px] font-black border border-red-600/20 hover:bg-red-600 hover:text-white transition-colors">
+                                            Limpar Filtro
+                                        </button>
+                                    )}
+                                    <span className="bg-white/5 px-4 py-1 rounded-full text-[10px] font-black text-gray-400 border border-white/5">
+                                        {students.filter(s => {
+                                            const matchesSearch = String(s.name || '').toLowerCase().includes(studentSearch.toLowerCase()) || String(s.className || '').toLowerCase().includes(studentSearch.toLowerCase());
+                                            const matchesClass = selectedClassFilter ? s.className === selectedClassFilter : true;
+                                            return matchesSearch && matchesClass;
+                                        }).length} Alunos
+                                    </span>
+                                </div>
                             </div>
                             <div className="overflow-y-auto custom-scrollbar p-0">
                                 <table className="w-full text-left">
@@ -573,7 +636,11 @@ export const PrintShopDashboard: React.FC = () => {
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
                                         {students
-                                            .filter(s => String(s.name || '').toLowerCase().includes(studentSearch.toLowerCase()) || String(s.className || '').toLowerCase().includes(studentSearch.toLowerCase()))
+                                            .filter(s => {
+                                                const matchesSearch = String(s.name || '').toLowerCase().includes(studentSearch.toLowerCase()) || String(s.className || '').toLowerCase().includes(studentSearch.toLowerCase());
+                                                const matchesClass = selectedClassFilter ? s.className === selectedClassFilter : true;
+                                                return matchesSearch && matchesClass;
+                                            })
                                             .sort((a,b) => (a.name || '').localeCompare(b.name || ''))
                                             .map(student => (
                                             <tr key={student.id} className="hover:bg-white/[0.02] group transition-colors">

@@ -235,7 +235,7 @@ export const PublicSchedule: React.FC = () => {
             {/* Main Grid */}
             <main className="flex-1 px-4 md:px-8 pb-8 w-full max-w-[1920px] mx-auto flex flex-col justify-center">
                 {/* RESPONSIVE GRID CONFIGURATION */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 h-full max-h-[60vh] content-center items-stretch">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 h-full max-h-[70vh] content-start md:content-center items-stretch overflow-y-auto">
                      {currentClasses.map(cls => {
                         // 1. Determina qual grade de horários usar
                         let slots: TimeSlot[] = [];
