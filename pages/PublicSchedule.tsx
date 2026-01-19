@@ -2,13 +2,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Maximize2, Monitor, Volume2, VolumeX, Wifi, WifiOff, Clock, AlertCircle } from 'lucide-react';
+import { Maximize2, Monitor, Volume2, VolumeX, Wifi, WifiOff, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 
 // Sons para os alertas
 const SOUND_SHORT = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; 
 const SOUND_LONG = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3";
 
-// --- CONFIGURAÇÃO DE HORÁRIOS (Sincronizado com Admin) ---
+// --- CONFIGURAÇÃO DE HORÁRIOS (Sincronizado com os IDs do Admin) ---
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
     { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
@@ -70,15 +70,20 @@ export const PublicSchedule: React.FC = () => {
         audioLongRef.current = new Audio(SOUND_LONG);
     }, []);
 
-    // FETCH DATA
+    // FETCH DATA REAL-TIME
     useEffect(() => {
         if (!isAuthorized) return;
+        
+        // Otimização: Garantir que o listener capture todas as mudanças no nó 'schedule'
         const unsubscribeSchedule = listenToSchedule((data) => {
-            console.log("TV DATA RECEIVED:", data.length, "entries");
+            console.log("TV Sync: Recebidos", data.length, "horários do banco.");
+            // Criamos uma nova referência de array para forçar re-renderização total
             setSchedule([...data]);
             setConnectionStatus(true);
         });
+
         const unsubscribeConfig = listenToSystemConfig(setSysConfig);
+        
         return () => {
             unsubscribeSchedule();
             unsubscribeConfig();
@@ -91,16 +96,14 @@ export const PublicSchedule: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // TURN & SHIFT LOGIC (Updated to be more flexible for testing)
+    // SHIFT & ALARM LOGIC
     useEffect(() => {
         const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
         
         let newShift: 'morning' | 'afternoon' | 'off' = 'morning';
-        // Matutino: 06:00 até 12:30
         if (nowMins >= 360 && nowMins <= 750) newShift = 'morning'; 
-        // Vespertino: 12:31 até 21:00
         else if (nowMins > 750 && nowMins <= 1260) newShift = 'afternoon'; 
-        else newShift = 'morning'; // Default para manhã se estiver fora do horário escolar
+        else newShift = 'morning'; // Fallback para manhã se fora do horário
         
         if (newShift !== currentShift) setCurrentShift(newShift);
 
@@ -123,19 +126,18 @@ export const PublicSchedule: React.FC = () => {
         lastProcessedSlotId.current = currentSlotId;
     }, [currentTime, audioEnabled, currentShift]);
 
-    // DATA NORMALIZATION HELPER
-    const normalizeId = (id: string) => id.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+    // NORMALIZADOR DE IDS (Essencial para casar os dados do Admin com a TV)
+    const normalizeId = (id: string) => id?.toLowerCase().replace(/[^a-z0-9]/g, '').trim() || '';
 
     // DISPLAY DATA CALCULATION
     const displayData = useMemo(() => {
         const rawDay = currentTime.getDay();
-        // Se for fim de semana, mostra Segunda (1) para fins de teste e gestão
+        // Se for Fim de Semana (0 ou 6), exibe Segunda-feira (1) para testes
         const dayOfWeek = (rawDay === 0 || rawDay === 6) ? 1 : rawDay;
         
         const slots = currentShift === 'afternoon' ? AFTERNOON_SLOTS : MORNING_SLOTS;
         const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
         
-        // Encontra o slot de tempo atual
         const currentSlotIndex = slots.findIndex(s => {
             const start = timeToMins(s.start);
             const end = timeToMins(s.end);
@@ -150,19 +152,19 @@ export const PublicSchedule: React.FC = () => {
         return classes.map(cls => {
             const normalizedClsId = normalizeId(cls.id);
 
-            // Tenta encontrar a aula exata do horário agora
+            // Busca exata: Dia da semana + Turma Normalizada + Slot de Horário
             let currentEntry = schedule.find(s => 
                 normalizeId(s.classId) === normalizedClsId && 
                 s.slotId === (currentSlot?.id || 'none') && 
-                s.dayOfWeek === dayOfWeek
+                Number(s.dayOfWeek) === Number(dayOfWeek)
             );
 
-            // FALLBACK: Se estivermos em um "buraco" de horário mas a turma tiver aula cadastrada hoje,
-            // vamos exibir a primeira aula do dia ou a próxima aula se o slot atual for nulo.
+            // FALLBACK INTELIGENTE: Se o horário local não bater com nenhum slot mas houver aula hoje,
+            // vamos mostrar a aula que deveria estar ocorrendo ou a próxima.
             if (!currentEntry && !currentSlot) {
                 currentEntry = schedule.find(s => 
                     normalizeId(s.classId) === normalizedClsId && 
-                    s.dayOfWeek === dayOfWeek
+                    Number(s.dayOfWeek) === Number(dayOfWeek)
                 );
             }
 
@@ -174,7 +176,7 @@ export const PublicSchedule: React.FC = () => {
                     const entry = schedule.find(s => 
                         normalizeId(s.classId) === normalizedClsId && 
                         s.slotId === nextSlot.id && 
-                        s.dayOfWeek === dayOfWeek
+                        Number(s.dayOfWeek) === Number(dayOfWeek)
                     );
                     nextEntry = entry ? { subject: entry.subject, professor: entry.professor, start: nextSlot.start } : null;
                 }
@@ -297,13 +299,13 @@ export const PublicSchedule: React.FC = () => {
                     ))}
                 </div>
                 
-                {/* DEBUG HELPER - APENAS SE HOUVER PROBLEMA DE DADOS */}
-                {schedule.length === 0 && (
+                {/* AVISO DE DADOS VAZIOS */}
+                {schedule.length === 0 && connectionStatus && (
                     <div className="mt-8 mx-auto bg-red-600/20 border border-red-600/50 p-6 rounded-3xl flex items-center gap-4 text-red-500 animate-pulse">
                         <AlertCircle size={32}/>
                         <div>
-                            <p className="font-black uppercase text-sm tracking-widest">Aviso do Sistema</p>
-                            <p className="text-xs font-bold opacity-80 uppercase">Nenhum dado de horário encontrado no banco. Verifique o Painel Administrativo.</p>
+                            <p className="font-black uppercase text-sm tracking-widest">Sincronização Pendente</p>
+                            <p className="text-xs font-bold opacity-80 uppercase">Buscando horários no banco de dados... Se persistir, atualize o Admin.</p>
                         </div>
                     </div>
                 )}
@@ -344,6 +346,3 @@ export const PublicSchedule: React.FC = () => {
         </div>
     );
 };
-
-// Re-import to fix RefreshCw missing from imports
-import { RefreshCw } from 'lucide-react';
