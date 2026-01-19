@@ -117,6 +117,7 @@ export interface SystemConfig {
   isBannerActive: boolean;
   tvStart?: string;
   tvEnd?: string;
+  lastScheduleSync?: number; // Added for TV Sync
 }
 
 export interface ScheduleEntry {

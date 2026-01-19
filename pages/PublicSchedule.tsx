@@ -63,7 +63,9 @@ export const PublicSchedule: React.FC = () => {
     
     // Audio
     const [audioEnabled, setAudioEnabled] = useState(true);
-    const lastSlotsRef = useRef<{EFAF: string|null, EM: string|null}>({ EFAF: null, EM: null });
+    // Trackers
+    const lastProcessedSlotId = useRef<string | null>(null);
+    const lastSyncTimestamp = useRef<number | null>(null);
     const audioShortRef = useRef<HTMLAudioElement | null>(null);
     const audioLongRef = useRef<HTMLAudioElement | null>(null);
 
@@ -74,6 +76,7 @@ export const PublicSchedule: React.FC = () => {
         audioLongRef.current.load();
     }, []);
 
+    // Initial Data Load
     useEffect(() => {
         if (!isAuthorized) return;
         
@@ -82,7 +85,16 @@ export const PublicSchedule: React.FC = () => {
             setConnectionStatus(true);
         });
         
-        const unsubscribeConfig = listenToSystemConfig(setSysConfig);
+        const unsubscribeConfig = listenToSystemConfig((config) => {
+            setSysConfig(config);
+            
+            // Sync Logic: Refresh if timestamp changes (and not first load)
+            if (config.lastScheduleSync && lastSyncTimestamp.current && config.lastScheduleSync > lastSyncTimestamp.current) {
+                console.log("Forced Sync Detected - Refreshing Data");
+                window.location.reload(); // Hard refresh to clear any stale state
+            }
+            lastSyncTimestamp.current = config.lastScheduleSync || Date.now();
+        });
         
         return () => {
             unsubscribeSchedule();
@@ -90,60 +102,56 @@ export const PublicSchedule: React.FC = () => {
         };
     }, [isAuthorized]);
 
+    // Timer Loop
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // Lógica Central de Horário e Alarme
+    // --- ALARM & SHIFT LOGIC (Robust) ---
     useEffect(() => {
         const now = currentTime;
         const totalMinutes = now.getHours() * 60 + now.getMinutes();
-        const seconds = now.getSeconds();
         
-        // Determinar Turno Geral
+        // 1. Determine Shift
         let newShift: 'morning' | 'afternoon' | 'off' = 'morning';
         if (totalMinutes >= 420 && totalMinutes <= 750) newShift = 'morning'; // 07:00 - 12:30
         else if (totalMinutes >= 780 && totalMinutes <= 1260) newShift = 'afternoon'; // 13:00 - 21:00
         setCurrentShift(newShift);
 
-        // Função para verificar mudança de slot em um grupo de horários
-        const checkSlotChange = (slots: TimeSlot[], type: 'EFAF' | 'EM') => {
-            const currentSlot = slots.find(s => {
-                const [hS, mS] = s.start.split(':').map(Number);
-                const [hE, mE] = s.end.split(':').map(Number);
-                const startMins = hS * 60 + mS;
-                const endMins = hE * 60 + mE;
-                return totalMinutes >= startMins && totalMinutes < endMins;
-            });
+        // 2. Select Active Slot Array
+        const activeSlots = newShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
 
-            const currentId = currentSlot ? currentSlot.id : 'free';
-            const lastId = lastSlotsRef.current[type];
+        // 3. Find Current Slot ID
+        const currentSlot = activeSlots.find(s => {
+            const [hS, mS] = s.start.split(':').map(Number);
+            const [hE, mE] = s.end.split(':').map(Number);
+            const startMins = hS * 60 + mS;
+            const endMins = hE * 60 + mE;
+            return totalMinutes >= startMins && totalMinutes < endMins;
+        });
 
-            if (lastId !== null && lastId !== currentId && audioEnabled) {
-                console.log(`[ALARM ${type}] Change from ${lastId} to ${currentId}`);
+        const currentSlotId = currentSlot ? currentSlot.id : 'free';
+
+        // 4. Check for Change & Play Alarm
+        if (lastProcessedSlotId.current !== null && lastProcessedSlotId.current !== currentSlotId) {
+            console.log(`[ALARM] Slot Changed: ${lastProcessedSlotId.current} -> ${currentSlotId}`);
+            
+            if (audioEnabled) {
+                // Determine if it's a major break or minor change
+                const isBreak = currentSlot?.type === 'break';
+                const wasBreak = activeSlots.find(s => s.id === lastProcessedSlotId.current)?.type === 'break';
                 
-                const prevSlot = slots.find(s => s.id === lastId);
-                const isBreak = currentSlot?.type === 'break' || prevSlot?.type === 'break';
-
-                // Prioridade: Intervalo (Longo) > Troca (Curto)
-                if (isBreak) {
+                if (isBreak || wasBreak) {
                     audioLongRef.current?.play().catch(e => console.warn("Audio blocked:", e));
-                } else if (currentId !== 'free') {
+                } else if (currentSlotId !== 'free') {
                     audioShortRef.current?.play().catch(e => console.warn("Audio blocked:", e));
                 }
             }
-            lastSlotsRef.current[type] = currentId;
-        };
-
-        // Verifica alarmes para o turno atual
-        if (seconds === 0 || lastSlotsRef.current.EFAF === null) { 
-            if (newShift === 'morning') {
-                checkSlotChange(MORNING_SLOTS, 'EFAF');
-            } else if (newShift === 'afternoon') {
-                checkSlotChange(AFTERNOON_SLOTS, 'EM');
-            }
         }
+
+        // Update Tracker
+        lastProcessedSlotId.current = currentSlotId;
 
     }, [currentTime, audioEnabled]);
 
@@ -159,12 +167,14 @@ export const PublicSchedule: React.FC = () => {
         setPin(newPin);
         if (newPin.length === 4) {
             if (newPin === DEFAULT_PIN) {
-                // Unlock Audio Context
+                // Unlock Audio Context Interaction
                 const unlock = () => {
                     if (audioShortRef.current) {
+                        audioShortRef.current.volume = 0;
                         audioShortRef.current.play().then(() => {
-                            audioShortRef.current?.pause();
+                            audioShortRef.current!.pause();
                             audioShortRef.current!.currentTime = 0;
+                            audioShortRef.current!.volume = 1;
                         }).catch(() => {});
                     }
                 };

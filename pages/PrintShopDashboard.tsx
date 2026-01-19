@@ -23,7 +23,7 @@ import {
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
     ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
-    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap
+    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -130,6 +130,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [scheduleLevel, setScheduleLevel] = useState<'EFAI' | 'EFAF' | 'EM'>('EFAF');
     const [editingSlot, setEditingSlot] = useState<{classId: string, slotId: string} | null>(null);
     const [editForm, setEditForm] = useState({ subject: '', professor: '' });
+    const [isSyncingTV, setIsSyncingTV] = useState(false);
 
     useEffect(() => {
         const fetchInitial = async () => {
@@ -174,6 +175,22 @@ export const PrintShopDashboard: React.FC = () => {
         };
         await updateSystemConfig(newConfig);
         alert("Configurações salvas!");
+    };
+
+    const handleSyncTV = async () => {
+        setIsSyncingTV(true);
+        try {
+            await updateSystemConfig({
+                ...(sysConfig || { bannerMessage: '', bannerType: 'info', isBannerActive: false }),
+                lastScheduleSync: Date.now()
+            });
+            alert("Sinal de sincronização enviado para a TV com sucesso!");
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao enviar sinal.");
+        } finally {
+            setIsSyncingTV(false);
+        }
     };
 
     const handleSaveSchedule = async () => {
@@ -382,6 +399,11 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                             
                             <div className="flex flex-col gap-4 items-end">
+                                {/* SYNC BUTTON */}
+                                <Button onClick={handleSyncTV} isLoading={isSyncingTV} className="bg-red-600 h-12 px-6 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg shadow-red-900/30">
+                                    <Radio size={18} className="mr-2"/> {isSyncingTV ? 'Enviando...' : 'Sincronizar Grade na TV'}
+                                </Button>
+
                                 {/* LEVEL SELECTOR */}
                                 <div className="flex bg-[#18181b] p-1 rounded-2xl border border-white/10">
                                     <button onClick={() => setScheduleLevel('EFAI')} className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${scheduleLevel === 'EFAI' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>
