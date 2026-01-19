@@ -4,51 +4,63 @@ import { listenToClassMaterials } from '../services/firebaseService';
 import { ClassMaterial } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
-import { FolderOpen, Download, FileText, File as FileIcon, Clock, Bell, Settings, ExternalLink, AlertTriangle, ArrowLeft, Folder, Lock, LogIn, LogOut } from 'lucide-react';
+import { 
+    Folder, Download, FileText, Image as ImageIcon, 
+    Bell, AlertTriangle, ArrowLeft, LogOut, Search, 
+    Grid, List as ListIcon, Clock, ChevronRight, Lock, LogIn, LayoutGrid, FolderOpen
+} from 'lucide-react';
 
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 export const ClassroomFiles: React.FC = () => {
     const { user, logout } = useAuth();
+    
+    // State
     const [selectedClassName, setSelectedClassName] = useState<string>('');
+    const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
     const [materials, setMaterials] = useState<ClassMaterial[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [autoOpen, setAutoOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [permissionDenied, setPermissionDenied] = useState(false);
-    
-    // Novo Estado para navegação por pastas
-    const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
-    
+    const [searchQuery, setSearchQuery] = useState('');
+
     const isFirstLoad = useRef(true);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Permite todas as turmas para evitar bloqueios
+    // Lista completa de turmas
     const availableClasses = useMemo(() => CLASSES, []);
 
-    // Determina a lista de disciplinas com base na turma selecionada
+    // Determina as disciplinas com base na turma (Fallback para EFAI/Infantil)
     const currentSubjectsList = useMemo(() => {
         if (!selectedClassName) return [];
         if (selectedClassName.includes('SÉRIE') || selectedClassName.includes('EM')) return EM_SUBJECTS;
-        // Fallback para EFAF ou lista padrão para garantir que pastas apareçam
-        return EFAF_SUBJECTS;
+        if (selectedClassName.includes('EFAF')) return EFAF_SUBJECTS;
+        
+        // Lista padrão para Fundamental I e Infantil
+        return [
+            "GERAL", "LÍNGUA PORTUGUESA", "MATEMÁTICA", "HISTÓRIA", "GEOGRAFIA", 
+            "CIÊNCIAS", "ARTE", "INGLÊS", "EDUCAÇÃO FÍSICA", "ENSINO RELIGIOSO", 
+            "PROJETOS", "AVALIAÇÕES"
+        ];
     }, [selectedClassName]);
 
+    // Carregar turma salva
     useEffect(() => {
-        // Carregar seleção salva
         const savedClass = localStorage.getItem('classroom_selected_class');
         if (savedClass && availableClasses.includes(savedClass)) {
             setSelectedClassName(savedClass);
         }
     }, [availableClasses]);
 
+    // Listener de Materiais
     useEffect(() => {
         if (!selectedClassName) return;
 
         setIsLoading(true);
         setError(null);
         setPermissionDenied(false);
-        setSelectedSubject(null); // Reseta a pasta ao mudar de turma
+        setSelectedSubject(null); 
         
         localStorage.setItem('classroom_selected_class', selectedClassName);
 
@@ -59,10 +71,9 @@ export const ClassroomFiles: React.FC = () => {
                 setError(null);
                 setPermissionDenied(false);
                 
-                // Ordena os materiais localmente (mais recentes primeiro)
                 newMaterials.sort((a, b) => b.createdAt - a.createdAt);
                 
-                // Lógica de notificação (apenas para arquivos novos gerais)
+                // Notificação de novo arquivo
                 if (!isFirstLoad.current && newMaterials.length > 0) {
                      const latestFile = newMaterials[0];
                      const currentLatestId = materials.length > 0 ? materials[0].id : null;
@@ -77,11 +88,10 @@ export const ClassroomFiles: React.FC = () => {
                 isFirstLoad.current = false;
             },
             (err) => {
-                console.error("Erro no listener:", err);
+                console.error("Erro listener:", err);
                 setIsLoading(false);
                 if (err.code === 'permission-denied') {
                     setPermissionDenied(true);
-                    setError(null); // Use specific permission state
                 } else {
                     setError("Erro de conexão ao buscar arquivos.");
                 }
@@ -94,233 +104,257 @@ export const ClassroomFiles: React.FC = () => {
     const playNotification = () => {
         if (audioRef.current) {
             audioRef.current.volume = 0.5;
-            audioRef.current.play().catch(e => console.log("Audio blocked", e));
+            audioRef.current.play().catch(() => {});
         }
     };
 
-    const handleSelectClass = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedClassName(e.target.value);
-        setMaterials([]);
-        setError(null);
-        setPermissionDenied(false);
-        isFirstLoad.current = true;
-    };
+    // Filtragem
+    const filteredMaterials = useMemo(() => {
+        let filtered = materials;
+        
+        if (selectedSubject) {
+            filtered = filtered.filter(m => m.subject === selectedSubject);
+        }
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            filtered = filtered.filter(m => 
+                m.title.toLowerCase().includes(q) || 
+                m.teacherName.toLowerCase().includes(q)
+            );
+        }
+        return filtered;
+    }, [materials, selectedSubject, searchQuery]);
+
+    // Contagem por disciplina
+    const getFileCount = (subject: string) => materials.filter(m => m.subject === subject).length;
 
     const getFileIcon = (type: string) => {
-        if (type.includes('pdf')) return <FileText size={40} className="text-red-500" />;
-        if (type.includes('image')) return <FileIcon size={40} className="text-blue-500" />;
-        return <FolderOpen size={40} className="text-yellow-500" />;
-    };
-
-    // Filtra os materiais para a pasta selecionada
-    const filteredMaterials = useMemo(() => {
-        if (!selectedSubject) return [];
-        return materials.filter(m => m.subject === selectedSubject);
-    }, [materials, selectedSubject]);
-
-    // Conta quantos arquivos existem em cada disciplina para exibir na pasta
-    const getFileCountForSubject = (subject: string) => {
-        return materials.filter(m => m.subject === subject).length;
+        if (type.includes('pdf')) return <FileText size={28} className="text-red-500" />;
+        if (type.includes('image')) return <ImageIcon size={28} className="text-blue-500" />;
+        return <FileText size={28} className="text-gray-400" />;
     };
 
     return (
-        <div className="min-h-screen bg-[#0f0f10] text-gray-100 font-sans p-6 md:p-12">
+        <div className="min-h-screen bg-[#09090b] text-gray-100 font-sans selection:bg-red-500/30 flex flex-col">
             <audio ref={audioRef} src={NOTIFICATION_SOUND} />
 
-            <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-6 border-b border-gray-800 pb-6">
-                <div className="flex items-center gap-4">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 w-auto" alt="Logo" />
-                    <div className="h-10 w-px bg-gray-800 hidden md:block"></div>
-                    <div>
-                        <h1 className="text-2xl font-bold uppercase tracking-wider text-white">Arquivos da Turma</h1>
-                        <p className="text-xs text-gray-500 font-mono mt-1">Sincronização em Tempo Real</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-4 bg-gray-900 p-2 rounded-xl border border-gray-800">
-                    <div className="px-4">
-                        <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Selecione a Sala</label>
-                        <select 
-                            value={selectedClassName} 
-                            onChange={handleSelectClass}
-                            className="bg-transparent text-white font-bold text-lg outline-none cursor-pointer min-w-[200px]"
-                        >
-                            <option value="" className="text-gray-500">-- Selecione --</option>
-                            {availableClasses.map(c => (
-                                <option key={c} value={c} className="bg-gray-900">{c}</option>
-                            ))}
-                        </select>
-                    </div>
-                    
-                    <div className="h-10 w-px bg-gray-800"></div>
-
-                    <label className="flex items-center gap-2 px-4 cursor-pointer group" title="Tenta abrir o arquivo assim que ele chega">
-                        <div className={`w-10 h-6 rounded-full p-1 transition-colors ${autoOpen ? 'bg-green-600' : 'bg-gray-700'}`} onClick={() => setAutoOpen(!autoOpen)}>
-                            <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${autoOpen ? 'translate-x-4' : ''}`}></div>
+            {/* HEADER */}
+            <header className="bg-black/40 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50">
+                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 w-auto" alt="Logo" />
+                        <div className="h-8 w-px bg-white/10 hidden md:block"></div>
+                        <div className="hidden md:block">
+                            <h1 className="text-sm font-black text-white uppercase tracking-widest">Arquivos da Turma</h1>
+                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Acesso ao Material Didático</p>
                         </div>
-                        <span className="text-xs font-bold text-gray-400 group-hover:text-white transition-colors">Abrir Automático</span>
-                    </label>
+                    </div>
 
-                    {user && (
-                        <>
-                            <div className="h-10 w-px bg-gray-800"></div>
-                            <button 
-                                onClick={logout} 
-                                className="px-4 text-gray-400 hover:text-red-500 transition-colors"
-                                title="Sair do Sistema"
+                    <div className="flex items-center gap-4">
+                        {/* CLASS SELECTOR */}
+                        <div className="relative group">
+                            <select 
+                                value={selectedClassName} 
+                                onChange={(e) => { setSelectedClassName(e.target.value); setSearchQuery(''); }}
+                                className="appearance-none bg-[#18181b] border border-white/10 text-white font-bold text-xs uppercase tracking-widest py-3 pl-4 pr-10 rounded-xl focus:outline-none focus:border-red-600 transition-all cursor-pointer min-w-[180px]"
                             >
-                                <LogOut size={20} />
+                                <option value="">Selecione a Turma</option>
+                                {availableClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                                <ChevronRight size={14} className="rotate-90"/>
+                            </div>
+                        </div>
+
+                        {/* AUTO OPEN TOGGLE */}
+                        <button 
+                            onClick={() => setAutoOpen(!autoOpen)}
+                            className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${autoOpen ? 'bg-green-600/10 border-green-600/30 text-green-500' : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'}`}
+                            title="Abrir arquivos automaticamente ao chegar"
+                        >
+                            <div className={`w-2 h-2 rounded-full ${autoOpen ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Auto</span>
+                        </button>
+
+                        {/* LOGOUT */}
+                        {user && (
+                            <button onClick={logout} className="p-3 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-xl transition-all" title="Sair">
+                                <LogOut size={18} />
                             </button>
-                        </>
-                    )}
+                        )}
+                    </div>
                 </div>
             </header>
 
-            {!selectedClassName ? (
-                <div className="flex flex-col items-center justify-center h-[50vh] text-gray-600 animate-in fade-in zoom-in duration-500">
-                    <FolderOpen size={80} className="mb-6 opacity-20" />
-                    <h2 className="text-2xl font-bold text-gray-500">Selecione uma turma para iniciar</h2>
-                    <p className="mt-2 text-sm">Os arquivos enviados pelos professores aparecerão aqui automaticamente.</p>
-                </div>
-            ) : (
-                <div className="max-w-7xl mx-auto">
-                     {error && (
-                         <div className="bg-red-900/20 border border-red-500/50 rounded-2xl p-6 text-center mb-8 flex flex-col items-center">
-                             <AlertTriangle size={48} className="text-red-500 mb-2"/>
-                             <h3 className="text-xl font-bold text-white">Falha de Conexão</h3>
-                             <p className="text-red-300 mt-2">{error}</p>
-                         </div>
-                     )}
+            {/* MAIN CONTENT */}
+            <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
+                
+                {/* ERROR STATES */}
+                {error && (
+                    <div className="bg-red-950/30 border border-red-500/20 rounded-2xl p-8 text-center max-w-xl mx-auto mt-10">
+                        <AlertTriangle size={48} className="mx-auto text-red-500 mb-4"/>
+                        <h3 className="text-xl font-bold text-white mb-2">Erro de Conexão</h3>
+                        <p className="text-red-300 text-sm">{error}</p>
+                    </div>
+                )}
 
-                     {permissionDenied && (
-                         <div className="bg-black/40 border border-red-900/50 rounded-3xl p-12 text-center mb-8 flex flex-col items-center animate-in zoom-in-95">
-                             <div className="bg-red-900/20 p-6 rounded-full mb-6">
-                                <Lock size={64} className="text-red-500"/>
-                             </div>
-                             <h3 className="text-3xl font-black text-white uppercase tracking-wider mb-2">Acesso Restrito</h3>
-                             <p className="text-gray-400 max-w-md mx-auto mb-8 text-lg">
-                                 Os arquivos desta turma estão protegidos. É necessário realizar login para visualizar o conteúdo.
-                             </p>
-                             <button 
-                                onClick={() => window.location.href = '/'}
-                                className="bg-red-600 hover:bg-red-700 text-white font-bold py-4 px-10 rounded-xl shadow-lg shadow-red-900/40 flex items-center gap-3 transition-all transform hover:-translate-y-1"
-                             >
-                                 <LogIn size={24} />
-                                 Fazer Login no Sistema
-                             </button>
-                         </div>
-                     )}
+                {permissionDenied && (
+                    <div className="bg-[#18181b] border border-white/5 rounded-[2rem] p-12 text-center max-w-xl mx-auto mt-10 shadow-2xl relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 via-purple-600 to-red-600"></div>
+                        <div className="bg-red-500/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Lock size={40} className="text-red-500"/>
+                        </div>
+                        <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Acesso Restrito</h3>
+                        <p className="text-gray-400 text-sm mb-8 font-medium">Faça login com a conta da turma para visualizar os arquivos.</p>
+                        <button onClick={() => window.location.href = '/'} className="inline-flex items-center gap-2 px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-red-900/20">
+                            <LogIn size={16} /> Acessar Sistema
+                        </button>
+                    </div>
+                )}
 
-                     {isLoading && (
-                         <div className="text-center py-10 text-brand-500 flex items-center justify-center gap-2">
-                             <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce"></div>
-                             <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce delay-100"></div>
-                             <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce delay-200"></div>
-                             <span className="text-xs font-bold uppercase tracking-widest ml-2">Carregando Pastas...</span>
-                         </div>
-                     )}
-
-                     {!isLoading && !error && !permissionDenied && (
-                         <>
-                            {/* NAVEGAÇÃO: VOLTAR PARA PASTAS */}
-                            {selectedSubject && (
+                {/* CONTENT STATES */}
+                {!selectedClassName ? (
+                    <div className="flex flex-col items-center justify-center h-[60vh] text-center animate-in fade-in zoom-in duration-500">
+                        <div className="w-32 h-32 bg-white/5 rounded-full flex items-center justify-center mb-8 border border-white/5">
+                            <FolderOpen size={64} className="text-gray-600 opacity-50" />
+                        </div>
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tight mb-2">Nenhuma Turma Selecionada</h2>
+                        <p className="text-gray-500 font-medium max-w-md">Utilize o seletor no topo da página para acessar o material didático da sua turma.</p>
+                    </div>
+                ) : !isLoading && !permissionDenied && !error && (
+                    <div className="animate-in slide-in-from-bottom-4 duration-500">
+                        
+                        {/* BREADCRUMBS & SEARCH */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 bg-[#18181b] p-4 rounded-2xl border border-white/5">
+                            <div className="flex items-center gap-2 text-sm overflow-x-auto whitespace-nowrap">
                                 <button 
                                     onClick={() => setSelectedSubject(null)}
-                                    className="flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-bold uppercase tracking-wider text-sm"
+                                    className={`flex items-center gap-2 font-black uppercase tracking-widest transition-colors ${!selectedSubject ? 'text-white' : 'text-gray-500 hover:text-white'}`}
                                 >
-                                    <ArrowLeft size={18} /> Voltar para Disciplinas
+                                    <LayoutGrid size={16}/> {selectedClassName}
                                 </button>
-                            )}
+                                {selectedSubject && (
+                                    <>
+                                        <ChevronRight size={14} className="text-gray-600"/>
+                                        <span className="text-red-500 font-black uppercase tracking-widest">{selectedSubject}</span>
+                                    </>
+                                )}
+                            </div>
 
-                            {/* VIEW 1: PASTAS DAS DISCIPLINAS */}
-                            {!selectedSubject && (
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 animate-in fade-in slide-in-from-bottom-4">
-                                    {currentSubjectsList.map(subject => {
-                                        const count = getFileCountForSubject(subject);
-                                        return (
-                                            <button 
-                                                key={subject}
-                                                onClick={() => setSelectedSubject(subject)}
-                                                className="bg-[#18181b] p-6 rounded-2xl border border-gray-800 hover:border-brand-600 hover:bg-[#202024] transition-all group text-left flex flex-col justify-between min-h-[160px]"
-                                            >
-                                                <div className="flex justify-between items-start w-full">
-                                                    <Folder size={40} className={`text-yellow-500 group-hover:scale-110 transition-transform ${subject === 'COORDENAÇÃO' ? 'text-blue-500' : ''}`} />
-                                                    {count > 0 && (
-                                                        <span className="bg-brand-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">{count}</span>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <h3 className={`text-sm font-bold text-white mt-4 line-clamp-2 uppercase leading-tight group-hover:text-brand-500 transition-colors ${subject === 'COORDENAÇÃO' ? 'text-blue-400' : ''}`}>
-                                                        {String(subject || '')}
-                                                    </h3>
-                                                    <p className="text-[10px] text-gray-500 mt-1 font-mono">{count} arquivos</p>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
+                            {selectedSubject && (
+                                <div className="relative w-full md:w-64 group">
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-red-500 transition-colors"/>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Filtrar arquivos..." 
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs font-bold text-white outline-none focus:border-red-600 transition-all uppercase placeholder:normal-case"
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                    />
                                 </div>
                             )}
+                        </div>
 
-                            {/* VIEW 2: ARQUIVOS DENTRO DA PASTA */}
-                            {selectedSubject && (
-                                <div className="animate-in fade-in slide-in-from-right-4">
-                                    <h2 className="text-xl font-bold text-brand-500 mb-6 flex items-center gap-2 uppercase">
-                                        <Folder className={selectedSubject === 'COORDENAÇÃO' ? 'text-blue-500' : 'text-yellow-500'} /> {String(selectedSubject || '')}
-                                    </h2>
+                        {/* VIEW 1: SUBJECT FOLDERS */}
+                        {!selectedSubject ? (
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                {currentSubjectsList.map(subject => {
+                                    const count = getFileCount(subject);
+                                    return (
+                                        <button 
+                                            key={subject}
+                                            onClick={() => setSelectedSubject(subject)}
+                                            className="group bg-[#18181b] hover:bg-[#202024] border border-white/5 hover:border-red-600/30 p-6 rounded-[1.5rem] text-left transition-all duration-300 relative overflow-hidden flex flex-col justify-between min-h-[160px] shadow-lg hover:shadow-xl hover:shadow-red-900/10 hover:-translate-y-1"
+                                        >
+                                            <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <ChevronRight size={16} className="text-red-500"/>
+                                            </div>
+                                            
+                                            <div className="mb-4">
+                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-2 transition-colors ${count > 0 ? 'bg-red-600/10 text-red-500' : 'bg-white/5 text-gray-600'}`}>
+                                                    <Folder size={24} fill="currentColor" fillOpacity={0.2} />
+                                                </div>
+                                            </div>
+                                            
+                                            <div>
+                                                <h3 className="text-xs font-black text-gray-200 uppercase tracking-wider leading-tight group-hover:text-white mb-1">
+                                                    {subject}
+                                                </h3>
+                                                <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest group-hover:text-gray-500">
+                                                    {count} {count === 1 ? 'Arquivo' : 'Arquivos'}
+                                                </p>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            /* VIEW 2: FILES LIST */
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in slide-in-from-right-4">
+                                {filteredMaterials.length === 0 ? (
+                                    <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[2rem]">
+                                        <FolderOpen size={48} className="mx-auto text-gray-600 mb-4 opacity-50"/>
+                                        <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Pasta Vazia</p>
+                                    </div>
+                                ) : (
+                                    filteredMaterials.map(file => {
+                                        const isNew = (Date.now() - file.createdAt) < 86400000; // 24h
+                                        return (
+                                            <div key={file.id} className="bg-[#18181b] border border-white/5 rounded-2xl p-5 hover:border-white/10 transition-all group relative flex flex-col">
+                                                {isNew && (
+                                                    <span className="absolute top-4 right-4 flex h-2 w-2">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                                    </span>
+                                                )}
 
-                                    {filteredMaterials.length === 0 ? (
-                                        <div className="text-center py-20 bg-gray-900/50 rounded-3xl border border-gray-800 border-dashed">
-                                            <p className="text-gray-500 font-medium">Pasta vazia.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                            {filteredMaterials.map((file, index) => (
-                                                <div 
-                                                    key={file.id} 
-                                                    className={`bg-[#18181b] rounded-2xl p-6 border border-gray-800 hover:border-brand-500/50 transition-all group relative overflow-hidden`}
-                                                >
-                                                    {/* Badge de Novo (se for recente - menos de 24h) */}
-                                                    {(Date.now() - file.createdAt) < 86400000 && (
-                                                        <div className="absolute top-0 right-0 bg-brand-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider flex items-center gap-1">
-                                                            <Bell size={10} className="animate-pulse" /> Novo
-                                                        </div>
-                                                    )}
-
-                                                    <div className="flex items-start justify-between mb-4">
-                                                        <div className="p-3 bg-black/40 rounded-xl border border-gray-800 group-hover:bg-brand-900/20 group-hover:border-brand-500/30 transition-colors">
-                                                            {getFileIcon(file.fileType)}
-                                                        </div>
-                                                        <span className="text-[10px] font-mono text-gray-500 bg-gray-900 px-2 py-1 rounded border border-gray-800">
-                                                            {new Date(file.createdAt).toLocaleDateString()}
-                                                        </span>
+                                                <div className="flex items-start gap-4 mb-4">
+                                                    <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center border border-white/5 group-hover:border-red-500/30 transition-colors">
+                                                        {getFileIcon(file.fileType)}
                                                     </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h4 className="text-sm font-bold text-white leading-tight line-clamp-2 mb-1" title={file.title}>{file.title}</h4>
+                                                        <p className="text-[10px] text-gray-500 font-mono">{new Date(file.createdAt).toLocaleDateString()}</p>
+                                                    </div>
+                                                </div>
 
-                                                    <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 leading-tight" title={String(file.title || '')}>
-                                                        {String(file.title || '')}
-                                                    </h3>
-                                                    <p className="text-xs text-gray-400 mb-6 flex items-center gap-1">
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${file.teacherName === 'Coordenação' ? 'bg-blue-500' : 'bg-brand-500'}`}></span>
-                                                        {file.teacherName === 'Coordenação' ? 'Setor Coordenação' : `Prof. ${String(file.teacherName || '')}`}
-                                                    </p>
-
+                                                <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-5 h-5 rounded-full bg-gray-800 flex items-center justify-center text-[8px] font-black text-gray-400">
+                                                            {file.teacherName.charAt(0)}
+                                                        </div>
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate max-w-[100px]">{file.teacherName.split(' ')[0]}</span>
+                                                    </div>
+                                                    
                                                     <a 
                                                         href={file.fileUrl} 
                                                         target="_blank" 
                                                         rel="noopener noreferrer"
-                                                        className="flex items-center justify-center gap-2 w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+                                                        className="p-2 bg-white/5 hover:bg-red-600 hover:text-white text-gray-400 rounded-lg transition-all"
+                                                        title="Baixar"
                                                     >
-                                                        <Download size={18} /> Baixar Arquivo
+                                                        <Download size={16}/>
                                                     </a>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                         </>
-                     )}
-                </div>
-            )}
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {isLoading && (
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40">
+                        <div className="flex flex-col items-center">
+                            <div className="w-10 h-10 border-4 border-t-red-600 border-white/10 rounded-full animate-spin mb-4"></div>
+                            <p className="text-xs font-black text-white uppercase tracking-widest">Carregando...</p>
+                        </div>
+                    </div>
+                )}
+            </main>
         </div>
     );
 };
