@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
 import { Maximize2, Monitor, Volume2, VolumeX, Wifi, WifiOff, ArrowRight } from 'lucide-react';
-import { EFAI_CLASSES } from '../constants';
 
 // Sons para os alertas
 const SOUND_SHORT = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; // Ding discreto
@@ -21,15 +20,6 @@ const MORNING_SLOTS_EFAF: TimeSlot[] = [
     { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
 ];
 
-// Horários do Fundamental I (1º ao 5º)
-const MORNING_SLOTS_EFAI: TimeSlot[] = [
-    { id: 'm1', start: '07:30', end: '08:25', type: 'class', label: '1º Horário', shift: 'morning' },
-    { id: 'm2', start: '08:25', end: '09:20', type: 'class', label: '2º Horário', shift: 'morning' },
-    { id: 'mb1', start: '09:20', end: '09:40', type: 'break', label: 'INTERVALO', shift: 'morning' },
-    { id: 'm3', start: '09:40', end: '10:35', type: 'class', label: '3º Horário', shift: 'morning' },
-    { id: 'm4', start: '10:35', end: '11:30', type: 'class', label: '4º Horário', shift: 'morning' },
-];
-
 // Horários do Ensino Médio
 const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a1', start: '13:00', end: '13:50', type: 'class', label: '1º Horário', shift: 'afternoon' },
@@ -43,21 +33,15 @@ const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
 ];
 
-// Gerar lista de IDs compatíveis
-const EFAI_CLASSES_LIST = EFAI_CLASSES.map(c => ({
-    id: c.toLowerCase().replace(/[^a-z0-9]/g, ''),
-    name: c,
-    type: 'EFAI'
-}));
-
+// Lista de Turmas do Fundamental II (Manhã)
 const MORNING_CLASSES = [
-    ...EFAI_CLASSES_LIST,
     { id: '6efaf', name: '6º EFAF', type: 'EFAF' },
     { id: '7efaf', name: '7º EFAF', type: 'EFAF' },
     { id: '8efaf', name: '8º EFAF', type: 'EFAF' },
     { id: '9efaf', name: '9º EFAF', type: 'EFAF' },
 ];
 
+// Lista de Turmas do Ensino Médio (Tarde)
 const AFTERNOON_CLASSES = [
     { id: '1em', name: '1ª SÉRIE EM', type: 'EM' },
     { id: '2em', name: '2ª SÉRIE EM', type: 'EM' },
@@ -79,8 +63,8 @@ export const PublicSchedule: React.FC = () => {
     
     // Audio
     const [audioEnabled, setAudioEnabled] = useState(true);
-    // Armazena o ID do slot atual para cada TIPO de horário (EFAI, EFAF, EM) para evitar conflitos de alarme
-    const lastSlotsRef = useRef<{EFAI: string|null, EFAF: string|null, EM: string|null}>({ EFAI: null, EFAF: null, EM: null });
+    // Armazena o ID do slot atual para cada TIPO de horário
+    const lastSlotsRef = useRef<{EFAF: string|null, EM: string|null}>({ EFAF: null, EM: null });
     const audioShortRef = useRef<HTMLAudioElement | null>(null);
     const audioLongRef = useRef<HTMLAudioElement | null>(null);
 
@@ -118,14 +102,14 @@ export const PublicSchedule: React.FC = () => {
         const totalMinutes = now.getHours() * 60 + now.getMinutes();
         const seconds = now.getSeconds();
         
-        // Determinar Turno Geral (para exibir as turmas corretas)
+        // Determinar Turno Geral
         let newShift: 'morning' | 'afternoon' | 'off' = 'morning';
         if (totalMinutes >= 420 && totalMinutes <= 750) newShift = 'morning'; // 07:00 - 12:30
         else if (totalMinutes >= 780 && totalMinutes <= 1260) newShift = 'afternoon'; // 13:00 - 21:00
         setCurrentShift(newShift);
 
         // Função para verificar mudança de slot em um grupo de horários
-        const checkSlotChange = (slots: TimeSlot[], type: 'EFAI' | 'EFAF' | 'EM') => {
+        const checkSlotChange = (slots: TimeSlot[], type: 'EFAF' | 'EM') => {
             const currentSlot = slots.find(s => {
                 const [hS, mS] = s.start.split(':').map(Number);
                 const [hE, mE] = s.end.split(':').map(Number);
@@ -138,7 +122,6 @@ export const PublicSchedule: React.FC = () => {
             const lastId = lastSlotsRef.current[type];
 
             if (lastId !== null && lastId !== currentId && audioEnabled) {
-                // Tocar som apenas se não tocou recentemente (evita flood se EFAI e EFAF trocarem quase juntos)
                 console.log(`[ALARM ${type}] Change from ${lastId} to ${currentId}`);
                 
                 const prevSlot = slots.find(s => s.id === lastId);
@@ -154,10 +137,9 @@ export const PublicSchedule: React.FC = () => {
             lastSlotsRef.current[type] = currentId;
         };
 
-        // Verifica alarmes para todos os tipos relevantes no turno atual
-        if (seconds === 0 || lastSlotsRef.current.EFAF === null) { // Checa a cada minuto ou na inicialização
+        // Verifica alarmes para o turno atual
+        if (seconds === 0 || lastSlotsRef.current.EFAF === null) { 
             if (newShift === 'morning') {
-                checkSlotChange(MORNING_SLOTS_EFAI, 'EFAI');
                 checkSlotChange(MORNING_SLOTS_EFAF, 'EFAF');
             } else if (newShift === 'afternoon') {
                 checkSlotChange(AFTERNOON_SLOTS, 'EM');
@@ -246,10 +228,11 @@ export const PublicSchedule: React.FC = () => {
                 <div className="grid h-full max-h-[60vh] gap-4" style={{ gridTemplateColumns: `repeat(${Math.ceil(currentClasses.length / 2)}, 1fr)` }}>
                     <div className="contents">
                          {currentClasses.map(cls => {
-                            // 1. Determina qual grade de horários usar para esta turma específica
+                            // 1. Determina qual grade de horários usar
+                            // Manhã = EFAF (Fund II), Tarde = EM (Médio)
                             let slots: TimeSlot[] = [];
                             if (currentShift === 'morning') {
-                                slots = cls.type === 'EFAI' ? MORNING_SLOTS_EFAI : MORNING_SLOTS_EFAF;
+                                slots = MORNING_SLOTS_EFAF;
                             } else {
                                 slots = AFTERNOON_SLOTS;
                             }
