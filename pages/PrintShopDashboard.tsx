@@ -33,7 +33,7 @@ import { Button } from '../components/Button';
 import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 import { GenneraSyncPanel } from './GenneraSyncPanel';
 
-// --- CONFIGURAÇÃO DE HORÁRIOS (Espelhado do PublicSchedule) ---
+// --- CONFIGURAÇÃO DE HORÁRIOS ---
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
     { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
@@ -43,6 +43,7 @@ const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
 ];
 
+// EFAI tem horários levemente diferentes, mas usamos os IDs base para simplificar a TV
 const MORNING_SLOTS_EFAI: TimeSlot[] = [
     { id: 'm1', start: '07:30', end: '08:25', type: 'class', label: '1º Horário', shift: 'morning' },
     { id: 'm2', start: '08:25', end: '09:20', type: 'class', label: '2º Horário', shift: 'morning' },
@@ -63,10 +64,14 @@ const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
 ];
 
-const EFAI_CLASSES_LIST = EFAI_CLASSES.map(c => ({
-    id: c.toLowerCase().replace(/[^a-z0-9]/g, ''),
-    name: c
-}));
+// LISTAS DE TURMAS COM IDS NORMALIZADOS PARA SINCRONIA
+const EFAI_CLASSES_LIST = [
+    { id: '1anoefai', name: '1º EFAI' },
+    { id: '2anoefai', name: '2º EFAI' },
+    { id: '3anoefai', name: '3º EFAI' },
+    { id: '4anoefai', name: '4º EFAI' },
+    { id: '5anoefai', name: '5º EFAI' },
+];
 
 const MORNING_CLASSES_LIST = [
     { id: '6efaf', name: '6º EFAF' },
