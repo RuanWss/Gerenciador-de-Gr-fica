@@ -263,11 +263,10 @@ export interface InfantilReport {
 // Added missing interfaces to resolve firebaseService and HRDashboard errors
 export interface AnswerKey {
   id: string;
-  examId: string;
+  title: string;
   teacherId: string;
-  subject: string;
   createdAt: number;
-  questions: any[];
+  questions: { number: number; correctOption: string; subject?: string }[];
 }
 
 export interface StudentCorrection {
