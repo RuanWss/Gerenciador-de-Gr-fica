@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { DatabaseZap, RefreshCw, AlertCircle, CheckCircle2, History, Settings, Info, Loader2, Users, School, Clock } from 'lucide-react';
+import { Database, RefreshCw, AlertCircle, CheckCircle2, History, Settings, Info, Loader2, Users, School, Clock } from 'lucide-react';
 import { Button } from '../components/Button';
 import { syncAllDataWithGennera, getStudents } from '../services/firebaseService';
 import { Student } from '../types';
@@ -63,7 +63,7 @@ export const GenneraSyncPanel: React.FC = () => {
             <header className="mb-12">
                 <div className="flex items-center gap-6 mb-4">
                     <div className="h-20 w-20 bg-blue-600/20 text-blue-500 rounded-[2rem] border border-blue-500/20 flex items-center justify-center shadow-2xl shadow-blue-900/20">
-                        <DatabaseZap size={40} />
+                        <Database size={40} />
                     </div>
                     <div>
                         <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Integração Gennera ERP</h1>
