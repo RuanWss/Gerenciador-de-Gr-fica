@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { listenToStudents, updateStudent, uploadReportFile, getAllPEIs } from '../services/firebaseService';
-import { Student, PEIDocument } from '../types';
+import { listenToStudents, updateStudent, uploadReportFile, getAllPEIs, listenToAEEAppointments, saveAEEAppointment, deleteAEEAppointment } from '../services/firebaseService';
+import { Student, PEIDocument, AEEAppointment } from '../types';
 import { Button } from '../components/Button';
 import { 
     Users, Search, Edit3, X, Save, FileText, UploadCloud, 
     CheckCircle, ShieldAlert, Heart, FileCheck, ExternalLink, School, Eye, List,
-    Phone, UserCircle, MessageSquare
+    Phone, UserCircle, MessageSquare, AlertTriangle, Star, Plus, Calendar, ChevronLeft, ChevronRight, Trash2, Clock
 } from 'lucide-react';
 
 const DISORDERS = [
@@ -19,17 +19,32 @@ const DISORDERS = [
     "Deficiência Física",
     "Altas Habilidades/Superdotação",
     "Transtorno de Aprendizagem",
+    "TOD (Transtorno Opositor Desafiador)",
+    "Síndrome de Down",
+    "Paralisia Cerebral",
     "Outros"
 ];
 
+const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
 export const AEEDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'students' | 'pei_reports'>('students');
+    const [activeTab, setActiveTab] = useState<'students' | 'pei_reports' | 'agenda'>('students');
     const [students, setStudents] = useState<Student[]>([]);
     const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
     const [search, setSearch] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     
+    // Agenda State
+    const [appointments, setAppointments] = useState<AEEAppointment[]>([]);
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+    const [newAppointment, setNewAppointment] = useState<Partial<AEEAppointment>>({
+        time: '08:00',
+        period: 'Manhã'
+    });
+
     // Edit Modal (Students)
     const [showEdit, setShowEdit] = useState(false);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -44,8 +59,11 @@ export const AEEDashboard: React.FC = () => {
             // EXIBIR APENAS ALUNOS MARCADOS COMO AEE
             setStudents(data.filter(s => s.isAEE));
         });
+        const unsubAppointments = listenToAEEAppointments((data) => {
+            setAppointments(data);
+        });
         fetchPeis();
-        return () => unsub();
+        return () => { unsub(); unsubAppointments(); };
     }, []);
 
     const fetchPeis = async () => {
@@ -71,8 +89,10 @@ export const AEEDashboard: React.FC = () => {
                 fatherName: selectedStudent.fatherName || '',
                 motherName: selectedStudent.motherName || '',
                 contacts: selectedStudent.contacts || '',
-                coordinationOpinion: selectedStudent.coordinationOpinion || '',
-                disorder: selectedStudent.disorder || ''
+                skills: selectedStudent.skills || '',
+                weaknesses: selectedStudent.weaknesses || '',
+                disorder: selectedStudent.disorder || '',
+                disorders: selectedStudent.disorders || []
             };
 
             await updateStudent(studentToUpdate);
@@ -87,6 +107,40 @@ export const AEEDashboard: React.FC = () => {
         }
     };
 
+    // Calendar Helpers
+    const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+    const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+    const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+    const handleSaveAppointment = async () => {
+        if (!newAppointment.studentId || !newAppointment.date || !newAppointment.time) return alert("Preencha todos os campos");
+        
+        const student = students.find(s => s.id === newAppointment.studentId);
+        
+        const appointment: AEEAppointment = {
+            id: '',
+            studentId: newAppointment.studentId,
+            studentName: student?.name || '',
+            date: newAppointment.date,
+            time: newAppointment.time,
+            period: newAppointment.period || 'Manhã',
+            description: newAppointment.description || '',
+            createdAt: Date.now()
+        };
+
+        await saveAEEAppointment(appointment);
+        setShowAppointmentModal(false);
+        setNewAppointment({ time: '08:00', period: 'Manhã' });
+    };
+
+    const handleDeleteAppointment = async (id: string) => {
+        if (confirm("Cancelar este agendamento?")) {
+            await deleteAEEAppointment(id);
+        }
+    };
+
     const filteredStudents = students.filter(s => 
         String(s.name || '').toLowerCase().includes(search.toLowerCase()) || 
         String(s.className || '').toLowerCase().includes(search.toLowerCase())
@@ -97,6 +151,19 @@ export const AEEDashboard: React.FC = () => {
         String(p.teacherName || '').toLowerCase().includes(search.toLowerCase()) ||
         String(p.subject || '').toLowerCase().includes(search.toLowerCase())
     );
+
+    // Render Calendar
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysCount = getDaysInMonth(year, month);
+    const startDay = getFirstDayOfMonth(year, month);
+    const monthName = currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    const calendarDays = [];
+    for (let i = 0; i < startDay; i++) calendarDays.push(null);
+    for (let i = 1; i <= daysCount; i++) calendarDays.push(i);
+
+    const dayAppointments = appointments.filter(a => a.date === selectedDate).sort((a,b) => a.time.localeCompare(b.time));
 
     return (
         <div className="flex flex-col h-full animate-in fade-in duration-500">
@@ -111,63 +178,188 @@ export const AEEDashboard: React.FC = () => {
                     <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 mr-4">
                         <button onClick={() => setActiveTab('students')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'students' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Fila de Atendimento</button>
                         <button onClick={() => { setActiveTab('pei_reports'); fetchPeis(); }} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'pei_reports' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Relatórios PEI</button>
+                        <button onClick={() => setActiveTab('agenda')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'agenda' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Agenda</button>
                     </div>
-                    <div className="relative w-full md:w-80">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                        <input 
-                            className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-red-600 outline-none transition-all"
-                            placeholder="Buscar aluno inclusive..."
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                        />
-                    </div>
+                    {activeTab !== 'agenda' && (
+                        <div className="relative w-full md:w-80">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                            <input 
+                                className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-red-600 outline-none transition-all"
+                                placeholder="Buscar aluno inclusive..."
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                            />
+                        </div>
+                    )}
                 </div>
             </header>
 
-            {activeTab === 'students' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in slide-in-from-right-4">
-                    {filteredStudents.map(student => (
-                        <div key={student.id} className="bg-[#18181b] border-2 rounded-3xl p-6 transition-all group relative overflow-hidden border-red-600/50 shadow-lg shadow-red-900/10">
-                            <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">AEE</div>
-                            <div className="flex items-center gap-4 mb-6">
-                                <div className="h-14 w-14 rounded-2xl bg-gray-900 border border-gray-800 overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
-                                    {student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover"/> : <Users className="p-3 text-gray-700 w-full h-full"/>}
+            {activeTab === 'agenda' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4">
+                    {/* CALENDAR COLUMN */}
+                    <div className="lg:col-span-2 bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-xl">
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                <Calendar className="text-red-500" size={28}/> Agenda de Atendimentos
+                            </h2>
+                            <div className="flex items-center gap-4 bg-black/40 p-2 rounded-xl border border-white/5">
+                                <button onClick={handlePrevMonth} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white"><ChevronLeft size={20}/></button>
+                                <span className="text-sm font-black text-white uppercase tracking-widest min-w-[140px] text-center">{monthName}</span>
+                                <button onClick={handleNextMonth} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white"><ChevronRight size={20}/></button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-7 gap-4 mb-4">
+                            {DAYS_OF_WEEK.map(d => (
+                                <div key={d} className="text-center text-xs font-black text-gray-500 uppercase tracking-widest">{d}</div>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-7 gap-4">
+                            {calendarDays.map((day, idx) => {
+                                if (!day) return <div key={idx} className="h-24 md:h-32"></div>;
+                                
+                                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                const isSelected = selectedDate === dateStr;
+                                const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+                                const dayApps = appointments.filter(a => a.date === dateStr);
+                                const hasApps = dayApps.length > 0;
+
+                                return (
+                                    <div 
+                                        key={idx}
+                                        onClick={() => setSelectedDate(dateStr)}
+                                        className={`h-24 md:h-32 rounded-2xl border flex flex-col items-center justify-start p-3 cursor-pointer transition-all relative group ${
+                                            isSelected 
+                                            ? 'bg-red-600 border-red-500 text-white shadow-lg scale-105 z-10' 
+                                            : 'bg-black/20 border-white/5 text-gray-400 hover:bg-white/5 hover:border-white/10'
+                                        }`}
+                                    >
+                                        <span className={`text-sm font-black ${isSelected ? 'text-white' : (isToday ? 'text-red-500' : 'text-gray-500')}`}>{day}</span>
+                                        {hasApps && (
+                                            <div className="mt-2 flex flex-col gap-1 w-full">
+                                                {dayApps.slice(0, 3).map((app, i) => (
+                                                    <div key={i} className={`h-1.5 rounded-full w-full ${isSelected ? 'bg-white/40' : 'bg-red-500/40'}`}></div>
+                                                ))}
+                                                {dayApps.length > 3 && <div className={`h-1.5 w-1.5 rounded-full mx-auto ${isSelected ? 'bg-white' : 'bg-gray-500'}`}></div>}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* DETAILS COLUMN */}
+                    <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-xl flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight">
+                                    {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}
+                                </h3>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })}</p>
+                            </div>
+                            <Button onClick={() => { setNewAppointment({ ...newAppointment, date: selectedDate }); setShowAppointmentModal(true); }} className="h-12 w-12 rounded-full bg-red-600 flex items-center justify-center p-0 shadow-lg shadow-red-900/40">
+                                <Plus size={24} />
+                            </Button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2">
+                            {dayAppointments.length > 0 ? dayAppointments.map(app => (
+                                <div key={app.id} className="bg-black/20 border border-white/5 p-4 rounded-2xl group hover:border-red-500/30 transition-all relative">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className="text-xl font-black text-red-500 flex items-center gap-2">
+                                            {app.time} <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-0.5 rounded border border-white/5 font-bold uppercase tracking-widest">{app.period}</span>
+                                        </span>
+                                        <button onClick={() => handleDeleteAppointment(app.id)} className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
+                                    </div>
+                                    <h4 className="font-bold text-white text-sm uppercase tracking-tight mb-1">{app.studentName}</h4>
+                                    {app.description && <p className="text-xs text-gray-400 italic">"{app.description}"</p>}
                                 </div>
-                                <div className="overflow-hidden">
-                                    <h3 className="font-bold text-white truncate text-lg leading-tight">{String(student.name || '')}</h3>
-                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{String(student.className || '')}</p>
+                            )) : (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50">
+                                    <Clock size={48} className="mb-4"/>
+                                    <p className="text-xs font-black uppercase tracking-widest text-center">Sem atendimentos</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'students' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4">
+                    {filteredStudents.map(student => (
+                        <div key={student.id} className="bg-[#18181b] border-2 border-white/5 rounded-[2.5rem] p-8 shadow-xl relative overflow-hidden group hover:border-red-600/30 transition-all flex flex-col">
+                            <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest shadow-lg">AEE</div>
+                            
+                            {/* PHOTO & HEADER */}
+                            <div className="flex items-center gap-6 mb-8">
+                                <div className="h-28 w-28 rounded-[1.5rem] bg-gray-900 border-2 border-white/10 overflow-hidden shrink-0 group-hover:scale-105 transition-transform shadow-2xl relative">
+                                    {student.photoUrl ? (
+                                        <img src={student.photoUrl} className="w-full h-full object-cover"/>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-black">
+                                            <Users className="text-gray-600" size={32}/>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="font-black text-white text-2xl uppercase tracking-tight leading-none mb-2 line-clamp-2">{String(student.name || '')}</h3>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest bg-white/5 inline-block px-3 py-1 rounded-lg">{String(student.className || '')}</p>
                                 </div>
                             </div>
 
-                            <div className="space-y-3 mb-6">
-                                <div className="bg-red-900/10 p-3 rounded-xl border border-red-900/20">
-                                    <span className="block text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Diagnóstico</span>
-                                    <p className="text-sm font-bold text-red-100">{student.disorder || 'Não informado'}</p>
+                            <div className="space-y-4 mb-8 flex-1">
+                                {/* DIAGNOSIS */}
+                                <div className="bg-red-950/20 p-5 rounded-2xl border border-red-900/30 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
+                                    <span className="block text-[9px] font-black text-red-500 uppercase tracking-[0.2em] mb-1">Diagnóstico(s)</span>
+                                    <div className="flex flex-wrap gap-1">
+                                        {(student.disorders && student.disorders.length > 0) ? (
+                                            student.disorders.map((d, i) => (
+                                                <span key={i} className="text-sm font-black text-white uppercase tracking-tight leading-tight block w-full">• {d}</span>
+                                            ))
+                                        ) : (
+                                            <p className="text-lg font-black text-white uppercase tracking-tight leading-tight">{student.disorder || 'Não informado'}</p>
+                                        )}
+                                    </div>
                                 </div>
                                 
-                                {student.motherName && (
-                                    <div className="flex items-center gap-2 text-xs text-gray-400">
-                                        <UserCircle size={14} className="text-gray-600"/>
-                                        <span className="truncate"><b>Mãe:</b> {String(student.motherName || '')}</span>
+                                {/* SKILLS & WEAKNESSES */}
+                                <div className="grid grid-cols-1 gap-4">
+                                    <div className="bg-emerald-950/20 p-5 rounded-2xl border border-emerald-900/30 relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                                        <span className="block text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-2">Habilidades</span>
+                                        <p className="text-xs font-medium text-gray-300 leading-relaxed">
+                                            {student.skills || 'Não registrado.'}
+                                        </p>
                                     </div>
-                                )}
+                                    <div className="bg-amber-950/20 p-5 rounded-2xl border border-amber-900/30 relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                                        <span className="block text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] mb-2">Fragilidades</span>
+                                        <p className="text-xs font-medium text-gray-300 leading-relaxed">
+                                            {student.weaknesses || 'Não registrado.'}
+                                        </p>
+                                    </div>
+                                </div>
 
+                                {/* LAUDO STATUS */}
                                 {student.reportUrl ? (
-                                    <a href={student.reportUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs font-black text-blue-400 hover:text-blue-300 transition-colors bg-blue-400/10 p-2 rounded-lg justify-center border border-blue-400/20">
-                                        <FileCheck size={14}/> VER LAUDO MÉDICO
+                                    <a href={student.reportUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 text-[10px] font-black text-green-400 uppercase tracking-widest bg-green-900/10 p-4 rounded-xl border border-green-900/20 hover:bg-green-900/20 transition-all">
+                                        <FileCheck size={16}/> Laudo Digital Disponível
                                     </a>
                                 ) : (
-                                    <div className="text-[10px] font-bold text-orange-500 bg-orange-500/10 p-2 rounded-lg text-center border border-orange-500/20">
-                                        <ShieldAlert size={12} className="inline mr-1"/> LAUDO PENDENTE
+                                    <div className="flex items-center justify-center gap-2 text-[10px] font-black text-orange-500 uppercase tracking-widest bg-orange-900/10 p-4 rounded-xl border border-orange-900/20">
+                                        <ShieldAlert size={16}/> Laudo Pendente
                                     </div>
                                 )}
                             </div>
 
                             <button 
                                 onClick={() => { setSelectedStudent(student); setShowEdit(true); }}
-                                className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-900/20 uppercase text-xs tracking-widest"
+                                className="w-full py-5 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-red-900/30 uppercase text-xs tracking-[0.15em] hover:scale-[1.02]"
                             >
-                                <Edit3 size={16}/> Abrir Prontuário
+                                <Edit3 size={18}/> Abrir Prontuário
                             </button>
                         </div>
                     ))}
@@ -219,6 +411,77 @@ export const AEEDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* APPOINTMENT MODAL */}
+            {showAppointmentModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Novo Agendamento</h3>
+                            <button onClick={() => setShowAppointmentModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
+                        </div>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Aluno AEE</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                    value={newAppointment.studentId}
+                                    onChange={e => setNewAppointment({...newAppointment, studentId: e.target.value})}
+                                >
+                                    <option value="">Selecione o Aluno...</option>
+                                    {students.filter(s => s.isAEE).map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Data</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600"
+                                        value={newAppointment.date}
+                                        onChange={e => setNewAppointment({...newAppointment, date: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Horário</label>
+                                    <input 
+                                        type="time" 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600"
+                                        value={newAppointment.time}
+                                        onChange={e => setNewAppointment({...newAppointment, time: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Período</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                    value={newAppointment.period}
+                                    onChange={e => setNewAppointment({...newAppointment, period: e.target.value as any})}
+                                >
+                                    <option value="Manhã">Manhã</option>
+                                    <option value="Tarde">Tarde</option>
+                                    <option value="Contraturno">Contraturno</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Descrição / Observações</label>
+                                <textarea 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[100px]"
+                                    placeholder="Detalhes do atendimento..."
+                                    value={newAppointment.description}
+                                    onChange={e => setNewAppointment({...newAppointment, description: e.target.value})}
+                                />
+                            </div>
+                            <Button onClick={handleSaveAppointment} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20">
+                                Confirmar Agendamento
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* EDIT MODAL (PRONTUÁRIO COMPLETO AEE) */}
             {showEdit && selectedStudent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
@@ -231,7 +494,7 @@ export const AEEDashboard: React.FC = () => {
                             <button onClick={() => setShowEdit(false)} className="text-gray-400 hover:text-gray-900 transition-colors"><X size={32}/></button>
                         </div>
                         
-                        <form onSubmit={handleSave} className="p-8 space-y-6 overflow-y-auto flex-1">
+                        <form onSubmit={handleSave} className="p-8 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
                             {/* SEÇÃO 1: DADOS FAMILIARES */}
                             <div className="bg-gray-50 p-6 rounded-3xl border border-gray-200">
                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -257,32 +520,79 @@ export const AEEDashboard: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* SEÇÃO 2: PARECER DA COORDENAÇÃO */}
-                            <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
-                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <MessageSquare size={14}/> Parecer da Coordenação do AEE
-                                </h4>
-                                <textarea 
-                                    rows={4} 
-                                    className="w-full border-2 border-blue-200 rounded-xl p-4 text-sm focus:border-blue-500 outline-none bg-white font-medium text-gray-900" 
-                                    value={selectedStudent.coordinationOpinion || ''} 
-                                    onChange={e => setSelectedStudent({...selectedStudent, coordinationOpinion: e.target.value})} 
-                                    placeholder="Descreva aqui o parecer técnico e orientações da coordenação sobre este aluno..."
-                                />
+                            {/* SEÇÃO 2: HABILIDADES E FRAGILIDADES */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
+                                    <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <Star size={14}/> Habilidades (Pontos Fortes)
+                                    </h4>
+                                    <textarea 
+                                        rows={4} 
+                                        className="w-full border-2 border-emerald-200 rounded-xl p-4 text-sm focus:border-emerald-500 outline-none bg-white font-medium text-gray-900" 
+                                        value={selectedStudent.skills || ''} 
+                                        onChange={e => setSelectedStudent({...selectedStudent, skills: e.target.value})} 
+                                        placeholder="Descreva as habilidades e facilidades do aluno..."
+                                    />
+                                </div>
+                                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100">
+                                    <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <AlertTriangle size={14}/> Fragilidades (Dificuldades)
+                                    </h4>
+                                    <textarea 
+                                        rows={4} 
+                                        className="w-full border-2 border-amber-200 rounded-xl p-4 text-sm focus:border-amber-500 outline-none bg-white font-medium text-gray-900" 
+                                        value={selectedStudent.weaknesses || ''} 
+                                        onChange={e => setSelectedStudent({...selectedStudent, weaknesses: e.target.value})} 
+                                        placeholder="Descreva as dificuldades e pontos de atenção..."
+                                    />
+                                </div>
                             </div>
 
-                            {/* SEÇÃO 3: DADOS TÉCNICOS */}
-                            <div className="space-y-6">
+                            {/* SEÇÃO 3: DADOS TÉCNICOS E COMORBIDADES */}
+                            <div className="space-y-6 bg-red-50 p-6 rounded-3xl border border-red-100">
+                                <h4 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-4">Transtornos e Comorbidades</h4>
                                 <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Transtorno ou Deficiência Principal</label>
-                                    <select className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors bg-white" value={selectedStudent.disorder || ''} onChange={e => setSelectedStudent({...selectedStudent, disorder: e.target.value})}>
-                                        <option value="">Selecione...</option>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Diagnósticos Adicionados</label>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {(selectedStudent.disorders || (selectedStudent.disorder ? [selectedStudent.disorder] : [])).map((d, i) => (
+                                            <div key={i} className="flex items-center gap-2 bg-white border-2 border-red-100 px-4 py-2 rounded-xl">
+                                                <span className="text-xs font-bold text-gray-700 uppercase">{d}</span>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => {
+                                                        const current = selectedStudent.disorders || (selectedStudent.disorder ? [selectedStudent.disorder] : []);
+                                                        const updated = current.filter(item => item !== d);
+                                                        setSelectedStudent({ ...selectedStudent, disorders: updated, disorder: updated[0] || '' });
+                                                    }} 
+                                                    className="text-red-400 hover:text-red-600"
+                                                >
+                                                    <X size={14}/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    <select 
+                                        className="w-full border-2 border-gray-100 rounded-2xl p-4 text-gray-800 font-bold outline-none focus:border-red-600 transition-colors bg-white cursor-pointer" 
+                                        value="" 
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            if (!val) return;
+                                            const current = selectedStudent.disorders || (selectedStudent.disorder ? [selectedStudent.disorder] : []);
+                                            if (!current.includes(val)) {
+                                                const updated = [...current, val];
+                                                setSelectedStudent({ ...selectedStudent, disorders: updated, disorder: updated[0] });
+                                            }
+                                        }}
+                                    >
+                                        <option value="">+ Adicionar Diagnóstico...</option>
                                         {DISORDERS.map(d => <option key={d} value={d}>{d}</option>)}
                                     </select>
                                 </div>
+                                
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Laudo Médico Atualizado (PDF)</label>
-                                    <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:bg-gray-50 transition-colors relative">
+                                    <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:bg-gray-50 transition-colors relative bg-white">
                                         <input type="file" accept="application/pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files && setReportFile(e.target.files[0])}/>
                                         {reportFile ? (<div className="text-green-600 flex flex-col items-center"><FileCheck size={40} className="mb-2"/><span className="font-bold">{reportFile.name}</span></div>) : (<div className="text-gray-400 flex flex-col items-center"><UploadCloud size={40} className="mb-2"/><span className="font-bold">Anexar Laudo Digital</span><span className="text-[10px]">Apenas arquivos PDF</span></div>)}
                                     </div>

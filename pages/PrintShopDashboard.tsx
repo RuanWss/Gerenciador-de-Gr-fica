@@ -12,11 +12,14 @@ import {
     listenToStaffMembers,
     listenToAttendanceLogs,
     listenToOccurrences,
-    listenToStudents, // ADDED: Real-time listener
-    listenToExams, // ADDED: Real-time listener
+    listenToStudents,
+    listenToExams,
     updateStudent,
     deleteStudent,
-    uploadStudentPhoto
+    uploadStudentPhoto,
+    listenToAEEAppointments,
+    saveAEEAppointment,
+    deleteAEEAppointment
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -27,12 +30,13 @@ import {
     TimeSlot,
     StaffMember,
     AttendanceLog,
-    StudentOccurrence
+    StudentOccurrence,
+    AEEAppointment
 } from '../types';
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
     ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
-    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio, BookOpen, AlertTriangle, Camera, User
+    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio, BookOpen, AlertTriangle, Camera, User, Calendar, Heart, Plus, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -90,6 +94,8 @@ const AFTERNOON_CLASSES_LIST = [
     { id: '3em', name: '3ª SÉRIE EM' },
 ];
 
+const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
 const StatCard: React.FC<{ title: string; value: number; icon: React.ElementType; color: string }> = ({ title, value, icon: Icon, color }) => (
     <div className="bg-[#18181b] border border-white/5 p-6 rounded-[2rem] shadow-lg flex items-center gap-6">
         <div className={`h-16 w-16 rounded-2xl flex items-center justify-center ${color}/20 text-${color}`}>
@@ -121,7 +127,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 };
 
 export const PrintShopDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'sync' | 'schedule' | 'config' | 'occurrences'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'sync' | 'schedule' | 'config' | 'occurrences' | 'aee_agenda'>('exams');
     const [isLoading, setIsLoading] = useState(false);
 
     // Data States
@@ -134,6 +140,7 @@ export const PrintShopDashboard: React.FC = () => {
     const [selectedClassFilter, setSelectedClassFilter] = useState<string | null>(null);
     const [occurrences, setOccurrences] = useState<StudentOccurrence[]>([]);
     const [occurrenceSearch, setOccurrenceSearch] = useState('');
+    const [aeeAppointments, setAeeAppointments] = useState<AEEAppointment[]>([]);
     
     // Config States
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
@@ -154,6 +161,15 @@ export const PrintShopDashboard: React.FC = () => {
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [studentPhoto, setStudentPhoto] = useState<File | null>(null);
     const [isSavingStudent, setIsSavingStudent] = useState(false);
+
+    // AEE Agenda State
+    const [currentDateAEE, setCurrentDateAEE] = useState(new Date());
+    const [selectedDateAEE, setSelectedDateAEE] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+    const [newAppointment, setNewAppointment] = useState<Partial<AEEAppointment>>({
+        time: '08:00',
+        period: 'Manhã'
+    });
 
     useEffect(() => {
         setIsLoading(true);
@@ -178,6 +194,7 @@ export const PrintShopDashboard: React.FC = () => {
         const unsubSchedule = listenToSchedule(setSchedule);
         const unsubStaff = listenToStaffMembers(setStaffList);
         const unsubOccurrences = listenToOccurrences(setOccurrences);
+        const unsubAEE = listenToAEEAppointments(setAeeAppointments);
 
         // Listen to today's attendance
         const today = new Date().toISOString().split('T')[0];
@@ -193,6 +210,7 @@ export const PrintShopDashboard: React.FC = () => {
             unsubStaff(); 
             unsubAttendance(); 
             unsubOccurrences(); 
+            unsubAEE();
         };
     }, []);
 
@@ -294,6 +312,41 @@ export const PrintShopDashboard: React.FC = () => {
         }
     };
 
+    // AEE Agenda Handlers
+    const handleSaveAppointment = async () => {
+        if (!newAppointment.studentId || !newAppointment.date || !newAppointment.time) return alert("Preencha todos os campos");
+        
+        const student = students.find(s => s.id === newAppointment.studentId);
+        
+        const appointment: AEEAppointment = {
+            id: '',
+            studentId: newAppointment.studentId || '',
+            studentName: student?.name || '',
+            date: newAppointment.date || '',
+            time: newAppointment.time || '',
+            period: newAppointment.period || 'Manhã',
+            description: newAppointment.description || '',
+            createdAt: Date.now()
+        };
+
+        await saveAEEAppointment(appointment);
+        setShowAppointmentModal(false);
+        setNewAppointment({ time: '08:00', period: 'Manhã' });
+    };
+
+    const handleDeleteAppointment = async (id: string) => {
+        if (confirm("Cancelar este agendamento?")) {
+            await deleteAEEAppointment(id);
+        }
+    };
+
+    // Calendar Helpers
+    const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+    const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+    const handlePrevMonthAEE = () => setCurrentDateAEE(new Date(currentDateAEE.getFullYear(), currentDateAEE.getMonth() - 1, 1));
+    const handleNextMonthAEE = () => setCurrentDateAEE(new Date(currentDateAEE.getFullYear(), currentDateAEE.getMonth() + 1, 1));
+
     const getScheduleEntry = (classId: string, slotId: string) => {
         return schedule.find(s => s.dayOfWeek === scheduleDay && s.classId === classId && s.slotId === slotId);
     };
@@ -338,6 +391,19 @@ export const PrintShopDashboard: React.FC = () => {
     const availableTeachers = staffList.filter(s => s.isTeacher).map(s => s.name).sort();
     const availableSubjects = scheduleLevel === 'EM' ? EM_SUBJECTS : EFAF_SUBJECTS;
 
+    // Calendar Calculations
+    const aeeYear = currentDateAEE.getFullYear();
+    const aeeMonth = currentDateAEE.getMonth();
+    const aeeDaysCount = getDaysInMonth(aeeYear, aeeMonth);
+    const aeeStartDay = getFirstDayOfMonth(aeeYear, aeeMonth);
+    const aeeMonthName = currentDateAEE.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+    const aeeCalendarDays = [];
+    for (let i = 0; i < aeeStartDay; i++) aeeCalendarDays.push(null);
+    for (let i = 1; i <= aeeDaysCount; i++) aeeCalendarDays.push(i);
+
+    const aeeDayAppointments = aeeAppointments.filter(a => a.date === selectedDateAEE).sort((a,b) => a.time.localeCompare(b.time));
+
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8">
             <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
@@ -345,6 +411,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-6 ml-2">Escola & Cópias</p>
                     <SidebarItem id="exams" label="Fila de Impressão" icon={Printer} />
                     <SidebarItem id="students" label="Base de Alunos" icon={Users} />
+                    <SidebarItem id="aee_agenda" label="Agenda AEE" icon={Calendar} />
                     <SidebarItem id="occurrences" label="Livro de Ocorrências" icon={BookOpen} />
                     <SidebarItem id="schedule" label="Gestão de Horários" icon={CalendarClock} />
                     <SidebarItem id="sync" label="Integração Gennera" icon={Database} />
@@ -354,6 +421,99 @@ export const PrintShopDashboard: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto p-12 bg-transparent custom-scrollbar">
                 
+                {/* --- AEE AGENDA TAB --- */}
+                {activeTab === 'aee_agenda' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4">
+                        {/* CALENDAR COLUMN */}
+                        <div className="lg:col-span-2 bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-xl">
+                            <div className="flex justify-between items-center mb-8">
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                    <Heart className="text-red-500" size={28}/> Agenda AEE
+                                </h2>
+                                <div className="flex items-center gap-4 bg-black/40 p-2 rounded-xl border border-white/5">
+                                    <button onClick={handlePrevMonthAEE} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white"><ChevronLeft size={20}/></button>
+                                    <span className="text-sm font-black text-white uppercase tracking-widest min-w-[140px] text-center">{aeeMonthName}</span>
+                                    <button onClick={handleNextMonthAEE} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white"><ChevronRight size={20}/></button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-7 gap-4 mb-4">
+                                {DAYS_OF_WEEK.map(d => (
+                                    <div key={d} className="text-center text-xs font-black text-gray-500 uppercase tracking-widest">{d}</div>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-7 gap-4">
+                                {aeeCalendarDays.map((day, idx) => {
+                                    if (!day) return <div key={idx} className="h-24 md:h-32"></div>;
+                                    
+                                    const dateStr = `${aeeYear}-${String(aeeMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                    const isSelected = selectedDateAEE === dateStr;
+                                    const isToday = new Date().toDateString() === new Date(aeeYear, aeeMonth, day).toDateString();
+                                    const dayApps = aeeAppointments.filter(a => a.date === dateStr);
+                                    const hasApps = dayApps.length > 0;
+
+                                    return (
+                                        <div 
+                                            key={idx}
+                                            onClick={() => setSelectedDateAEE(dateStr)}
+                                            className={`h-24 md:h-32 rounded-2xl border flex flex-col items-center justify-start p-3 cursor-pointer transition-all relative group ${
+                                                isSelected 
+                                                ? 'bg-red-600 border-red-500 text-white shadow-lg scale-105 z-10' 
+                                                : 'bg-black/20 border-white/5 text-gray-400 hover:bg-white/5 hover:border-white/10'
+                                            }`}
+                                        >
+                                            <span className={`text-sm font-black ${isSelected ? 'text-white' : (isToday ? 'text-red-500' : 'text-gray-500')}`}>{day}</span>
+                                            {hasApps && (
+                                                <div className="mt-2 flex flex-col gap-1 w-full">
+                                                    {dayApps.slice(0, 3).map((app, i) => (
+                                                        <div key={i} className={`h-1.5 rounded-full w-full ${isSelected ? 'bg-white/40' : 'bg-red-500/40'}`}></div>
+                                                    ))}
+                                                    {dayApps.length > 3 && <div className={`h-1.5 w-1.5 rounded-full mx-auto ${isSelected ? 'bg-white' : 'bg-gray-500'}`}></div>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* DETAILS COLUMN */}
+                        <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-xl flex flex-col h-[calc(100vh-140px)] lg:h-auto">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight">
+                                        {new Date(selectedDateAEE + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}
+                                    </h3>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">{new Date(selectedDateAEE + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })}</p>
+                                </div>
+                                <Button onClick={() => { setNewAppointment({ ...newAppointment, date: selectedDateAEE }); setShowAppointmentModal(true); }} className="h-12 w-12 rounded-full bg-red-600 flex items-center justify-center p-0 shadow-lg shadow-red-900/40">
+                                    <Plus size={24} />
+                                </Button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2">
+                                {aeeDayAppointments.length > 0 ? aeeDayAppointments.map(app => (
+                                    <div key={app.id} className="bg-black/20 border border-white/5 p-4 rounded-2xl group hover:border-red-500/30 transition-all relative">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className="text-xl font-black text-red-500 flex items-center gap-2">
+                                                {app.time} <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-0.5 rounded border border-white/5 font-bold uppercase tracking-widest">{app.period}</span>
+                                            </span>
+                                            <button onClick={() => handleDeleteAppointment(app.id)} className="text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
+                                        </div>
+                                        <h4 className="font-bold text-white text-sm uppercase tracking-tight mb-1">{app.studentName}</h4>
+                                        {app.description && <p className="text-xs text-gray-400 italic">"{app.description}"</p>}
+                                    </div>
+                                )) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50">
+                                        <Clock size={48} className="mb-4"/>
+                                        <p className="text-xs font-black uppercase tracking-widest text-center">Sem atendimentos</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* --- EXAMS TAB --- */}
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
@@ -638,6 +798,77 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* --- APPOINTMENT MODAL (AEE) --- */}
+            {showAppointmentModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Novo Agendamento</h3>
+                            <button onClick={() => setShowAppointmentModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
+                        </div>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Aluno AEE</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                    value={newAppointment.studentId}
+                                    onChange={e => setNewAppointment({...newAppointment, studentId: e.target.value})}
+                                >
+                                    <option value="">Selecione o Aluno...</option>
+                                    {students.filter(s => s.isAEE).map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Data</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600"
+                                        value={newAppointment.date}
+                                        onChange={e => setNewAppointment({...newAppointment, date: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Horário</label>
+                                    <input 
+                                        type="time" 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600"
+                                        value={newAppointment.time}
+                                        onChange={e => setNewAppointment({...newAppointment, time: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Período</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                    value={newAppointment.period}
+                                    onChange={e => setNewAppointment({...newAppointment, period: e.target.value as any})}
+                                >
+                                    <option value="Manhã">Manhã</option>
+                                    <option value="Tarde">Tarde</option>
+                                    <option value="Contraturno">Contraturno</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Descrição / Observações</label>
+                                <textarea 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[100px]"
+                                    placeholder="Detalhes do atendimento..."
+                                    value={newAppointment.description}
+                                    onChange={e => setNewAppointment({...newAppointment, description: e.target.value})}
+                                />
+                            </div>
+                            <Button onClick={handleSaveAppointment} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20">
+                                Confirmar Agendamento
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* --- STUDENT EDIT MODAL --- */}
             {showStudentModal && editingStudent && (

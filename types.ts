@@ -74,12 +74,15 @@ export interface Student {
   photoUrl?: string;
   isAEE?: boolean;
   disorder?: string; 
+  disorders?: string[];
   reportUrl?: string;
   contacts?: string; 
   pedagogicalResponsible?: string;
   fatherName?: string;
   motherName?: string;
   coordinationOpinion?: string;
+  skills?: string;
+  weaknesses?: string;
 }
 
 export interface StudentOccurrence {
@@ -294,5 +297,16 @@ export interface PedagogicalProject {
   teacherName: string;
   title: string;
   description: string;
+  createdAt: number;
+}
+
+export interface AEEAppointment {
+  id: string;
+  studentId: string;
+  studentName: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  period: 'Manhã' | 'Tarde' | 'Contraturno';
+  description?: string;
   createdAt: number;
 }

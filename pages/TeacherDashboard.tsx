@@ -27,7 +27,7 @@ import {
   BookOpen, Save, ArrowLeft, Heart, FileText, Eye, Clock, UploadCloud, ChevronRight,
   Target, BookOpenCheck, Calendar as CalendarIcon, ClipboardCheck,
   CheckCircle2, FileDown, FileType, Folder, UserCheck, UserX, ShieldCheck,
-  LayoutTemplate, Download
+  LayoutTemplate, Download, Users, Edit3
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES } from '../constants';
 
@@ -73,6 +73,17 @@ export const TeacherDashboard: React.FC = () => {
       studentId: '',
       category: 'indisciplina',
       description: ''
+  });
+
+  // PEI Creation State
+  const [showPeiModal, setShowPeiModal] = useState(false);
+  const [selectedStudentForPei, setSelectedStudentForPei] = useState<Student | null>(null);
+  const [peiData, setPeiData] = useState<Partial<PEIDocument>>({
+      period: '1º Bimestre',
+      essentialCompetencies: '',
+      selectedContents: '',
+      didacticResources: '',
+      evaluation: ''
   });
 
   useEffect(() => {
@@ -261,6 +272,47 @@ export const TeacherDashboard: React.FC = () => {
     }
   };
 
+  const handleOpenPeiModal = (student: Student) => {
+      setSelectedStudentForPei(student);
+      setPeiData({
+          period: '1º Bimestre',
+          essentialCompetencies: '',
+          selectedContents: '',
+          didacticResources: '',
+          evaluation: ''
+      });
+      setShowPeiModal(true);
+  };
+
+  const handleSavePei = async () => {
+      if (!selectedStudentForPei || !user) return;
+      setIsSaving(true);
+      try {
+          const peiDoc: PEIDocument = {
+              id: '', // Firestore will assign
+              studentId: selectedStudentForPei.id,
+              studentName: selectedStudentForPei.name,
+              teacherId: user.id,
+              teacherName: user.name,
+              subject: user.subject || 'Geral',
+              period: peiData.period || '1º Bimestre',
+              essentialCompetencies: peiData.essentialCompetencies || '',
+              selectedContents: peiData.selectedContents || '',
+              didacticResources: peiData.didacticResources || '',
+              evaluation: peiData.evaluation || '',
+              updatedAt: Date.now()
+          };
+          await savePEIDocument(peiDoc);
+          alert("Plano PEI salvo com sucesso!");
+          setShowPeiModal(false);
+      } catch (e) {
+          console.error(e);
+          alert("Erro ao salvar PEI.");
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
   const getExamStatusInfo = (status: ExamStatus): { text: string; className: string } => {
     switch (status) {
       case ExamStatus.PENDING:
@@ -336,6 +388,7 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* ... other tabs ... */}
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-4xl mx-auto space-y-8">
                     
@@ -404,6 +457,7 @@ export const TeacherDashboard: React.FC = () => {
 
             {activeTab === 'materials' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
+                    {/* ... materials content ... */}
                     <header className="mb-12">
                         <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Materiais de Aula</h1>
                         <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Compartilhe arquivos diretamente com os alunos</p>
@@ -522,6 +576,7 @@ export const TeacherDashboard: React.FC = () => {
 
             {activeTab === 'attendance' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto pb-40">
+                    {/* ... attendance content ... */}
                     <header className="mb-10">
                         <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Diário de Frequência</h1>
                         <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Controle de presença diária</p>
@@ -589,127 +644,178 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
-            {activeTab === 'occurrences' && (
-                <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto">
-                    {/* Header */}
-                    <header className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div>
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Ocorrências</h1>
-                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Registro de comportamento e observações</p>
-                        </div>
-                        <Button onClick={() => setShowOccurrenceModal(true)} className="bg-red-600 h-16 px-8 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
-                            <PlusCircle size={20} className="mr-2"/> Nova Ocorrência
-                        </Button>
+            {/* PEI TAB */}
+            {activeTab === 'pei' && (
+                <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
+                    <header className="mb-12">
+                        <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Alunos AEE & PEI</h1>
+                        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Acompanhamento de alunos com necessidades especiais</p>
                     </header>
 
-                    {/* List */}
-                    <div className="space-y-6">
-                        {teacherOccurrences.length === 0 ? (
-                            <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
-                                <AlertCircle size={48} className="mx-auto mb-4 text-gray-500" />
-                                <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhuma ocorrência registrada</p>
-                            </div>
-                        ) : (
-                            teacherOccurrences.map(occ => (
-                                <div key={occ.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl relative group hover:border-red-600/30 transition-all">
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                                        <div>
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                                    occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 
-                                                    occ.category === 'indisciplina' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 
-                                                    'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
-                                                }`}>
-                                                    {occ.category}
-                                                </span>
-                                                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">{new Date(occ.timestamp).toLocaleDateString()}</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {students.filter(s => s.isAEE).map(student => (
+                            <div key={student.id} className="bg-[#18181b] border-2 border-white/5 rounded-[2.5rem] p-8 shadow-xl relative overflow-hidden group hover:border-red-600/30 transition-all flex flex-col">
+                                <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest shadow-lg">AEE</div>
+                                
+                                {/* PHOTO & HEADER */}
+                                <div className="flex items-center gap-6 mb-8">
+                                     <div className="h-28 w-28 rounded-[1.5rem] bg-gray-900 border-2 border-white/10 overflow-hidden shrink-0 relative">
+                                        {student.photoUrl ? (
+                                            <img src={student.photoUrl} className="w-full h-full object-cover"/>
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-black">
+                                                <Users className="text-gray-600" size={32}/>
                                             </div>
-                                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">{occ.studentName}</h3>
-                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{occ.studentClass}</p>
-                                        </div>
-                                        <button onClick={() => handleDeleteOccurrence(occ.id)} className="p-3 bg-white/5 hover:bg-red-600 text-gray-400 hover:text-white rounded-xl transition-all absolute top-8 right-8">
-                                            <Trash2 size={20}/>
-                                        </button>
+                                        )}
                                     </div>
-                                    <div className="bg-black/30 p-6 rounded-3xl border border-white/5 text-gray-300 italic text-sm leading-relaxed">
-                                        "{occ.description}"
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="text-2xl font-black text-white uppercase tracking-tight leading-none mb-2 line-clamp-2">{student.name}</h3>
+                                        <p className="text-xs text-gray-500 font-bold uppercase tracking-widest bg-white/5 inline-block px-3 py-1 rounded-lg">{student.className}</p>
                                     </div>
                                 </div>
-                            ))
+                                
+                                <div className="space-y-4 mb-8 flex-1">
+                                     {/* DIAGNOSIS */}
+                                     <div className="bg-red-900/10 p-5 rounded-2xl border border-red-900/20 relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
+                                        <span className="block text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Diagnóstico(s)</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {(student.disorders && student.disorders.length > 0) ? (
+                                                student.disorders.map((d, i) => (
+                                                    <span key={i} className="text-sm font-black text-white uppercase tracking-tight leading-tight block w-full">• {d}</span>
+                                                ))
+                                            ) : (
+                                                <p className="text-lg font-black text-white uppercase tracking-tight leading-tight">{student.disorder || 'Não informado'}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* SKILLS */}
+                                    <div className="bg-emerald-900/10 p-5 rounded-2xl border border-emerald-900/20 relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                                        <span className="block text-[9px] font-black text-emerald-400 uppercase tracking-widest mb-2">Habilidades</span>
+                                        <p className="text-xs font-medium text-gray-300 leading-relaxed">
+                                            {student.skills || 'Não registrado.'}
+                                        </p>
+                                    </div>
+
+                                    {/* WEAKNESSES */}
+                                    <div className="bg-amber-900/10 p-5 rounded-2xl border border-amber-900/20 relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                                        <span className="block text-[9px] font-black text-amber-400 uppercase tracking-widest mb-2">Fragilidades</span>
+                                        <p className="text-xs font-medium text-gray-300 leading-relaxed">
+                                            {student.weaknesses || 'Não registrado.'}
+                                        </p>
+                                    </div>
+
+                                     {/* LAUDO STATUS */}
+                                     {student.reportUrl ? (
+                                        <a href={student.reportUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 text-[10px] font-black text-green-400 uppercase tracking-widest bg-green-900/10 p-4 rounded-xl border border-green-900/20 hover:bg-green-900/20 transition-all">
+                                            <FileText size={16}/> Visualizar Laudo
+                                        </a>
+                                    ) : (
+                                        <div className="flex items-center justify-center gap-2 text-[10px] font-black text-orange-500 uppercase tracking-widest bg-orange-900/10 p-4 rounded-xl border border-orange-900/20">
+                                            <ShieldCheck size={16}/> Laudo Pendente
+                                        </div>
+                                    )}
+                                </div>
+
+                                <Button 
+                                    onClick={() => handleOpenPeiModal(student)} 
+                                    className="w-full h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-[0.15em] text-xs shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2"
+                                >
+                                    <Edit3 size={18}/> Criar / Editar PEI
+                                </Button>
+                            </div>
+                        ))}
+                        {students.filter(s => s.isAEE).length === 0 && (
+                             <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[2.5rem] opacity-30">
+                                <Heart size={48} className="mx-auto mb-4 text-gray-500" />
+                                <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhum aluno AEE identificado nas suas turmas</p>
+                            </div>
                         )}
                     </div>
+                </div>
+            )}
 
-                    {/* Modal */}
-                    {showOccurrenceModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                            <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95">
-                                <div className="flex justify-between items-center mb-8">
-                                    <h3 className="text-2xl font-black text-white uppercase tracking-tight">Nova Ocorrência</h3>
-                                    <button onClick={() => setShowOccurrenceModal(false)} className="text-gray-500 hover:text-white"><X size={24}/></button>
+            {/* PEI MODAL */}
+            {showPeiModal && selectedStudentForPei && (
+                <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-4xl max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 bg-black/20 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                    <Heart size={28} className="text-red-500"/> Planejamento Educacional Individualizado (PEI)
+                                </h3>
+                                <p className="text-sm text-gray-400 font-bold mt-1 uppercase tracking-wider">
+                                    Aluno: <span className="text-white">{selectedStudentForPei.name}</span>
+                                </p>
+                            </div>
+                            <button onClick={() => setShowPeiModal(false)} className="text-gray-500 hover:text-white p-2"><X size={32}/></button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-10 space-y-8 custom-scrollbar">
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Período de Referência</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                    value={peiData.period}
+                                    onChange={e => setPeiData({...peiData, period: e.target.value})}
+                                >
+                                    <option value="1º Bimestre">1º Bimestre</option>
+                                    <option value="2º Bimestre">2º Bimestre</option>
+                                    <option value="3º Bimestre">3º Bimestre</option>
+                                    <option value="4º Bimestre">4º Bimestre</option>
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Habilidades a Desenvolver / Competências</label>
+                                    <textarea 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 min-h-[200px]"
+                                        placeholder="Descreva as competências essenciais a serem trabalhadas..."
+                                        value={peiData.essentialCompetencies}
+                                        onChange={e => setPeiData({...peiData, essentialCompetencies: e.target.value})}
+                                    />
                                 </div>
-                                <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Turma</label>
-                                        <select
-                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
-                                            value={occurrenceClass}
-                                            onChange={e => {
-                                                setOccurrenceClass(e.target.value);
-                                                setOccurrenceForm(prev => ({ ...prev, studentId: '' }));
-                                            }}
-                                        >
-                                            <option value="">Selecione a Turma...</option>
-                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Aluno</label>
-                                        <select 
-                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none disabled:opacity-50"
-                                            value={occurrenceForm.studentId}
-                                            onChange={e => setOccurrenceForm({...occurrenceForm, studentId: e.target.value})}
-                                            disabled={!occurrenceClass}
-                                        >
-                                            <option value="">{occurrenceClass ? 'Selecione o Aluno...' : 'Selecione a Turma primeiro'}</option>
-                                            {students
-                                                .filter(s => s.className === occurrenceClass)
-                                                .sort((a,b) => (a.name || '').localeCompare(b.name || ''))
-                                                .map(s => (
-                                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Categoria</label>
-                                        <select 
-                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
-                                            value={occurrenceForm.category}
-                                            onChange={e => setOccurrenceForm({...occurrenceForm, category: e.target.value})}
-                                        >
-                                            <option value="indisciplina">Indisciplina</option>
-                                            <option value="atraso">Atraso</option>
-                                            <option value="desempenho">Desempenho</option>
-                                            <option value="uniforme">Uniforme</option>
-                                            <option value="elogio">Elogio</option>
-                                            <option value="outros">Outros</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-2">Descrição</label>
-                                        <textarea 
-                                            className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[120px]"
-                                            placeholder="Descreva o ocorrido..."
-                                            value={occurrenceForm.description}
-                                            onChange={e => setOccurrenceForm({...occurrenceForm, description: e.target.value})}
-                                        />
-                                    </div>
-                                    <Button onClick={handleSaveOccurrence} isLoading={isSaving} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20">
-                                        Registrar
-                                    </Button>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Conteúdo Programático Adaptado</label>
+                                    <textarea 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 min-h-[200px]"
+                                        placeholder="Liste os conteúdos selecionados e adaptados..."
+                                        value={peiData.selectedContents}
+                                        onChange={e => setPeiData({...peiData, selectedContents: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Metodologia / Recursos Didáticos</label>
+                                    <textarea 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 min-h-[200px]"
+                                        placeholder="Quais recursos e estratégias serão utilizados?"
+                                        value={peiData.didacticResources}
+                                        onChange={e => setPeiData({...peiData, didacticResources: e.target.value})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Critérios de Avaliação</label>
+                                    <textarea 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 min-h-[200px]"
+                                        placeholder="Como será avaliado o progresso do aluno?"
+                                        value={peiData.evaluation}
+                                        onChange={e => setPeiData({...peiData, evaluation: e.target.value})}
+                                    />
                                 </div>
                             </div>
                         </div>
-                    )}
+
+                        <div className="p-8 border-t border-white/5 bg-black/20 flex justify-end gap-4">
+                            <Button variant="outline" onClick={() => setShowPeiModal(false)} className="h-16 px-10 rounded-2xl font-black uppercase tracking-widest border-white/10 hover:bg-white/5">Cancelar</Button>
+                            <Button onClick={handleSavePei} isLoading={isSaving} className="h-16 px-12 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">
+                                <Save size={20} className="mr-2"/> Salvar Planejamento
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

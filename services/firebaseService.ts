@@ -16,7 +16,8 @@ import {
     ExamRequest, ExamStatus, User, UserRole, ClassMaterial, LessonPlan, 
     Student, ScheduleEntry, SystemConfig, AttendanceLog, StaffMember, 
     StaffAttendanceLog, SchoolEvent, LibraryBook, LibraryLoan,
-    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence, DailySchoolLog, InfantilReport, PedagogicalProject
+    AnswerKey, StudentCorrection, PEIDocument, StudentOccurrence, DailySchoolLog, InfantilReport, PedagogicalProject,
+    AEEAppointment
 } from '../types';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
@@ -40,6 +41,7 @@ const OCCURRENCES_COLLECTION = 'occurrences';
 const DAILY_LOGS_COLLECTION = 'daily_logs';
 const INFANTIL_REPORTS_COLLECTION = 'infantil_reports';
 const PEDAGOGICAL_PROJECTS_COLLECTION = 'pedagogical_projects';
+const AEE_APPOINTMENTS_COLLECTION = 'aee_appointments';
 
 const sanitizeForFirestore = (obj: any) => {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
@@ -590,4 +592,24 @@ export const savePedagogicalProject = async (project: PedagogicalProject): Promi
 
 export const deletePedagogicalProject = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, PEDAGOGICAL_PROJECTS_COLLECTION, id));
+};
+
+// --- AEE APPOINTMENTS ---
+export const saveAEEAppointment = async (appointment: AEEAppointment): Promise<void> => {
+    const { id, ...data } = appointment;
+    if (id) await setDoc(doc(db, AEE_APPOINTMENTS_COLLECTION, id), sanitizeForFirestore(data));
+    else await addDoc(collection(db, AEE_APPOINTMENTS_COLLECTION), sanitizeForFirestore(data));
+};
+
+export const deleteAEEAppointment = async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, AEE_APPOINTMENTS_COLLECTION, id));
+};
+
+export const listenToAEEAppointments = (callback: (appointments: AEEAppointment[]) => void) => {
+    const q = query(collection(db, AEE_APPOINTMENTS_COLLECTION));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AEEAppointment)));
+    }, (error) => {
+        if (error.code !== 'permission-denied') console.error("Error listening to appointments:", error);
+    });
 };
