@@ -5,12 +5,10 @@ import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
 import { Maximize2, Monitor, Volume2, VolumeX, Wifi, WifiOff, Clock } from 'lucide-react';
 
 // Sons para os alertas
-const SOUND_SHORT = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; // Ding discreto
-const SOUND_LONG = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3"; // Sino de escola
+const SOUND_SHORT = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; 
+const SOUND_LONG = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3";
 
 // --- CONFIGURAÇÃO DE HORÁRIOS (Sincronizado com Admin) ---
-
-// Horários do Fundamental II (6º ao 9º)
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
     { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
@@ -20,7 +18,6 @@ const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm5', start: '11:00', end: '12:00', type: 'class', label: '5º Horário', shift: 'morning' },
 ];
 
-// Horários do Ensino Médio
 const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a1', start: '13:00', end: '13:50', type: 'class', label: '1º Horário', shift: 'afternoon' },
     { id: 'a2', start: '13:50', end: '14:40', type: 'class', label: '2º Horário', shift: 'afternoon' },
@@ -33,19 +30,17 @@ const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
 ];
 
-// Lista de Turmas do Fundamental II (Manhã)
 const MORNING_CLASSES = [
-    { id: '6efaf', name: '6º EFAF', type: 'EFAF' },
-    { id: '7efaf', name: '7º EFAF', type: 'EFAF' },
-    { id: '8efaf', name: '8º EFAF', type: 'EFAF' },
-    { id: '9efaf', name: '9º EFAF', type: 'EFAF' },
+    { id: '6efaf', name: '6º EFAF' },
+    { id: '7efaf', name: '7º EFAF' },
+    { id: '8efaf', name: '8º EFAF' },
+    { id: '9efaf', name: '9º EFAF' },
 ];
 
-// Lista de Turmas do Ensino Médio (Tarde)
 const AFTERNOON_CLASSES = [
-    { id: '1em', name: '1ª SÉRIE EM', type: 'EM' },
-    { id: '2em', name: '2ª SÉRIE EM', type: 'EM' },
-    { id: '3em', name: '3ª SÉRIE EM', type: 'EM' },
+    { id: '1em', name: '1ª SÉRIE EM' },
+    { id: '2em', name: '2ª SÉRIE EM' },
+    { id: '3em', name: '3ª SÉRIE EM' },
 ];
 
 const DEFAULT_PIN = "2016";
@@ -61,105 +56,70 @@ export const PublicSchedule: React.FC = () => {
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState(true);
     
-    // Audio
     const [audioEnabled, setAudioEnabled] = useState(true);
-    // Trackers
     const lastProcessedSlotId = useRef<string | null>(null);
-    const lastSyncTimestamp = useRef<number | null>(null);
     const audioShortRef = useRef<HTMLAudioElement | null>(null);
     const audioLongRef = useRef<HTMLAudioElement | null>(null);
+
+    // Helpers to convert time to minutes
+    const timeToMins = (timeStr: string) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        return h * 60 + m;
+    };
 
     useEffect(() => {
         audioShortRef.current = new Audio(SOUND_SHORT);
         audioLongRef.current = new Audio(SOUND_LONG);
-        audioShortRef.current.load();
-        audioLongRef.current.load();
     }, []);
 
-    // Initial Data Load
     useEffect(() => {
         if (!isAuthorized) return;
-        
+        // The service already uses onSnapshot for real-time updates
         const unsubscribeSchedule = listenToSchedule((data) => {
             setSchedule(data);
             setConnectionStatus(true);
         });
-        
-        const unsubscribeConfig = listenToSystemConfig((config) => {
-            setSysConfig(config);
-            
-            // Sync Logic: Refresh if timestamp changes (and not first load)
-            if (config.lastScheduleSync && lastSyncTimestamp.current && config.lastScheduleSync > lastSyncTimestamp.current) {
-                console.log("Forced Sync Detected - Refreshing Data");
-                window.location.reload(); // Hard refresh to clear any stale state
-            }
-            lastSyncTimestamp.current = config.lastScheduleSync || Date.now();
-        });
-        
+        const unsubscribeConfig = listenToSystemConfig(setSysConfig);
         return () => {
             unsubscribeSchedule();
             unsubscribeConfig();
         };
     }, [isAuthorized]);
 
-    // Timer Loop
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // --- ALARM & SHIFT LOGIC (Robust) ---
+    // Shift and Alarm Logic
     useEffect(() => {
-        const now = currentTime;
-        const totalMinutes = now.getHours() * 60 + now.getMinutes();
+        const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
         
-        // 1. Determine Shift
         let newShift: 'morning' | 'afternoon' | 'off' = 'morning';
-        if (totalMinutes >= 420 && totalMinutes <= 750) newShift = 'morning'; // 07:00 - 12:30
-        else if (totalMinutes >= 780 && totalMinutes <= 1260) newShift = 'afternoon'; // 13:00 - 21:00
-        setCurrentShift(newShift);
+        if (nowMins >= 420 && nowMins <= 750) newShift = 'morning'; 
+        else if (nowMins >= 780 && nowMins <= 1260) newShift = 'afternoon'; 
+        else newShift = 'off';
+        
+        if (newShift !== currentShift) setCurrentShift(newShift);
 
-        // 2. Select Active Slot Array
         const activeSlots = newShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
-
-        // 3. Find Current Slot ID
         const currentSlot = activeSlots.find(s => {
-            const [hS, mS] = s.start.split(':').map(Number);
-            const [hE, mE] = s.end.split(':').map(Number);
-            const startMins = hS * 60 + mS;
-            const endMins = hE * 60 + mE;
-            return totalMinutes >= startMins && totalMinutes < endMins;
+            const start = timeToMins(s.start);
+            const end = timeToMins(s.end);
+            return nowMins >= start && nowMins < end;
         });
 
         const currentSlotId = currentSlot ? currentSlot.id : 'free';
 
-        // 4. Check for Change & Play Alarm
         if (lastProcessedSlotId.current !== null && lastProcessedSlotId.current !== currentSlotId) {
-            console.log(`[ALARM] Slot Changed: ${lastProcessedSlotId.current} -> ${currentSlotId}`);
-            
             if (audioEnabled) {
-                // Determine if it's a major break or minor change
                 const isBreak = currentSlot?.type === 'break';
-                const wasBreak = activeSlots.find(s => s.id === lastProcessedSlotId.current)?.type === 'break';
-                
-                if (isBreak || wasBreak) {
-                    audioLongRef.current?.play().catch(e => console.warn("Audio blocked:", e));
-                } else if (currentSlotId !== 'free') {
-                    audioShortRef.current?.play().catch(e => console.warn("Audio blocked:", e));
-                }
+                if (isBreak) audioLongRef.current?.play().catch(() => {});
+                else if (currentSlotId !== 'free') audioShortRef.current?.play().catch(() => {});
             }
         }
-
-        // Update Tracker
         lastProcessedSlotId.current = currentSlotId;
-
     }, [currentTime, audioEnabled]);
-
-    const toggleFullscreen = () => {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-        else document.exitFullscreen();
-        setIsFullscreen(!isFullscreen);
-    };
 
     const handlePinPress = (num: string) => {
         if (pin.length >= 4) return;
@@ -167,19 +127,6 @@ export const PublicSchedule: React.FC = () => {
         setPin(newPin);
         if (newPin.length === 4) {
             if (newPin === DEFAULT_PIN) {
-                // Unlock Audio Context Interaction
-                const unlock = () => {
-                    if (audioShortRef.current) {
-                        audioShortRef.current.volume = 0;
-                        audioShortRef.current.play().then(() => {
-                            audioShortRef.current!.pause();
-                            audioShortRef.current!.currentTime = 0;
-                            audioShortRef.current!.volume = 1;
-                        }).catch(() => {});
-                    }
-                };
-                unlock();
-                
                 setIsAuthorized(true);
                 sessionStorage.setItem('monitor_auth', 'true');
             } else {
@@ -194,10 +141,9 @@ export const PublicSchedule: React.FC = () => {
             <div className="fixed inset-0 bg-[#0a0000] flex flex-col items-center justify-center p-6 z-[1000]">
                 <div className="max-w-xs w-full text-center space-y-8">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 mx-auto" alt="CEMAL" />
-                    <h2 className="text-white font-black text-xl uppercase tracking-widest">Painel TV</h2>
                     <div className="flex justify-center gap-4">
                         {[1, 2, 3, 4].map((i) => (
-                            <div key={i} className={`w-4 h-4 rounded-full border-2 transition-all ${pin.length >= i ? 'bg-red-600 border-red-600 scale-125' : 'border-gray-800'}`}></div>
+                            <div key={i} className={`w-4 h-4 rounded-full border-2 ${pin.length >= i ? 'bg-red-600 border-red-600 scale-125' : 'border-gray-800'}`}></div>
                         ))}
                     </div>
                     <div className="grid grid-cols-3 gap-4">
@@ -218,7 +164,6 @@ export const PublicSchedule: React.FC = () => {
     return (
         <div className="fixed inset-0 bg-[#050505] text-white flex flex-col overflow-hidden font-sans select-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/20 via-[#050505] to-[#050505]">
             
-            {/* Header Section */}
             <header className="flex flex-col items-center justify-center pt-6 pb-2 shrink-0 z-10 relative">
                 <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-12 mb-2 opacity-90 drop-shadow-lg" alt="CEMAL Logo" />
                 <div className="text-[7rem] md:text-[9rem] leading-[0.85] font-clock font-black tracking-tighter text-white drop-shadow-2xl tabular-nums">
@@ -232,42 +177,27 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </header>
 
-            {/* Main Grid */}
             <main className="flex-1 px-4 md:px-8 pb-8 w-full max-w-[1920px] mx-auto flex flex-col justify-center">
-                {/* RESPONSIVE GRID CONFIGURATION */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 h-full max-h-[70vh] content-start md:content-center items-stretch overflow-y-auto">
                      {currentClasses.map(cls => {
-                        // 1. Determina qual grade de horários usar
-                        let slots: TimeSlot[] = [];
-                        if (currentShift === 'morning') {
-                            slots = MORNING_SLOTS;
-                        } else {
-                            slots = AFTERNOON_SLOTS;
-                        }
-
-                        // 2. Encontra o slot atual baseado na hora
+                        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
                         const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
+                        
                         const currentSlotIndex = slots.findIndex(s => {
-                            const [hS, mS] = s.start.split(':').map(Number);
-                            const [hE, mE] = s.end.split(':').map(Number);
-                            const startMins = hS * 60 + mS;
-                            const endMins = hE * 60 + mE;
-                            return nowMins >= startMins && nowMins < endMins;
+                            const start = timeToMins(s.start);
+                            const end = timeToMins(s.end);
+                            return nowMins >= start && nowMins < end;
                         });
                         
                         const currentSlot = currentSlotIndex !== -1 ? slots[currentSlotIndex] : null;
-                        
-                        // 3. Determina o próximo slot
                         const nextSlot = currentSlotIndex !== -1 && currentSlotIndex + 1 < slots.length ? slots[currentSlotIndex + 1] : null;
 
-                        // 4. Busca os dados no Schedule do Firebase para o Slot Atual
                         const currentEntry = schedule.find(s => 
                             s.classId === cls.id && 
-                            s.slotId === (currentSlot?.id || 'free') && 
+                            s.slotId === (currentSlot?.id || 'none') && 
                             s.dayOfWeek === dayOfWeek
                         );
 
-                        // 5. Busca os dados para o Próximo Slot
                         let nextEntry = null;
                         if (nextSlot) {
                             if (nextSlot.type === 'break') {
@@ -284,7 +214,6 @@ export const PublicSchedule: React.FC = () => {
 
                         return (
                             <div key={cls.id} className="bg-[#0f0f10] rounded-[2rem] border border-white/5 flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-sm min-h-[220px] transition-all duration-500">
-                                {/* CARD HEADER */}
                                 <div className="py-3 bg-white/[0.02] border-b border-white/5 text-center flex justify-between px-6 items-center">
                                     <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">{cls.name}</h3>
                                     {currentSlot ? (
@@ -296,16 +225,14 @@ export const PublicSchedule: React.FC = () => {
                                     )}
                                 </div>
                                 
-                                {/* CARD BODY (AULA ATUAL) */}
                                 <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative">
                                     {currentSlot && currentSlot.type === 'break' ? (
                                          <div className="animate-pulse flex flex-col items-center gap-2">
                                             <p className="text-yellow-500/80 font-black uppercase text-3xl tracking-widest">Intervalo</p>
-                                            <p className="text-[10px] text-yellow-500/50 uppercase tracking-[0.3em]">Recesso Escolar</p>
                                          </div>
                                     ) : currentEntry ? (
-                                        <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500 w-full">
-                                            <h4 className="text-3xl lg:text-4xl font-black text-white uppercase tracking-tighter mb-2 leading-tight break-words max-w-full line-clamp-2 px-2">
+                                        <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 w-full">
+                                            <h4 className="text-3xl lg:text-4xl font-black text-white uppercase tracking-tighter mb-2 leading-tight line-clamp-2 px-2">
                                                 {currentEntry.subject}
                                             </h4>
                                             <span className="bg-red-600/10 border border-red-600/20 px-4 py-1.5 rounded-full text-red-400 font-black uppercase text-xs tracking-widest truncate max-w-[90%]">
@@ -315,12 +242,10 @@ export const PublicSchedule: React.FC = () => {
                                     ) : (
                                         <div className="opacity-30">
                                             <p className="text-white font-black uppercase text-3xl tracking-widest select-none">LIVRE</p>
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Nenhuma aula cadastrada</p>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* CARD FOOTER (PRÓXIMA AULA) */}
                                 <div className="bg-black/40 border-t border-white/5 px-6 py-3 flex items-center justify-between gap-4 h-14">
                                     <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest shrink-0">PRÓXIMO:</span>
                                     <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase truncate">
@@ -344,7 +269,6 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </main>
 
-            {/* Banner Overlay */}
             {sysConfig?.isBannerActive && (
                 <div className="absolute bottom-0 left-0 right-0 bg-red-600 z-50 py-3 overflow-hidden shadow-[0_-10px_30px_rgba(220,38,38,0.3)]">
                     <div className="animate-marquee whitespace-nowrap">
@@ -355,7 +279,6 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             )}
 
-            {/* Controls */}
             <div className="fixed right-8 bottom-8 z-50 flex gap-4 opacity-0 hover:opacity-100 transition-opacity duration-500">
                 <button onClick={() => setAudioEnabled(!audioEnabled)} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
                     {audioEnabled ? <Volume2 size={18}/> : <VolumeX size={18}/>}
@@ -363,7 +286,7 @@ export const PublicSchedule: React.FC = () => {
                 <button onClick={() => window.location.reload()} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
                     <Monitor size={18}/>
                 </button>
-                <button onClick={toggleFullscreen} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
+                <button onClick={() => document.documentElement.requestFullscreen()} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
                     <Maximize2 size={18}/>
                 </button>
             </div>
