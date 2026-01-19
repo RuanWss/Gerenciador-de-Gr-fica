@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
 import { Maximize2, Monitor, Volume2, VolumeX, Wifi, WifiOff, Clock } from 'lucide-react';
@@ -8,7 +8,7 @@ import { Maximize2, Monitor, Volume2, VolumeX, Wifi, WifiOff, Clock } from 'luci
 const SOUND_SHORT = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; 
 const SOUND_LONG = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3";
 
-// --- CONFIGURAÇÃO DE HORÁRIOS (Sincronizado com Admin) ---
+// --- CONFIGURAÇÃO DE HORÁRIOS ---
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
     { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
@@ -53,15 +53,13 @@ export const PublicSchedule: React.FC = () => {
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState(true);
-    
     const [audioEnabled, setAudioEnabled] = useState(true);
+    
     const lastProcessedSlotId = useRef<string | null>(null);
     const audioShortRef = useRef<HTMLAudioElement | null>(null);
     const audioLongRef = useRef<HTMLAudioElement | null>(null);
 
-    // Helpers to convert time to minutes
     const timeToMins = (timeStr: string) => {
         const [h, m] = timeStr.split(':').map(Number);
         return h * 60 + m;
@@ -72,26 +70,33 @@ export const PublicSchedule: React.FC = () => {
         audioLongRef.current = new Audio(SOUND_LONG);
     }, []);
 
+    // REAL-TIME DATA FETCHING
     useEffect(() => {
         if (!isAuthorized) return;
-        // The service already uses onSnapshot for real-time updates
+        
+        // Listen to schedule changes
         const unsubscribeSchedule = listenToSchedule((data) => {
-            setSchedule(data);
+            console.log("TV Received Schedule Update:", data.length, "entries");
+            setSchedule([...data]); // Create new array to ensure re-render
             setConnectionStatus(true);
         });
+
+        // Listen to system configs
         const unsubscribeConfig = listenToSystemConfig(setSysConfig);
+        
         return () => {
             unsubscribeSchedule();
             unsubscribeConfig();
         };
     }, [isAuthorized]);
 
+    // TIMER LOOP
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // Shift and Alarm Logic
+    // SHIFT & ALARM LOGIC
     useEffect(() => {
         const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
         
@@ -119,7 +124,7 @@ export const PublicSchedule: React.FC = () => {
             }
         }
         lastProcessedSlotId.current = currentSlotId;
-    }, [currentTime, audioEnabled]);
+    }, [currentTime, audioEnabled, currentShift]);
 
     const handlePinPress = (num: string) => {
         if (pin.length >= 4) return;
@@ -135,6 +140,49 @@ export const PublicSchedule: React.FC = () => {
             }
         }
     };
+
+    // Calculate current display data
+    const displayData = useMemo(() => {
+        const rawDay = currentTime.getDay();
+        const dayOfWeek = (rawDay === 0 || rawDay === 6) ? 1 : rawDay;
+        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+        const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
+        
+        const currentSlotIndex = slots.findIndex(s => {
+            const start = timeToMins(s.start);
+            const end = timeToMins(s.end);
+            return nowMins >= start && nowMins < end;
+        });
+        
+        const currentSlot = currentSlotIndex !== -1 ? slots[currentSlotIndex] : null;
+        const nextSlot = currentSlotIndex !== -1 && currentSlotIndex + 1 < slots.length ? slots[currentSlotIndex + 1] : null;
+
+        const classes = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
+
+        return classes.map(cls => {
+            const currentEntry = schedule.find(s => 
+                s.classId === cls.id && 
+                s.slotId === (currentSlot?.id || 'none') && 
+                s.dayOfWeek === dayOfWeek
+            );
+
+            let nextEntry = null;
+            if (nextSlot) {
+                if (nextSlot.type === 'break') {
+                    nextEntry = { subject: 'INTERVALO', professor: '', start: nextSlot.start };
+                } else {
+                    const entry = schedule.find(s => 
+                        s.classId === cls.id && 
+                        s.slotId === nextSlot.id && 
+                        s.dayOfWeek === dayOfWeek
+                    );
+                    nextEntry = entry ? { subject: entry.subject, professor: entry.professor, start: nextSlot.start } : null;
+                }
+            }
+
+            return { cls, currentSlot, currentEntry, nextEntry, nextSlot };
+        });
+    }, [currentTime, schedule, currentShift]);
 
     if (!isAuthorized) {
         return (
@@ -157,10 +205,6 @@ export const PublicSchedule: React.FC = () => {
         );
     }
 
-    const currentClasses = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
-    const rawDay = currentTime.getDay();
-    const dayOfWeek = (rawDay === 0 || rawDay === 6) ? 1 : rawDay;
-
     return (
         <div className="fixed inset-0 bg-[#050505] text-white flex flex-col overflow-hidden font-sans select-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/20 via-[#050505] to-[#050505]">
             
@@ -179,93 +223,59 @@ export const PublicSchedule: React.FC = () => {
 
             <main className="flex-1 px-4 md:px-8 pb-8 w-full max-w-[1920px] mx-auto flex flex-col justify-center">
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 h-full max-h-[70vh] content-start md:content-center items-stretch overflow-y-auto">
-                     {currentClasses.map(cls => {
-                        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
-                        const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
-                        
-                        const currentSlotIndex = slots.findIndex(s => {
-                            const start = timeToMins(s.start);
-                            const end = timeToMins(s.end);
-                            return nowMins >= start && nowMins < end;
-                        });
-                        
-                        const currentSlot = currentSlotIndex !== -1 ? slots[currentSlotIndex] : null;
-                        const nextSlot = currentSlotIndex !== -1 && currentSlotIndex + 1 < slots.length ? slots[currentSlotIndex + 1] : null;
-
-                        const currentEntry = schedule.find(s => 
-                            s.classId === cls.id && 
-                            s.slotId === (currentSlot?.id || 'none') && 
-                            s.dayOfWeek === dayOfWeek
-                        );
-
-                        let nextEntry = null;
-                        if (nextSlot) {
-                            if (nextSlot.type === 'break') {
-                                nextEntry = { subject: 'INTERVALO', professor: '' };
-                            } else {
-                                const entry = schedule.find(s => 
-                                    s.classId === cls.id && 
-                                    s.slotId === nextSlot.id && 
-                                    s.dayOfWeek === dayOfWeek
-                                );
-                                nextEntry = entry ? { subject: entry.subject, professor: entry.professor } : null;
-                            }
-                        }
-
-                        return (
-                            <div key={cls.id} className="bg-[#0f0f10] rounded-[2rem] border border-white/5 flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-sm min-h-[220px] transition-all duration-500">
-                                <div className="py-3 bg-white/[0.02] border-b border-white/5 text-center flex justify-between px-6 items-center">
-                                    <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">{cls.name}</h3>
-                                    {currentSlot ? (
-                                        <span className="text-[10px] font-mono text-gray-600 font-bold bg-white/5 px-2 py-1 rounded flex items-center gap-2">
-                                            <Clock size={10}/> {currentSlot.start} - {currentSlot.end}
+                     {displayData.map(({ cls, currentSlot, currentEntry, nextEntry, nextSlot }) => (
+                        <div key={cls.id} className="bg-[#0f0f10] rounded-[2rem] border border-white/5 flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-sm min-h-[220px] transition-all duration-500 hover:border-red-600/20">
+                            <div className="py-3 bg-white/[0.02] border-b border-white/5 text-center flex justify-between px-6 items-center">
+                                <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">{cls.name}</h3>
+                                {currentSlot ? (
+                                    <span className="text-[10px] font-mono text-gray-600 font-bold bg-white/5 px-2 py-1 rounded flex items-center gap-2">
+                                        <Clock size={10}/> {currentSlot.start} - {currentSlot.end}
+                                    </span>
+                                ) : (
+                                    <span className="text-[10px] text-gray-700 font-bold uppercase tracking-wider">Aguardando</span>
+                                )}
+                            </div>
+                            
+                            <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative">
+                                {currentSlot && currentSlot.type === 'break' ? (
+                                     <div className="animate-pulse flex flex-col items-center gap-2">
+                                        <p className="text-yellow-500/80 font-black uppercase text-3xl tracking-widest">Intervalo</p>
+                                     </div>
+                                ) : currentEntry ? (
+                                    <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 w-full">
+                                        <h4 className="text-3xl lg:text-4xl font-black text-white uppercase tracking-tighter mb-2 leading-tight line-clamp-2 px-2">
+                                            {currentEntry.subject}
+                                        </h4>
+                                        <span className="bg-red-600/10 border border-red-600/20 px-4 py-1.5 rounded-full text-red-400 font-black uppercase text-xs tracking-widest truncate max-w-[90%]">
+                                            {currentEntry.professor}
                                         </span>
-                                    ) : (
-                                        <span className="text-[10px] text-gray-700 font-bold uppercase">Aguardando</span>
-                                    )}
-                                </div>
-                                
-                                <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative">
-                                    {currentSlot && currentSlot.type === 'break' ? (
-                                         <div className="animate-pulse flex flex-col items-center gap-2">
-                                            <p className="text-yellow-500/80 font-black uppercase text-3xl tracking-widest">Intervalo</p>
-                                         </div>
-                                    ) : currentEntry ? (
-                                        <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300 w-full">
-                                            <h4 className="text-3xl lg:text-4xl font-black text-white uppercase tracking-tighter mb-2 leading-tight line-clamp-2 px-2">
-                                                {currentEntry.subject}
-                                            </h4>
-                                            <span className="bg-red-600/10 border border-red-600/20 px-4 py-1.5 rounded-full text-red-400 font-black uppercase text-xs tracking-widest truncate max-w-[90%]">
-                                                {currentEntry.professor}
-                                            </span>
-                                        </div>
-                                    ) : (
-                                        <div className="opacity-30">
-                                            <p className="text-white font-black uppercase text-3xl tracking-widest select-none">LIVRE</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="bg-black/40 border-t border-white/5 px-6 py-3 flex items-center justify-between gap-4 h-14">
-                                    <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest shrink-0">PRÓXIMO:</span>
-                                    <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase truncate">
-                                        {nextEntry ? (
-                                            nextEntry.subject === 'INTERVALO' ? (
-                                                <span className="text-yellow-600 flex items-center gap-1"><Clock size={10}/> INTERVALO ({nextSlot?.start})</span>
-                                            ) : (
-                                                <div className="flex flex-col items-end leading-tight">
-                                                    <span className="text-gray-300 truncate">{nextEntry.subject}</span>
-                                                    {nextEntry.professor && <span className="text-gray-600 truncate text-[8px]">{nextEntry.professor} • {nextSlot?.start}</span>}
-                                                </div>
-                                            )
-                                        ) : (
-                                            <span className="text-gray-700 italic">-- : --</span>
-                                        )}
                                     </div>
+                                ) : (
+                                    <div className="opacity-30">
+                                        <p className="text-white font-black uppercase text-3xl tracking-widest select-none">LIVRE</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="bg-black/40 border-t border-white/5 px-6 py-3 flex items-center justify-between gap-4 h-14">
+                                <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest shrink-0">PRÓXIMO:</span>
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase truncate">
+                                    {nextEntry ? (
+                                        nextEntry.subject === 'INTERVALO' ? (
+                                            <span className="text-yellow-600 flex items-center gap-1"><Clock size={10}/> INTERVALO ({nextEntry.start})</span>
+                                        ) : (
+                                            <div className="flex flex-col items-end leading-tight">
+                                                <span className="text-gray-300 truncate">{nextEntry.subject}</span>
+                                                {nextEntry.professor && <span className="text-gray-600 truncate text-[8px]">{nextEntry.professor} • {nextEntry.start}</span>}
+                                            </div>
+                                        )
+                                    ) : (
+                                        <span className="text-gray-700 italic tracking-widest">-- : --</span>
+                                    )}
                                 </div>
                             </div>
-                        );
-                    })}
+                        </div>
+                    ))}
                 </div>
             </main>
 
