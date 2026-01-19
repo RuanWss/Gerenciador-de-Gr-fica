@@ -23,15 +23,14 @@ export const ClassroomFiles: React.FC = () => {
     const isFirstLoad = useRef(true);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Filtra apenas turmas do Fundamental II e Médio para esta visualização
-    const availableClasses = useMemo(() => {
-        return CLASSES.filter(c => c.includes('EFAF') || c.includes('EM') || c.includes('SÉRIE'));
-    }, []);
+    // Permite todas as turmas para evitar bloqueios
+    const availableClasses = useMemo(() => CLASSES, []);
 
     // Determina a lista de disciplinas com base na turma selecionada
     const currentSubjectsList = useMemo(() => {
         if (!selectedClassName) return [];
         if (selectedClassName.includes('SÉRIE') || selectedClassName.includes('EM')) return EM_SUBJECTS;
+        // Fallback para EFAF ou lista padrão para garantir que pastas apareçam
         return EFAF_SUBJECTS;
     }, [selectedClassName]);
 

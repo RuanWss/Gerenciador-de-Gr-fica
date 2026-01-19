@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Clock, Maximize2, Minimize, Monitor, Bell, BookOpen } from 'lucide-react';
+import { Maximize2, Monitor } from 'lucide-react';
 
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
@@ -70,7 +70,7 @@ export const PublicSchedule: React.FC = () => {
         const totalMinutes = now.getHours() * 60 + now.getMinutes();
         if (totalMinutes >= 420 && totalMinutes <= 750) setCurrentShift('morning');
         else if (totalMinutes >= 780 && totalMinutes <= 1260) setCurrentShift('afternoon');
-        else setCurrentShift('morning');
+        else setCurrentShift('morning'); // Default to morning for display if off-hours
     }, [currentTime]);
 
     const toggleFullscreen = () => {
@@ -96,7 +96,7 @@ export const PublicSchedule: React.FC = () => {
 
     if (!isAuthorized) {
         return (
-            <div className="fixed inset-0 bg-[#0a0a0b] flex flex-col items-center justify-center p-6 z-[1000]">
+            <div className="fixed inset-0 bg-[#0a0000] flex flex-col items-center justify-center p-6 z-[1000]">
                 <div className="max-w-xs w-full text-center space-y-8">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-20 mx-auto" alt="CEMAL" />
                     <h2 className="text-white font-black text-xl uppercase tracking-widest">Painel TV</h2>
@@ -118,34 +118,38 @@ export const PublicSchedule: React.FC = () => {
 
     const currentClasses = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
     const dayOfWeek = currentTime.getDay() || 1;
-    const dayName = currentTime.toLocaleDateString('pt-BR', { weekday: 'long' });
 
     return (
-        <div className="fixed inset-0 bg-[#050505] text-white flex flex-col overflow-hidden font-sans select-none">
-            <header className="relative z-10 flex items-center justify-between px-12 py-8 border-b border-white/5 bg-black/40 backdrop-blur-3xl shrink-0">
-                <div className="flex items-center gap-10">
-                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 w-auto" alt="CEMAL" />
-                    <div className="h-12 w-px bg-white/10"></div>
-                    <div>
-                        <h1 className="text-3xl font-black uppercase tracking-tighter">Grade de Horários</h1>
-                        <p className="text-red-600 font-bold uppercase text-[9px] mt-2 tracking-widest">Sistema em Tempo Real</p>
-                    </div>
+        <div className="fixed inset-0 bg-[#050505] text-white flex flex-col overflow-hidden font-sans select-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/20 via-[#050505] to-[#050505]">
+            
+            {/* Header Section - Centralized */}
+            <header className="flex flex-col items-center justify-center pt-10 pb-6 shrink-0 z-10 relative">
+                <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-14 mb-2 opacity-90 drop-shadow-lg" alt="CEMAL Logo" />
+                
+                {/* Giant Clock */}
+                <div className="text-[10rem] md:text-[12rem] leading-[0.85] font-clock font-black tracking-tighter text-white drop-shadow-2xl">
+                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
-                <div className="flex items-center gap-10">
-                    <div className="text-right">
-                        <p className="text-[9px] font-black text-gray-500 uppercase mb-1">{String(dayName)}</p>
-                        <p className="text-xl font-black text-white uppercase">{currentTime.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</p>
-                    </div>
-                    <div className="text-center bg-white/5 px-8 py-3 rounded-2xl border border-white/10 min-w-[200px]">
-                        <p className="text-5xl font-clock font-black text-white">
-                            {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </p>
-                    </div>
+                
+                {/* Date Pill */}
+                <div className="mt-6 bg-[#1a1a1a]/80 border border-white/5 px-8 py-2 rounded-full backdrop-blur-md shadow-xl">
+                    <p className="text-sm font-bold text-gray-300 uppercase tracking-[0.25em]">
+                        {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                </div>
+
+                {/* Shift Indicator */}
+                <div className="mt-4 flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full shadow-[0_0_10px_currentColor] ${currentShift !== 'off' ? 'bg-green-500 text-green-500 animate-pulse' : 'bg-red-500 text-red-500'}`}></div>
+                    <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">
+                        Turno {currentShift === 'morning' ? 'Matutino' : currentShift === 'afternoon' ? 'Vespertino' : 'Encerrado'}
+                    </span>
                 </div>
             </header>
 
-            <main className="flex-1 p-6">
-                <div className="grid h-full gap-4" style={{ gridTemplateColumns: `repeat(${currentClasses.length}, 1fr)` }}>
+            {/* Main Grid */}
+            <main className="flex-1 px-12 pb-12 w-full max-w-[1920px] mx-auto flex flex-col justify-center">
+                <div className="grid h-[55vh] gap-6" style={{ gridTemplateColumns: `repeat(${currentClasses.length}, 1fr)` }}>
                     {currentClasses.map(cls => {
                         const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
                         const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
@@ -157,45 +161,69 @@ export const PublicSchedule: React.FC = () => {
                         const currentEntry = currentSlot ? schedule.find(s => s.classId === cls.id && s.slotId === currentSlot.id && s.dayOfWeek === dayOfWeek) : null;
 
                         return (
-                            <div key={cls.id} className="bg-[#121214] rounded-3xl border border-white/10 flex flex-col overflow-hidden shadow-2xl h-full">
-                                <div className="py-6 bg-black/40 border-b border-white/5 text-center">
-                                    <h3 className="text-xl font-black text-white uppercase">{String(cls.name || '')}</h3>
+                            <div key={cls.id} className="bg-[#0f0f10] rounded-[2.5rem] border border-white/5 flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-sm">
+                                {/* Card Header */}
+                                <div className="py-6 bg-white/[0.02] border-b border-white/5 text-center">
+                                    <h3 className="text-xl font-black text-gray-200 uppercase tracking-widest">{cls.name}</h3>
                                 </div>
-                                <div className="p-8 flex-1 flex flex-col justify-center text-center">
-                                    {currentSlot ? (
-                                        currentSlot.type === 'break' ? (
-                                            <p className="text-yellow-500 font-black uppercase text-2xl tracking-tighter">INTERVALO</p>
-                                        ) : currentEntry ? (
-                                            <>
-                                                <h4 className="text-2xl font-black text-white uppercase mb-4">{String(currentEntry.subject || '')}</h4>
-                                                <p className="text-gray-300 font-bold uppercase text-sm">{String(currentEntry.professor || '')}</p>
-                                                <p className="text-[10px] text-gray-600 font-bold mt-8 uppercase">{currentSlot.start} - {currentSlot.end}</p>
-                                            </>
-                                        ) : (
-                                            <p className="text-gray-700 font-black uppercase text-xs">Vago</p>
-                                        )
+                                
+                                {/* Card Body */}
+                                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative">
+                                    {currentSlot && currentSlot.type === 'break' ? (
+                                         <div className="animate-pulse">
+                                            <p className="text-yellow-500/80 font-black uppercase text-3xl tracking-widest">Intervalo</p>
+                                         </div>
+                                    ) : currentEntry ? (
+                                        <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
+                                            <h4 className="text-4xl font-black text-white uppercase tracking-tighter mb-6 leading-tight break-words max-w-full">
+                                                {currentEntry.subject}
+                                            </h4>
+                                            <span className="bg-white/5 border border-white/10 px-6 py-2 rounded-full text-gray-400 font-bold uppercase text-xs tracking-widest">
+                                                {currentEntry.professor}
+                                            </span>
+                                        </div>
                                     ) : (
-                                        <p className="text-gray-800 font-black uppercase text-xs">Turno Encerrado</p>
+                                        <p className="text-[#1a1a1a] font-black uppercase text-6xl tracking-widest select-none">LIVRE</p>
                                     )}
                                 </div>
+
+                                {/* Slot Time (Optional Indicator) */}
+                                {currentSlot && (
+                                    <div className="absolute bottom-6 left-0 right-0 flex justify-center opacity-20">
+                                        <p className="text-[10px] font-mono font-bold text-gray-500 tracking-widest">{currentSlot.start} - {currentSlot.end}</p>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
                 </div>
             </main>
 
+            {/* Banner Overlay */}
             {sysConfig?.isBannerActive && (
-                <div className="bg-red-600 py-3 px-12 shrink-0">
-                    <p className="text-lg font-black text-white uppercase text-center truncate">
-                        AVISO: {String(sysConfig.bannerMessage || '')}
-                    </p>
+                <div className="absolute bottom-0 left-0 right-0 bg-red-600 z-50 py-3 overflow-hidden shadow-[0_-10px_30px_rgba(220,38,38,0.3)]">
+                    <div className="animate-marquee whitespace-nowrap">
+                        <p className="text-xl font-black text-white uppercase tracking-widest inline-block px-8">
+                            AVISO IMPORTANTE: {sysConfig.bannerMessage}
+                        </p>
+                    </div>
                 </div>
             )}
-            
-            <div className="fixed right-8 bottom-8 flex gap-4">
-                <button onClick={toggleFullscreen} className="w-12 h-12 bg-black/80 border border-white/10 text-white rounded-2xl flex items-center justify-center shadow-2xl"><Maximize2 size={20}/></button>
-                <button onClick={() => { sessionStorage.removeItem('monitor_auth'); window.location.reload(); }} className="w-12 h-12 bg-black/80 border border-white/10 text-gray-500 rounded-2xl flex items-center justify-center shadow-2xl"><Monitor size={20}/></button>
+
+            {/* Floating Controls */}
+            <div className="fixed right-8 bottom-8 z-50 flex gap-4 opacity-0 hover:opacity-100 transition-opacity duration-500">
+                <button onClick={() => window.location.reload()} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
+                    <Monitor size={18}/>
+                </button>
+                <button onClick={toggleFullscreen} className="w-12 h-12 bg-black/50 border border-white/10 rounded-full text-gray-500 hover:text-white flex items-center justify-center backdrop-blur-md">
+                    <Maximize2 size={18}/>
+                </button>
             </div>
+
+            <style>{`
+                .animate-marquee { display: inline-block; padding-left: 100%; animation: marquee 20s linear infinite; }
+                @keyframes marquee { 0% { transform: translate(0, 0); } 100% { transform: translate(-100%, 0); } }
+            `}</style>
         </div>
     );
 };
