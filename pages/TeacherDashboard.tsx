@@ -63,6 +63,7 @@ export const TeacherDashboard: React.FC = () => {
   // Class Material State
   const [materialTitle, setMaterialTitle] = useState('');
   const [materialClass, setMaterialClass] = useState('');
+  const [materialSubject, setMaterialSubject] = useState('');
   const [materialFile, setMaterialFile] = useState<File | null>(null);
 
   // Occurrence State
@@ -109,6 +110,18 @@ export const TeacherDashboard: React.FC = () => {
       return role.includes("POLIVALENTE") || role.includes("EFAI") || role.includes("INFANTIL") || user.email === 'ruan.wss@gmail.com';
   };
 
+  const getSubjectsForClass = (cls: string) => {
+      if (!cls) return [];
+      if (cls.includes('SÉRIE') || cls.includes('EM')) return EM_SUBJECTS;
+      if (cls.includes('EFAF')) return EFAF_SUBJECTS;
+      // Default for EFAI / Infantil
+      return [
+          "GERAL", "LÍNGUA PORTUGUESA", "MATEMÁTICA", "HISTÓRIA", "GEOGRAFIA", 
+          "CIÊNCIAS", "ARTE", "INGLÊS", "EDUCAÇÃO FÍSICA", "ENSINO RELIGIOSO", 
+          "PROJETOS", "AVALIAÇÕES"
+      ];
+  };
+
   const finalizeExam = async () => {
       if (!examTitle || !examGrade) return alert("Preencha título e turma.");
       if (uploadedFiles.length === 0) return alert("Anexe o arquivo.");
@@ -136,7 +149,7 @@ export const TeacherDashboard: React.FC = () => {
   };
 
   const handleSaveMaterial = async () => {
-      if (!materialTitle || !materialClass || !materialFile) return alert("Preencha todos os campos e anexe um arquivo.");
+      if (!materialTitle || !materialClass || !materialSubject || !materialFile) return alert("Preencha todos os campos, selecione a pasta e anexe um arquivo.");
       setIsSaving(true);
       try {
           const url = await uploadExamFile(materialFile, user?.name || 'Material');
@@ -146,7 +159,7 @@ export const TeacherDashboard: React.FC = () => {
               teacherName: user?.name || '',
               className: materialClass,
               title: materialTitle,
-              subject: user?.subject || 'Geral',
+              subject: materialSubject,
               fileUrl: url,
               fileName: materialFile.name,
               fileType: materialFile.type,
@@ -155,6 +168,7 @@ export const TeacherDashboard: React.FC = () => {
           alert("Material publicado para a turma!");
           setMaterialTitle('');
           setMaterialFile(null);
+          setMaterialSubject('');
           fetchData();
       } catch (e) {
           console.error(e);
@@ -411,10 +425,25 @@ export const TeacherDashboard: React.FC = () => {
                                 <select
                                     className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none appearance-none focus:border-red-600"
                                     value={materialClass}
-                                    onChange={e => setMaterialClass(e.target.value)}
+                                    onChange={e => {
+                                        setMaterialClass(e.target.value);
+                                        setMaterialSubject('');
+                                    }}
                                 >
                                     <option value="">Selecione a Turma...</option>
                                     {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+
+                                <select
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none appearance-none focus:border-red-600 disabled:opacity-50"
+                                    value={materialSubject}
+                                    onChange={e => setMaterialSubject(e.target.value)}
+                                    disabled={!materialClass}
+                                >
+                                    <option value="">Selecione a Pasta...</option>
+                                    {getSubjectsForClass(materialClass).map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
                                 </select>
 
                                 <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center hover:border-red-600 transition-colors relative cursor-pointer group bg-black/20">
@@ -461,7 +490,7 @@ export const TeacherDashboard: React.FC = () => {
                                             <div>
                                                 <h4 className="text-white font-black uppercase tracking-tight text-lg leading-tight">{mat.title}</h4>
                                                 <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-                                                    {mat.className} • {new Date(mat.createdAt).toLocaleDateString()}
+                                                    {mat.className} • {mat.subject} • {new Date(mat.createdAt).toLocaleDateString()}
                                                 </p>
                                             </div>
                                         </div>

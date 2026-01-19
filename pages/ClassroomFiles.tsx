@@ -31,7 +31,7 @@ export const ClassroomFiles: React.FC = () => {
     // Lista completa de turmas
     const availableClasses = useMemo(() => CLASSES, []);
 
-    // Determina as disciplinas com base na turma (Fallback para EFAI/Infantil)
+    // Determina as disciplinas padrão com base na turma
     const currentSubjectsList = useMemo(() => {
         if (!selectedClassName) return [];
         if (selectedClassName.includes('SÉRIE') || selectedClassName.includes('EM')) return EM_SUBJECTS;
@@ -44,6 +44,13 @@ export const ClassroomFiles: React.FC = () => {
             "PROJETOS", "AVALIAÇÕES"
         ];
     }, [selectedClassName]);
+
+    // Combina disciplinas padrão com as encontradas nos materiais (pastas dinâmicas)
+    const displaySubjects = useMemo(() => {
+        const materialSubjects = new Set(materials.map(m => m.subject));
+        const defaultSubjects = new Set(currentSubjectsList);
+        return Array.from(new Set([...defaultSubjects, ...materialSubjects])).sort();
+    }, [materials, currentSubjectsList]);
 
     // Carregar turma salva
     useEffect(() => {
@@ -259,7 +266,7 @@ export const ClassroomFiles: React.FC = () => {
                         {/* VIEW 1: SUBJECT FOLDERS */}
                         {!selectedSubject ? (
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                                {currentSubjectsList.map(subject => {
+                                {displaySubjects.map(subject => {
                                     const count = getFileCount(subject);
                                     return (
                                         <button 
