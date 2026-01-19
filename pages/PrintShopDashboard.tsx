@@ -23,7 +23,7 @@ import {
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
     ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
-    DatabaseZap, CalendarClock, Trash2, Edit, Monitor, GraduationCap
+    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -261,7 +261,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="exams" label="Fila de Impressão" icon={Printer} />
                     <SidebarItem id="students" label="Base de Alunos" icon={Users} />
                     <SidebarItem id="schedule" label="Gestão de Horários" icon={CalendarClock} />
-                    <SidebarItem id="sync" label="Integração Gennera" icon={DatabaseZap} />
+                    <SidebarItem id="sync" label="Integração Gennera" icon={Database} />
                     <SidebarItem id="config" label="Sistema" icon={Settings} />
                 </div>
             </div>
