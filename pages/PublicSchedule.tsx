@@ -2,12 +2,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
-import { Maximize2, Monitor, Volume2, VolumeX } from 'lucide-react';
+import { Maximize2, Monitor, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+import { EFAI_CLASSES } from '../constants';
 
 // Sons para os alertas
 const SOUND_SHORT = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"; // Ding discreto
-const SOUND_LONG = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3"; // Sino de escola (Longer)
+const SOUND_LONG = "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73467.mp3?filename=school-bell-199584.mp3"; // Sino de escola
 
+// --- CONFIGURAÇÃO DE HORÁRIOS ---
+// IMPORTANTE: Os IDs aqui devem bater exatamente com o PrintShopDashboard
 const MORNING_SLOTS: TimeSlot[] = [
     { id: 'm1', start: '07:20', end: '08:10', type: 'class', label: '1º Horário', shift: 'morning' },
     { id: 'm2', start: '08:10', end: '09:00', type: 'class', label: '2º Horário', shift: 'morning' },
@@ -29,7 +32,14 @@ const AFTERNOON_SLOTS: TimeSlot[] = [
     { id: 'a8', start: '19:20', end: '20:00', type: 'class', label: '8º Horário', shift: 'afternoon' },
 ];
 
+// Gerar lista de EFAI compatível com IDs do Admin
+const EFAI_CLASSES_LIST = EFAI_CLASSES.map(c => ({
+    id: c.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    name: c
+}));
+
 const MORNING_CLASSES = [
+    ...EFAI_CLASSES_LIST, // Adiciona Fundamental I
     { id: '6efaf', name: '6º EFAF' },
     { id: '7efaf', name: '7º EFAF' },
     { id: '8efaf', name: '8º EFAF' },
@@ -53,22 +63,33 @@ export const PublicSchedule: React.FC = () => {
     const [currentShift, setCurrentShift] = useState<'morning' | 'afternoon' | 'off'>('morning');
     const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState(true);
     
-    // Audio Refs
+    // Audio State
     const [audioEnabled, setAudioEnabled] = useState(true);
     const lastSlotIdRef = useRef<string | null>(null);
     const audioShortRef = useRef<HTMLAudioElement | null>(null);
     const audioLongRef = useRef<HTMLAudioElement | null>(null);
 
+    // Initialize Audio Objects Once
     useEffect(() => {
-        if (!isAuthorized) return;
-        const unsubscribeSchedule = listenToSchedule(setSchedule);
-        const unsubscribeConfig = listenToSystemConfig(setSysConfig);
-        
-        // Initialize Audio
         audioShortRef.current = new Audio(SOUND_SHORT);
         audioLongRef.current = new Audio(SOUND_LONG);
+        // Preload
+        audioShortRef.current.load();
+        audioLongRef.current.load();
+    }, []);
 
+    useEffect(() => {
+        if (!isAuthorized) return;
+        
+        const unsubscribeSchedule = listenToSchedule((data) => {
+            setSchedule(data);
+            setConnectionStatus(true);
+        });
+        
+        const unsubscribeConfig = listenToSystemConfig(setSysConfig);
+        
         return () => {
             unsubscribeSchedule();
             unsubscribeConfig();
@@ -105,19 +126,18 @@ export const PublicSchedule: React.FC = () => {
 
         // Check for transition
         if (lastSlotIdRef.current !== null && lastSlotIdRef.current !== currentId && audioEnabled) {
+            console.log(`[ALARM] Transitioning from ${lastSlotIdRef.current} to ${currentId}`);
             
-            // Determine transition type for sound
             const prevSlot = activeSlots.find(s => s.id === lastSlotIdRef.current);
-            
             const isEnteringBreak = currentSlot?.type === 'break';
             const isLeavingBreak = prevSlot?.type === 'break';
 
             if (isEnteringBreak || isLeavingBreak) {
                 // Intervalo (Inicio ou Fim) -> Som Longo
-                audioLongRef.current?.play().catch(e => console.log("Audio block:", e));
+                audioLongRef.current?.play().catch(e => console.warn("Audio block (Long):", e));
             } else if (currentId !== 'free') {
                 // Troca de aula normal -> Som Discreto
-                audioShortRef.current?.play().catch(e => console.log("Audio block:", e));
+                audioShortRef.current?.play().catch(e => console.warn("Audio block (Short):", e));
             }
         }
 
@@ -137,12 +157,22 @@ export const PublicSchedule: React.FC = () => {
         setPin(newPin);
         if (newPin.length === 4) {
             if (newPin === DEFAULT_PIN) {
+                // UNLOCK AUDIO CONTEXT ON USER INTERACTION
+                if (audioShortRef.current) {
+                    audioShortRef.current.play().then(() => {
+                        audioShortRef.current?.pause();
+                        audioShortRef.current!.currentTime = 0;
+                    }).catch(() => {});
+                }
+                if (audioLongRef.current) {
+                    audioLongRef.current.play().then(() => {
+                        audioLongRef.current?.pause();
+                        audioLongRef.current!.currentTime = 0;
+                    }).catch(() => {});
+                }
+
                 setIsAuthorized(true);
                 sessionStorage.setItem('monitor_auth', 'true');
-                // Tenta desbloquear o audio context no clique
-                const a = new Audio(SOUND_SHORT);
-                a.volume = 0;
-                a.play().catch(() => {});
             } else {
                 setPinError(true);
                 setTimeout(() => { setPin(''); setPinError(false); }, 1000);
@@ -173,25 +203,29 @@ export const PublicSchedule: React.FC = () => {
     }
 
     const currentClasses = currentShift === 'morning' ? MORNING_CLASSES : AFTERNOON_CLASSES;
-    const dayOfWeek = currentTime.getDay() || 1;
+    
+    // FIX: Handle weekends. If Sunday (0) or Saturday (6), show Monday (1).
+    const rawDay = currentTime.getDay();
+    const dayOfWeek = (rawDay === 0 || rawDay === 6) ? 1 : rawDay;
 
     return (
         <div className="fixed inset-0 bg-[#050505] text-white flex flex-col overflow-hidden font-sans select-none bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-950/20 via-[#050505] to-[#050505]">
             
             {/* Header Section - Centralized */}
-            <header className="flex flex-col items-center justify-center pt-10 pb-6 shrink-0 z-10 relative">
-                <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-14 mb-2 opacity-90 drop-shadow-lg" alt="CEMAL Logo" />
+            <header className="flex flex-col items-center justify-center pt-8 pb-4 shrink-0 z-10 relative">
+                <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-12 mb-2 opacity-90 drop-shadow-lg" alt="CEMAL Logo" />
                 
                 {/* Giant Clock */}
-                <div className="text-[10rem] md:text-[12rem] leading-[0.85] font-clock font-black tracking-tighter text-white drop-shadow-2xl">
+                <div className="text-[9rem] md:text-[11rem] leading-[0.85] font-clock font-black tracking-tighter text-white drop-shadow-2xl tabular-nums">
                     {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
                 
                 {/* Date Pill */}
-                <div className="mt-6 bg-[#1a1a1a]/80 border border-white/5 px-8 py-2 rounded-full backdrop-blur-md shadow-xl">
+                <div className="mt-6 bg-[#1a1a1a]/80 border border-white/5 px-8 py-2 rounded-full backdrop-blur-md shadow-xl flex items-center gap-4">
                     <p className="text-sm font-bold text-gray-300 uppercase tracking-[0.25em]">
                         {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
+                    {connectionStatus ? <Wifi size={14} className="text-green-500"/> : <WifiOff size={14} className="text-red-500"/>}
                 </div>
 
                 {/* Shift Indicator */}
@@ -204,54 +238,57 @@ export const PublicSchedule: React.FC = () => {
             </header>
 
             {/* Main Grid */}
-            <main className="flex-1 px-12 pb-12 w-full max-w-[1920px] mx-auto flex flex-col justify-center">
-                <div className="grid h-[55vh] gap-6" style={{ gridTemplateColumns: `repeat(${currentClasses.length}, 1fr)` }}>
-                    {currentClasses.map(cls => {
-                        const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
-                        const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
-                        const currentSlot = slots.find(s => {
-                            const [hS, mS] = s.start.split(':').map(Number);
-                            const [hE, mE] = s.end.split(':').map(Number);
-                            return nowMins >= (hS * 60 + mS) && nowMins < (hE * 60 + mE);
-                        });
-                        const currentEntry = currentSlot ? schedule.find(s => s.classId === cls.id && s.slotId === currentSlot.id && s.dayOfWeek === dayOfWeek) : null;
+            <main className="flex-1 px-8 pb-8 w-full max-w-[1920px] mx-auto flex flex-col justify-center">
+                <div className="grid h-[50vh] gap-4" style={{ gridTemplateColumns: `repeat(${Math.ceil(currentClasses.length / 2)}, 1fr)` }}>
+                    {/* Using a wrapping logic or just grid auto-flow if needed, but simple map is better for TV */}
+                    {/* Re-map to a simple responsive grid */}
+                    <div className="contents">
+                         {currentClasses.map(cls => {
+                            const slots = currentShift === 'morning' ? MORNING_SLOTS : AFTERNOON_SLOTS;
+                            const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
+                            const currentSlot = slots.find(s => {
+                                const [hS, mS] = s.start.split(':').map(Number);
+                                const [hE, mE] = s.end.split(':').map(Number);
+                                return nowMins >= (hS * 60 + mS) && nowMins < (hE * 60 + mE);
+                            });
+                            
+                            // Debug: Check if we find the entry in the schedule state
+                            const currentEntry = schedule.find(s => 
+                                s.classId === cls.id && 
+                                s.slotId === (currentSlot?.id || 'free') && 
+                                s.dayOfWeek === dayOfWeek
+                            );
 
-                        return (
-                            <div key={cls.id} className="bg-[#0f0f10] rounded-[2.5rem] border border-white/5 flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-sm">
-                                {/* Card Header */}
-                                <div className="py-6 bg-white/[0.02] border-b border-white/5 text-center">
-                                    <h3 className="text-xl font-black text-gray-200 uppercase tracking-widest">{cls.name}</h3>
-                                </div>
-                                
-                                {/* Card Body */}
-                                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative">
-                                    {currentSlot && currentSlot.type === 'break' ? (
-                                         <div className="animate-pulse">
-                                            <p className="text-yellow-500/80 font-black uppercase text-3xl tracking-widest">Intervalo</p>
-                                         </div>
-                                    ) : currentEntry ? (
-                                        <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
-                                            <h4 className="text-4xl font-black text-white uppercase tracking-tighter mb-6 leading-tight break-words max-w-full">
-                                                {currentEntry.subject}
-                                            </h4>
-                                            <span className="bg-white/5 border border-white/10 px-6 py-2 rounded-full text-gray-400 font-bold uppercase text-xs tracking-widest">
-                                                {currentEntry.professor}
-                                            </span>
-                                        </div>
-                                    ) : (
-                                        <p className="text-[#1a1a1a] font-black uppercase text-6xl tracking-widest select-none">LIVRE</p>
-                                    )}
-                                </div>
-
-                                {/* Slot Time (Optional Indicator) */}
-                                {currentSlot && (
-                                    <div className="absolute bottom-6 left-0 right-0 flex justify-center opacity-20">
-                                        <p className="text-[10px] font-mono font-bold text-gray-500 tracking-widest">{currentSlot.start} - {currentSlot.end}</p>
+                            return (
+                                <div key={cls.id} className="bg-[#0f0f10] rounded-[2rem] border border-white/5 flex flex-col overflow-hidden relative shadow-2xl backdrop-blur-sm min-h-[180px]">
+                                    {/* Card Header */}
+                                    <div className="py-3 bg-white/[0.02] border-b border-white/5 text-center">
+                                        <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">{cls.name}</h3>
                                     </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                                    
+                                    {/* Card Body */}
+                                    <div className="flex-1 flex flex-col items-center justify-center p-4 text-center relative">
+                                        {currentSlot && currentSlot.type === 'break' ? (
+                                             <div className="animate-pulse">
+                                                <p className="text-yellow-500/80 font-black uppercase text-2xl tracking-widest">Intervalo</p>
+                                             </div>
+                                        ) : currentEntry ? (
+                                            <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
+                                                <h4 className="text-2xl lg:text-3xl font-black text-white uppercase tracking-tighter mb-2 leading-tight break-words max-w-full">
+                                                    {currentEntry.subject}
+                                                </h4>
+                                                <span className="bg-white/5 border border-white/10 px-4 py-1 rounded-full text-gray-400 font-bold uppercase text-[10px] tracking-widest truncate max-w-[200px]">
+                                                    {currentEntry.professor}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <p className="text-[#1a1a1a] font-black uppercase text-4xl tracking-widest select-none">LIVRE</p>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </main>
 
