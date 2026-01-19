@@ -27,7 +27,7 @@ import {
   BookOpen, Save, ArrowLeft, Heart, FileText, Eye, Clock, UploadCloud, ChevronRight,
   Target, BookOpenCheck, Calendar as CalendarIcon, ClipboardCheck,
   CheckCircle2, FileDown, FileType, Folder, UserCheck, UserX, ShieldCheck,
-  LayoutTemplate, Download, Users, Edit3
+  LayoutTemplate, Download, Users, Edit3, MessageSquare
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES } from '../constants';
 
@@ -65,6 +65,12 @@ export const TeacherDashboard: React.FC = () => {
   const [materialClass, setMaterialClass] = useState('');
   const [materialSubject, setMaterialSubject] = useState('');
   const [materialFile, setMaterialFile] = useState<File | null>(null);
+
+  // Lesson Plan State
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [newPlan, setNewPlan] = useState<Partial<LessonPlan>>({
+      className: '', subject: '', topic: '', content: ''
+  });
 
   // Occurrence State
   const [showOccurrenceModal, setShowOccurrenceModal] = useState(false);
@@ -110,6 +116,9 @@ export const TeacherDashboard: React.FC = () => {
         } else if (activeTab === 'materials') {
             const mats = await getClassMaterials(user.id);
             setTeacherMaterials(mats.sort((a,b) => b.createdAt - a.createdAt));
+        } else if (activeTab === 'plans') {
+            const plans = await getLessonPlans(user.id);
+            setLessonPlans(plans.sort((a,b) => b.createdAt - a.createdAt));
         }
     } catch (e) { console.error(e); }
     setIsLoading(false);
@@ -192,6 +201,35 @@ export const TeacherDashboard: React.FC = () => {
   const handleDeleteMaterial = async (id: string) => {
       if (confirm("Deseja excluir este material?")) {
           await deleteClassMaterial(id);
+          fetchData();
+      }
+  };
+
+  const handleSavePlan = async () => {
+      if (!newPlan.className || !newPlan.topic) return alert("Preencha os campos obrigatórios.");
+      setIsSaving(true);
+      try {
+          await saveLessonPlan({
+              id: '',
+              teacherId: user?.id || '',
+              teacherName: user?.name || '',
+              className: newPlan.className || '',
+              subject: newPlan.subject || user?.subject || '',
+              topic: newPlan.topic || '',
+              content: newPlan.content || '',
+              createdAt: Date.now()
+          });
+          alert("Planejamento salvo!");
+          setShowPlanModal(false);
+          setNewPlan({ className: '', subject: '', topic: '', content: '' });
+          fetchData();
+      } catch(e) { alert("Erro ao salvar."); }
+      finally { setIsSaving(false); }
+  };
+
+  const handleDeletePlan = async (id: string) => {
+      if(confirm("Excluir planejamento?")) {
+          await deleteLessonPlan(id);
           fetchData();
       }
   };
@@ -574,6 +612,81 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* PLANS TAB (RESTORED) */}
+            {activeTab === 'plans' && (
+                <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto">
+                    <header className="mb-12 flex justify-between items-center">
+                        <div>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Organização de aulas e conteúdos</p>
+                        </div>
+                        <Button onClick={() => setShowPlanModal(true)} className="bg-red-600 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
+                            <Plus size={18} className="mr-3"/> Novo Planejamento
+                        </Button>
+                    </header>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {lessonPlans.map(plan => (
+                            <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-white/10 transition-all group relative">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="p-4 bg-white/5 text-gray-300 rounded-2xl"><BookOpen size={24}/></div>
+                                    <button onClick={() => handleDeletePlan(plan.id)} className="text-gray-600 hover:text-red-500 p-2"><Trash2 size={20}/></button>
+                                </div>
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2">{plan.topic}</h3>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-6">{plan.className} • {plan.subject}</p>
+                                <div className="bg-black/30 p-6 rounded-2xl border border-white/5 text-gray-400 text-sm leading-relaxed whitespace-pre-wrap">
+                                    {plan.content}
+                                </div>
+                            </div>
+                        ))}
+                        {lessonPlans.length === 0 && (
+                            <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[2.5rem] opacity-30">
+                                <BookOpen size={48} className="mx-auto mb-4 text-gray-500" />
+                                <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhum planejamento registrado</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* OCCURRENCES TAB (RESTORED) */}
+            {activeTab === 'occurrences' && (
+                <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto">
+                    <header className="mb-12 flex justify-between items-center">
+                        <div>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Ocorrências</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Diário de bordo disciplinar</p>
+                        </div>
+                        <Button onClick={() => setShowOccurrenceModal(true)} className="bg-red-600 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
+                            <AlertCircle size={18} className="mr-3"/> Nova Ocorrência
+                        </Button>
+                    </header>
+
+                    <div className="space-y-4">
+                        {teacherOccurrences.map(occ => (
+                            <div key={occ.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl flex flex-col md:flex-row gap-6 relative group hover:border-white/10 transition-all">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-4 mb-3">
+                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${occ.category === 'indisciplina' ? 'bg-red-500/10 text-red-500 border-red-500/20' : occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}`}>{occ.category}</span>
+                                        <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest">{new Date(occ.timestamp).toLocaleDateString()}</span>
+                                    </div>
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-1">{occ.studentName}</h3>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-4">{occ.studentClass}</p>
+                                    <p className="text-gray-400 text-sm leading-relaxed italic">"{occ.description}"</p>
+                                </div>
+                                <button onClick={() => handleDeleteOccurrence(occ.id)} className="absolute top-8 right-8 text-gray-600 hover:text-red-500"><Trash2 size={20}/></button>
+                            </div>
+                        ))}
+                        {teacherOccurrences.length === 0 && (
+                            <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2.5rem] opacity-30">
+                                <MessageSquare size={48} className="mx-auto mb-4 text-gray-500" />
+                                <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhuma ocorrência registrada</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {activeTab === 'attendance' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto pb-40">
                     {/* ... attendance content ... */}
@@ -813,6 +926,130 @@ export const TeacherDashboard: React.FC = () => {
                             <Button variant="outline" onClick={() => setShowPeiModal(false)} className="h-16 px-10 rounded-2xl font-black uppercase tracking-widest border-white/10 hover:bg-white/5">Cancelar</Button>
                             <Button onClick={handleSavePei} isLoading={isSaving} className="h-16 px-12 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">
                                 <Save size={20} className="mr-2"/> Salvar Planejamento
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* LESSON PLAN MODAL */}
+            {showPlanModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                        <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Novo Planejamento</h3>
+                            <button onClick={() => setShowPlanModal(false)} className="text-gray-500 hover:text-white"><X size={32}/></button>
+                        </div>
+                        <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Turma</label>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                        value={newPlan.className}
+                                        onChange={e => setNewPlan({...newPlan, className: e.target.value})}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Disciplina</label>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                        value={newPlan.subject}
+                                        onChange={e => setNewPlan({...newPlan, subject: e.target.value})}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {getSubjectsForClass(newPlan.className || '').map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Tópico / Tema da Aula</label>
+                                <input 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600"
+                                    placeholder="Ex: Introdução à Álgebra"
+                                    value={newPlan.topic}
+                                    onChange={e => setNewPlan({...newPlan, topic: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Conteúdo e Metodologia</label>
+                                <textarea 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 min-h-[200px]"
+                                    placeholder="Descreva o desenvolvimento da aula..."
+                                    value={newPlan.content}
+                                    onChange={e => setNewPlan({...newPlan, content: e.target.value})}
+                                />
+                            </div>
+                            <Button onClick={handleSavePlan} isLoading={isSaving} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20">
+                                Salvar Planejamento
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* OCCURRENCE MODAL */}
+            {showOccurrenceModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                        <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">Nova Ocorrência</h3>
+                            <button onClick={() => setShowOccurrenceModal(false)} className="text-gray-500 hover:text-white"><X size={32}/></button>
+                        </div>
+                        <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Turma</label>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                        value={occurrenceClass}
+                                        onChange={e => setOccurrenceClass(e.target.value)}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Aluno</label>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none disabled:opacity-50"
+                                        value={occurrenceForm.studentId}
+                                        onChange={e => setOccurrenceForm({...occurrenceForm, studentId: e.target.value})}
+                                        disabled={!occurrenceClass}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {students.filter(s => s.className === occurrenceClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Tipo de Ocorrência</label>
+                                <select 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none"
+                                    value={occurrenceForm.category}
+                                    onChange={e => setOccurrenceForm({...occurrenceForm, category: e.target.value})}
+                                >
+                                    <option value="indisciplina">Indisciplina</option>
+                                    <option value="atraso">Atraso</option>
+                                    <option value="uniforme">Uniforme</option>
+                                    <option value="elogio">Elogio</option>
+                                    <option value="outros">Outros</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Descrição do Fato</label>
+                                <textarea 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 min-h-[150px]"
+                                    placeholder="Descreva o ocorrido..."
+                                    value={occurrenceForm.description}
+                                    onChange={e => setOccurrenceForm({...occurrenceForm, description: e.target.value})}
+                                />
+                            </div>
+                            <Button onClick={handleSaveOccurrence} isLoading={isSaving} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-red-900/20">
+                                Registrar Ocorrência
                             </Button>
                         </div>
                     </div>
