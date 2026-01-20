@@ -446,6 +446,104 @@ export const PrintShopDashboard: React.FC = () => {
         }
     };
 
+    const handlePrintAnswerSheet = (key: AnswerKey) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const sortedQuestions = [...key.questions].sort((a,b) => a.number - b.number);
+        
+        let currentSubject = '';
+        
+        const questionBlocks = sortedQuestions.map(q => {
+            let header = '';
+            if (q.subject && q.subject !== currentSubject) {
+                currentSubject = q.subject;
+                header = `<div class="subject-header">${currentSubject}</div>`;
+            }
+            return `
+                <div class="question-block">
+                    ${header}
+                    <div class="question-item">
+                        <span class="q-num">${q.number}</span>
+                        <div class="bubbles">
+                            <div class="bubble">A</div>
+                            <div class="bubble">B</div>
+                            <div class="bubble">C</div>
+                            <div class="bubble">D</div>
+                            <div class="bubble">E</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Cartão Resposta - ${key.title}</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap');
+                    body { font-family: 'Roboto', sans-serif; padding: 40px; max-width: 1000px; margin: 0 auto; -webkit-print-color-adjust: exact; }
+                    .header { border: 3px solid #000; padding: 25px; border-radius: 15px; margin-bottom: 30px; display: flex; flex-direction: column; gap: 20px; }
+                    .school-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 10px; }
+                    .school-name { font-weight: 900; font-size: 28px; text-transform: uppercase; letter-spacing: 2px; }
+                    .info-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+                    .field { border-bottom: 2px solid #000; padding-bottom: 5px; display: flex; align-items: flex-end; }
+                    .label { font-weight: 900; font-size: 14px; text-transform: uppercase; margin-right: 10px; white-space: nowrap; }
+                    
+                    .exam-title { text-align: center; font-weight: 900; font-size: 32px; margin-bottom: 40px; text-transform: uppercase; background: #000; color: #fff; padding: 10px; border-radius: 10px; }
+                    
+                    .questions-container { column-count: 3; column-gap: 40px; column-rule: 1px solid #ccc; }
+                    @media print { .questions-container { column-count: 3; } }
+                    
+                    .question-block { break-inside: avoid; margin-bottom: 10px; }
+                    .subject-header { font-weight: 900; font-size: 16px; margin-top: 20px; margin-bottom: 10px; text-transform: uppercase; border-bottom: 2px solid #000; display: inline-block; padding-bottom: 2px; }
+                    .question-item { display: flex; align-items: center; gap: 15px; }
+                    .q-num { font-weight: 900; width: 30px; text-align: right; font-size: 16px; }
+                    .bubbles { display: flex; gap: 8px; }
+                    .bubble { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; }
+                    
+                    .footer { margin-top: 50px; border-top: 2px solid #000; padding-top: 15px; font-size: 12px; text-align: center; font-weight: bold; text-transform: uppercase; }
+                    .correction-area { margin-top: 20px; border: 2px dashed #999; padding: 10px; text-align: center; color: #666; font-size: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="school-header">
+                        <div class="school-name">CEMAL - Centro Educacional</div>
+                        <div style="font-size: 12px; font-weight: bold; margin-top: 5px;">ENSINO FUNDAMENTAL E MÉDIO</div>
+                    </div>
+                    <div class="info-grid">
+                        <div class="field"><span class="label">Nome do Aluno:</span></div>
+                        <div class="field"><span class="label">Data:</span></div>
+                        <div class="field"><span class="label">Turma:</span></div>
+                        <div class="field"><span class="label">Nota:</span></div>
+                    </div>
+                </div>
+                
+                <div class="exam-title">${key.title}</div>
+                
+                <div class="questions-container">
+                    ${questionBlocks}
+                </div>
+                
+                <div class="correction-area">
+                    ÁREA RESERVADA PARA CORREÇÃO AUTOMÁTICA
+                </div>
+
+                <div class="footer">
+                    Instruções: Preencha completamente a bolinha correspondente à alternativa correta. Utilize caneta esferográfica azul ou preta. Não rasure.
+                </div>
+                <script>window.onload = () => window.print();</script>
+            </body>
+            </html>
+        `;
+        
+        printWindow.document.write(html);
+        printWindow.document.close();
+    };
+
     const handleAnalyzeImage = async () => {
         if (!correctionImage || !selectedKey) return alert("Selecione uma imagem e um gabarito.");
         
@@ -691,16 +789,28 @@ export const PrintShopDashboard: React.FC = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {answerKeys.map(key => (
-                                <div key={key.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-white/10 transition-all group relative">
+                                <div key={key.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-white/10 transition-all group relative flex flex-col">
                                     <div className="flex justify-between items-start mb-6">
                                         <div className="p-4 bg-red-900/20 text-red-500 rounded-2xl"><FileCheck size={24}/></div>
                                         <button onClick={() => handleDeleteKey(key.id)} className="p-2 text-gray-600 hover:text-red-500"><Trash2 size={20}/></button>
                                     </div>
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2">{key.title}</h3>
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 line-clamp-2">{key.title}</h3>
                                     <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-6">{key.questions.length} Questões • {new Date(key.createdAt).toLocaleDateString()}</p>
-                                    <Button onClick={() => { setSelectedKey(key); setShowCorrectionModal(true); setCorrectionResult(null); setCorrectionImage(null); }} className="w-full h-14 rounded-xl bg-white/5 hover:bg-red-600 text-white font-black uppercase text-[10px] tracking-widest transition-all">
-                                        Corrigir Provas
-                                    </Button>
+                                    
+                                    <div className="mt-auto flex gap-3">
+                                        <Button 
+                                            onClick={() => handlePrintAnswerSheet(key)} 
+                                            className="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-white font-black uppercase text-[10px] tracking-widest transition-all"
+                                        >
+                                            <Printer size={16} className="mr-2"/> Cartão
+                                        </Button>
+                                        <Button 
+                                            onClick={() => { setSelectedKey(key); setShowCorrectionModal(true); setCorrectionResult(null); setCorrectionImage(null); }} 
+                                            className="flex-1 h-12 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest transition-all shadow-lg shadow-red-900/20"
+                                        >
+                                            Corrigir
+                                        </Button>
+                                    </div>
                                 </div>
                             ))}
                             {answerKeys.length === 0 && (
