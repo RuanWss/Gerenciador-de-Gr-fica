@@ -23,8 +23,7 @@ import {
     saveAnswerKey,
     getAnswerKeys,
     deleteAnswerKey,
-    saveCorrection,
-    getCorrectionsByGabarito
+    saveCorrection
 } from '../services/firebaseService';
 import { analyzeAnswerSheet } from '../services/geminiService';
 import { 
@@ -251,7 +250,6 @@ export const PrintShopDashboard: React.FC = () => {
 
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
-        // Optimistic update done by listener
     };
     
     const handleSaveConfig = async () => {
@@ -464,7 +462,7 @@ export const PrintShopDashboard: React.FC = () => {
                 <div class="question-block">
                     ${header}
                     <div class="question-item">
-                        <span class="q-num">${q.number}</span>
+                        <span class="q-num">${q.number.toString().padStart(2, '0')}</span>
                         <div class="bubbles">
                             <div class="bubble">A</div>
                             <div class="bubble">B</div>
@@ -483,59 +481,212 @@ export const PrintShopDashboard: React.FC = () => {
             <head>
                 <title>Cartão Resposta - ${key.title}</title>
                 <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700;900&display=swap');
-                    body { font-family: 'Roboto', sans-serif; padding: 40px; max-width: 1000px; margin: 0 auto; -webkit-print-color-adjust: exact; }
-                    .header { border: 3px solid #000; padding: 25px; border-radius: 15px; margin-bottom: 30px; display: flex; flex-direction: column; gap: 20px; }
-                    .school-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 10px; }
-                    .school-name { font-weight: 900; font-size: 28px; text-transform: uppercase; letter-spacing: 2px; }
-                    .info-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
-                    .field { border-bottom: 2px solid #000; padding-bottom: 5px; display: flex; align-items: flex-end; }
-                    .label { font-weight: 900; font-size: 14px; text-transform: uppercase; margin-right: 10px; white-space: nowrap; }
+                    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap');
+                    @page { size: A4; margin: 0; }
+                    body { 
+                        font-family: 'Roboto', sans-serif; 
+                        margin: 0; 
+                        padding: 15mm;
+                        -webkit-print-color-adjust: exact; 
+                        print-color-adjust: exact;
+                    }
                     
-                    .exam-title { text-align: center; font-weight: 900; font-size: 32px; margin-bottom: 40px; text-transform: uppercase; background: #000; color: #fff; padding: 10px; border-radius: 10px; }
+                    .sheet-container { 
+                        width: 100%;
+                        max-width: 190mm;
+                        margin: 0 auto;
+                    }
                     
-                    .questions-container { column-count: 3; column-gap: 40px; column-rule: 1px solid #ccc; }
-                    @media print { .questions-container { column-count: 3; } }
+                    /* HEADER */
+                    .header { 
+                        display: flex; 
+                        gap: 20px; 
+                        align-items: center; 
+                        border: 2px solid #000; 
+                        border-radius: 8px;
+                        padding: 15px; 
+                        margin-bottom: 15px; 
+                    }
+                    .logo-box { 
+                        width: 120px; 
+                        flex-shrink: 0; 
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .logo-box img { 
+                        width: 100%; 
+                        height: auto; 
+                    }
                     
-                    .question-block { break-inside: avoid; margin-bottom: 10px; }
-                    .subject-header { font-weight: 900; font-size: 16px; margin-top: 20px; margin-bottom: 10px; text-transform: uppercase; border-bottom: 2px solid #000; display: inline-block; padding-bottom: 2px; }
-                    .question-item { display: flex; align-items: center; gap: 15px; }
-                    .q-num { font-weight: 900; width: 30px; text-align: right; font-size: 16px; }
-                    .bubbles { display: flex; gap: 8px; }
-                    .bubble { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; }
+                    .info-box { 
+                        flex-grow: 1; 
+                        display: flex; 
+                        flex-direction: column; 
+                        gap: 12px; 
+                    }
+                    .field-row { 
+                        display: flex; 
+                        gap: 15px; 
+                    }
+                    .field { 
+                        flex-grow: 1; 
+                        display: flex; 
+                        flex-direction: column; 
+                    }
+                    .field-label { 
+                        font-size: 10px; 
+                        font-weight: 700; 
+                        text-transform: uppercase; 
+                        margin-bottom: 4px;
+                        color: #000;
+                    }
+                    .field-input {
+                        border-bottom: 1px solid #000;
+                        height: 20px;
+                    }
                     
-                    .footer { margin-top: 50px; border-top: 2px solid #000; padding-top: 15px; font-size: 12px; text-align: center; font-weight: bold; text-transform: uppercase; }
-                    .correction-area { margin-top: 20px; border: 2px dashed #999; padding: 10px; text-align: center; color: #666; font-size: 10px; }
+                    /* TITLE BAR */
+                    .exam-title-box { 
+                        background: #000; 
+                        color: #fff; 
+                        padding: 10px; 
+                        text-align: center; 
+                        font-weight: 900; 
+                        text-transform: uppercase; 
+                        font-size: 16px; 
+                        letter-spacing: 1px; 
+                        margin-bottom: 20px;
+                        border-radius: 4px;
+                    }
+                    
+                    /* QUESTIONS GRID */
+                    .questions-grid { 
+                        column-count: 4; 
+                        column-gap: 30px; 
+                        column-rule: 1px solid #ddd;
+                        font-size: 12px;
+                    }
+                    @media print {
+                        .questions-grid { column-count: 4; }
+                    }
+                    
+                    .question-block { 
+                        break-inside: avoid; 
+                        margin-bottom: 6px; 
+                    }
+                    
+                    .subject-header { 
+                        font-size: 10px; 
+                        font-weight: 900; 
+                        margin-top: 15px; 
+                        margin-bottom: 8px; 
+                        text-transform: uppercase; 
+                        border-bottom: 2px solid #000;
+                        padding-bottom: 2px;
+                        display: inline-block;
+                        width: 100%;
+                    }
+                    
+                    .question-item { 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: space-between;
+                        padding: 2px 0;
+                    }
+                    
+                    .q-num { 
+                        font-weight: 900; 
+                        font-size: 12px; 
+                        width: 20px; 
+                    }
+                    
+                    .bubbles { 
+                        display: flex; 
+                        gap: 6px; 
+                    }
+                    
+                    .bubble { 
+                        width: 16px; 
+                        height: 16px; 
+                        border-radius: 50%; 
+                        border: 1px solid #000; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        font-size: 9px; 
+                        font-weight: bold; 
+                        color: #444;
+                    }
+                    
+                    /* FOOTER */
+                    .footer {
+                        margin-top: 30px;
+                        border-top: 2px solid #000;
+                        padding-top: 10px;
+                        font-size: 10px;
+                        text-align: center;
+                        font-weight: bold;
+                        text-transform: uppercase;
+                    }
+                    
+                    .instructions {
+                        margin-top: 10px;
+                        font-size: 9px;
+                        color: #666;
+                        text-align: justify;
+                        line-height: 1.4;
+                    }
                 </style>
             </head>
             <body>
-                <div class="header">
-                    <div class="school-header">
-                        <div class="school-name">CEMAL - Centro Educacional</div>
-                        <div style="font-size: 12px; font-weight: bold; margin-top: 5px;">ENSINO FUNDAMENTAL E MÉDIO</div>
+                <div class="sheet-container">
+                    <div class="header">
+                        <div class="logo-box">
+                            <img src="https://i.ibb.co/cKhq9LSG/10-anos-CEMAL-Prancheta-1-c-pia-3-1.png" alt="Logo CEMAL">
+                        </div>
+                        <div class="info-box">
+                            <div class="field">
+                                <span class="field-label">Nome do Aluno</span>
+                                <div class="field-input"></div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field" style="flex: 2;">
+                                    <span class="field-label">Turma</span>
+                                    <div class="field-input"></div>
+                                </div>
+                                <div class="field" style="flex: 1;">
+                                    <span class="field-label">Data</span>
+                                    <div class="field-input"></div>
+                                </div>
+                                <div class="field" style="flex: 1;">
+                                    <span class="field-label">Nota</span>
+                                    <div class="field-input"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="info-grid">
-                        <div class="field"><span class="label">Nome do Aluno:</span></div>
-                        <div class="field"><span class="label">Data:</span></div>
-                        <div class="field"><span class="label">Turma:</span></div>
-                        <div class="field"><span class="label">Nota:</span></div>
-                    </div>
-                </div>
-                
-                <div class="exam-title">${key.title}</div>
-                
-                <div class="questions-container">
-                    ${questionBlocks}
-                </div>
-                
-                <div class="correction-area">
-                    ÁREA RESERVADA PARA CORREÇÃO AUTOMÁTICA
-                </div>
 
-                <div class="footer">
-                    Instruções: Preencha completamente a bolinha correspondente à alternativa correta. Utilize caneta esferográfica azul ou preta. Não rasure.
+                    <div class="exam-title-box">
+                        ${key.title}
+                    </div>
+
+                    <div class="questions-grid">
+                        ${questionBlocks}
+                    </div>
+
+                    <div class="footer">
+                        Boa Prova!
+                        <div class="instructions">
+                            Instruções: Preencha completamente a bolinha com caneta esferográfica de tinta azul ou preta. Não utilize corretivo. Respostas rasuradas serão anuladas.
+                        </div>
+                    </div>
                 </div>
-                <script>window.onload = () => window.print();</script>
+                <script>
+                    window.onload = () => {
+                        setTimeout(() => window.print(), 500);
+                    }
+                </script>
             </body>
             </html>
         `;
@@ -826,7 +977,6 @@ export const PrintShopDashboard: React.FC = () => {
                 {/* --- EXAMS TAB --- */}
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        {/* ... (Exams content remains same) ... */}
                         <header className="mb-12">
                             <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Central de Cópias</h1>
                             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Solicitações de professores em tempo real</p>
@@ -916,11 +1066,9 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {/* ... other tabs ... */}
-                {/* Omitted for brevity, kept existing ones (schedule, students, sync, config, occurrences, aee_agenda) */}
+                {/* --- SCHEDULE TAB --- */}
                 {activeTab === 'schedule' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        {/* ... (Schedule content remains same) ... */}
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
                             <div>
                                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Gestão de Horários</h1>

@@ -166,28 +166,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password?: string): Promise<boolean> => {
     try {
       if (!password) return false;
-      await signInWithEmailAndPassword(auth, email, password);
+      const cleanEmail = email.trim();
+      const cleanPassword = password.trim();
+      
+      await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
       return true;
     } catch (error: any) {
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-          const systemPasswords: Record<string, string> = {
-              'ruan.wss@gmail.com': 'cemal#2016',
-              'pontoequipecemal@ceprofmal.com': 'cemal#2016',
-              'rh@ceprofmal.com': 'cemal#2016',
-              'frequencia.cemal@ceprofmal.com': 'cemal#2016',
-              'cemal.salas@ceprofmal.com': 'cemal#2016',
-              'cemalaee@hotmail.com': 'cemal2016'
-          };
+      const systemPasswords: Record<string, string> = {
+          'ruan.wss@gmail.com': 'cemal#2016',
+          'pontoequipecemal@ceprofmal.com': 'cemal#2016',
+          'rh@ceprofmal.com': 'cemal#2016',
+          'frequencia.cemal@ceprofmal.com': 'cemal#2016',
+          'cemal.salas@ceprofmal.com': 'cemal#2016',
+          'cemalaee@hotmail.com': 'cemal2016',
+          'graficacemal@gmail.com': 'cemal#2016'
+      };
 
-          if (systemPasswords[email] === password) {
-              try {
-                  await createUserWithEmailAndPassword(auth, email, password);
-                  return true;
-              } catch (createError) {
-                  return false;
-              }
+      const emailInput = email.trim();
+      
+      // Fallback for system accounts initialization
+      if (systemPasswords[emailInput] === password?.trim()) {
+          try {
+              // Try to create the user if they don't exist yet (first run)
+              await createUserWithEmailAndPassword(auth, emailInput, password.trim());
+              return true;
+          } catch (createError: any) {
+              // If creation fails (e.g., user exists but password in DB is different),
+              // we can't force login. Just allow it to return false below.
+              // We suppress logging here to avoid confusion unless debugging.
           }
       }
+
+      // Suppress expected auth errors from console
+      const errorCode = error.code;
+      if (
+          errorCode === 'auth/invalid-credential' || 
+          errorCode === 'auth/user-not-found' || 
+          errorCode === 'auth/wrong-password' ||
+          errorCode === 'auth/invalid-email'
+      ) {
+          return false;
+      }
+
+      // Log only unexpected errors
       console.error("Login error:", error);
       return false;
     }
