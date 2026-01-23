@@ -23,7 +23,8 @@ import {
     saveAnswerKey,
     getAnswerKeys,
     deleteAnswerKey,
-    saveCorrection
+    saveCorrection,
+    listenToAllLessonPlans
 } from '../services/firebaseService';
 import { analyzeAnswerSheet } from '../services/geminiService';
 import { 
@@ -38,12 +39,13 @@ import {
     StudentOccurrence,
     AEEAppointment,
     AnswerKey,
-    StudentCorrection
+    StudentCorrection,
+    LessonPlan
 } from '../types';
 import { 
     Printer, Search, Users, Settings, RefreshCw, FileText, CheckCircle, Clock, Hourglass, 
     ClipboardCheck, Truck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
-    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio, BookOpen, AlertTriangle, Camera, User, Calendar, Heart, Plus, ChevronLeft, ChevronRight, FileCheck, UploadCloud, BrainCircuit, ListOrdered
+    Database, CalendarClock, Trash2, Edit, Monitor, GraduationCap, Radio, BookOpen, AlertTriangle, Camera, User, Calendar, Heart, Plus, ChevronLeft, ChevronRight, FileCheck, UploadCloud, BrainCircuit, ListOrdered, BookMarked
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAI_CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -134,7 +136,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 };
 
 export const PrintShopDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'sync' | 'schedule' | 'config' | 'occurrences' | 'aee_agenda' | 'answer_keys'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'students' | 'sync' | 'schedule' | 'config' | 'occurrences' | 'aee_agenda' | 'answer_keys' | 'lesson_plans'>('exams');
     const [isLoading, setIsLoading] = useState(false);
 
     // Data States
@@ -148,6 +150,9 @@ export const PrintShopDashboard: React.FC = () => {
     const [occurrences, setOccurrences] = useState<StudentOccurrence[]>([]);
     const [occurrenceSearch, setOccurrenceSearch] = useState('');
     const [aeeAppointments, setAeeAppointments] = useState<AEEAppointment[]>([]);
+    const [allLessonPlans, setAllLessonPlans] = useState<LessonPlan[]>([]);
+    const [planSearch, setPlanSearch] = useState('');
+    const [viewingPlan, setViewingPlan] = useState<LessonPlan | null>(null);
     
     // Answer Key & Correction States
     const [answerKeys, setAnswerKeys] = useState<AnswerKey[]>([]);
@@ -217,6 +222,7 @@ export const PrintShopDashboard: React.FC = () => {
         const unsubStaff = listenToStaffMembers(setStaffList);
         const unsubOccurrences = listenToOccurrences(setOccurrences);
         const unsubAEE = listenToAEEAppointments(setAeeAppointments);
+        const unsubPlans = listenToAllLessonPlans(setAllLessonPlans);
 
         // Fetch Answer Keys manually when tab changes
         if (activeTab === 'answer_keys') {
@@ -238,6 +244,7 @@ export const PrintShopDashboard: React.FC = () => {
             unsubAttendance(); 
             unsubOccurrences(); 
             unsubAEE();
+            unsubPlans();
         };
     }, [activeTab]);
 
@@ -824,6 +831,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="students" label="Base de Alunos" icon={Users} />
                     <SidebarItem id="aee_agenda" label="Agenda AEE" icon={Calendar} />
                     <SidebarItem id="occurrences" label="Livro de Ocorrências" icon={BookOpen} />
+                    <SidebarItem id="lesson_plans" label="Planejamentos" icon={BookMarked} />
                     <SidebarItem id="schedule" label="Gestão de Horários" icon={CalendarClock} />
                     <SidebarItem id="sync" label="Integração Gennera" icon={Database} />
                     <SidebarItem id="config" label="Sistema" icon={Settings} />
@@ -970,6 +978,70 @@ export const PrintShopDashboard: React.FC = () => {
                                     <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhum gabarito cadastrado</p>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- LESSON PLANS TAB --- */}
+                {activeTab === 'lesson_plans' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Acompanhamento pedagógico de aulas e projetos</p>
+                            </div>
+                            <div className="relative w-full md:w-96">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                                <input type="text" placeholder="Buscar por professor, turma ou tema..." className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" value={planSearch} onChange={e => setPlanSearch(e.target.value)} />
+                            </div>
+                        </header>
+
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                             <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
+                                        <tr>
+                                            <th className="p-8">Data</th>
+                                            <th className="p-8">Professor / Disciplina</th>
+                                            <th className="p-8">Turma / Tipo</th>
+                                            <th className="p-8">Tema</th>
+                                            <th className="p-8 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {allLessonPlans.filter(p => 
+                                            String(p.teacherName).toLowerCase().includes(planSearch.toLowerCase()) ||
+                                            String(p.className).toLowerCase().includes(planSearch.toLowerCase()) ||
+                                            String(p.topic || p.inovaTheme || '').toLowerCase().includes(planSearch.toLowerCase())
+                                        ).map(plan => (
+                                            <tr key={plan.id} className="hover:bg-white/[0.02] group align-top">
+                                                <td className="p-8 text-xs font-bold text-gray-500 w-32">{new Date(plan.createdAt).toLocaleDateString()}</td>
+                                                <td className="p-8">
+                                                    <p className="font-black text-white uppercase tracking-tight text-sm">{plan.teacherName}</p>
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">{plan.subject}</p>
+                                                </td>
+                                                <td className="p-8">
+                                                    <span className="bg-white/5 px-3 py-1 rounded-full text-[10px] font-black text-gray-400 uppercase border border-white/5">{plan.className}</span>
+                                                    <div className="mt-2 text-[9px] font-bold text-gray-600 uppercase tracking-widest">
+                                                        {plan.type === 'bimester' ? 'Bimestral' : plan.type === 'inova' ? 'Projeto Inova' : 'Diário'}
+                                                    </div>
+                                                </td>
+                                                <td className="p-8">
+                                                    <p className="text-sm font-bold text-gray-300 line-clamp-2">{plan.topic || plan.inovaTheme || 'Sem tema'}</p>
+                                                </td>
+                                                <td className="p-8 text-right">
+                                                    <button onClick={() => setViewingPlan(plan)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all">
+                                                        Visualizar
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {allLessonPlans.length === 0 && (
+                                            <tr><td colSpan={5} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Nenhum planejamento encontrado</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1535,6 +1607,70 @@ export const PrintShopDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* --- LESSON PLANS TAB --- */}
+            {activeTab === 'lesson_plans' && (
+                <div className="animate-in fade-in slide-in-from-right-4">
+                    <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+                        <div>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
+                            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Acompanhamento pedagógico de aulas e projetos</p>
+                        </div>
+                        <div className="relative w-full md:w-96">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                            <input type="text" placeholder="Buscar por professor, turma ou tema..." className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" value={planSearch} onChange={e => setPlanSearch(e.target.value)} />
+                        </div>
+                    </header>
+
+                    <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                         <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
+                                    <tr>
+                                        <th className="p-8">Data</th>
+                                        <th className="p-8">Professor / Disciplina</th>
+                                        <th className="p-8">Turma / Tipo</th>
+                                        <th className="p-8">Tema</th>
+                                        <th className="p-8 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {allLessonPlans.filter(p => 
+                                        String(p.teacherName).toLowerCase().includes(planSearch.toLowerCase()) ||
+                                        String(p.className).toLowerCase().includes(planSearch.toLowerCase()) ||
+                                        String(p.topic || p.inovaTheme || '').toLowerCase().includes(planSearch.toLowerCase())
+                                    ).map(plan => (
+                                        <tr key={plan.id} className="hover:bg-white/[0.02] group align-top">
+                                            <td className="p-8 text-xs font-bold text-gray-500 w-32">{new Date(plan.createdAt).toLocaleDateString()}</td>
+                                            <td className="p-8">
+                                                <p className="font-black text-white uppercase tracking-tight text-sm">{plan.teacherName}</p>
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">{plan.subject}</p>
+                                            </td>
+                                            <td className="p-8">
+                                                <span className="bg-white/5 px-3 py-1 rounded-full text-[10px] font-black text-gray-400 uppercase border border-white/5">{plan.className}</span>
+                                                <div className="mt-2 text-[9px] font-bold text-gray-600 uppercase tracking-widest">
+                                                    {plan.type === 'bimester' ? 'Bimestral' : plan.type === 'inova' ? 'Projeto Inova' : 'Diário'}
+                                                </div>
+                                            </td>
+                                            <td className="p-8">
+                                                <p className="text-sm font-bold text-gray-300 line-clamp-2">{plan.topic || plan.inovaTheme || 'Sem tema'}</p>
+                                            </td>
+                                            <td className="p-8 text-right">
+                                                <button onClick={() => setViewingPlan(plan)} className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all">
+                                                    Visualizar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {allLessonPlans.length === 0 && (
+                                        <tr><td colSpan={5} className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.3em] opacity-40">Nenhum planejamento encontrado</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* --- STUDENT EDIT MODAL --- */}
             {showStudentModal && editingStudent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
@@ -1601,6 +1737,86 @@ export const PrintShopDashboard: React.FC = () => {
                                 <Save size={18} className="mr-2"/> Salvar Alterações
                             </Button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* --- PLAN VIEW MODAL --- */}
+            {viewingPlan && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-3xl rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                        <div className="flex justify-between items-center mb-8 shrink-0">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Detalhes do Planejamento</h3>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">{viewingPlan.className} • {viewingPlan.subject}</p>
+                            </div>
+                            <button onClick={() => setViewingPlan(null)} className="text-gray-500 hover:text-white"><X size={32}/></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-6 pr-2">
+                            {/* Generic Fields */}
+                            <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Professor</p>
+                                <p className="text-white font-bold">{viewingPlan.teacherName}</p>
+                            </div>
+                            
+                            {/* Specific Fields based on type */}
+                            {viewingPlan.type === 'bimester' ? (
+                                <>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Bimestre</p>
+                                            <p className="text-white font-bold">{viewingPlan.bimester}</p>
+                                        </div>
+                                        <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Componente</p>
+                                            <p className="text-white font-bold">{viewingPlan.topic}</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Conteúdos</p>
+                                        <p className="text-gray-300 text-sm whitespace-pre-wrap">{viewingPlan.contents}</p>
+                                    </div>
+                                    <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Justificativa</p>
+                                        <p className="text-gray-300 text-sm whitespace-pre-wrap">{viewingPlan.justification}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Habilidades Cognitivas</p>
+                                            <p className="text-gray-300 text-sm whitespace-pre-wrap">{viewingPlan.cognitiveSkills}</p>
+                                        </div>
+                                        <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Habilidades Socioemocionais</p>
+                                            <p className="text-gray-300 text-sm whitespace-pre-wrap">{viewingPlan.socioEmotionalSkills}</p>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : viewingPlan.type === 'inova' ? (
+                                <>
+                                    <div className="bg-purple-900/10 p-6 rounded-3xl border border-purple-500/20">
+                                        <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">Tema do Subprojeto</p>
+                                        <p className="text-white font-bold text-lg">{viewingPlan.inovaTheme}</p>
+                                    </div>
+                                    <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Questão Norteadora</p>
+                                        <p className="text-gray-300 text-sm">{viewingPlan.guidingQuestion}</p>
+                                    </div>
+                                    <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Objetivo</p>
+                                        <p className="text-gray-300 text-sm">{viewingPlan.subprojectGoal}</p>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="bg-black/20 p-6 rounded-3xl border border-white/5">
+                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Conteúdo / Metodologia</p>
+                                    <p className="text-gray-300 text-sm whitespace-pre-wrap">{viewingPlan.content}</p>
+                                </div>
+                            )}
+                            
+                            <div className="text-[9px] font-mono text-gray-600 uppercase tracking-widest text-center pt-8">
+                                ID: {viewingPlan.id} • Criado em {new Date(viewingPlan.createdAt).toLocaleString()}
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
