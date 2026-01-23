@@ -109,6 +109,29 @@ export const TeacherDashboard: React.FC = () => {
       }
   }, [examGrade, students, activeTab]);
 
+  const getTeacherClasses = () => {
+      if (!user) return CLASSES;
+      if (user.classes && user.classes.length > 0) return user.classes;
+      
+      const name = user.name ? user.name.toUpperCase() : '';
+      if (name.includes('ALICIA')) return ['2º ANO EFAI'];
+      if (name.includes('LEILA')) return ['1º ANO EFAI'];
+      if (name.includes('JULIANA')) return ['3º ANO EFAI'];
+
+      return CLASSES;
+  };
+
+  // Efeito para selecionar automaticamente a turma se houver apenas uma
+  useEffect(() => {
+      if (activeTab === 'attendance') {
+          const classes = getTeacherClasses();
+          if (classes.length === 1) {
+              setAttendanceClass(classes[0]);
+              setAttendanceRecords({});
+          }
+      }
+  }, [activeTab, user]);
+
   const fetchData = async () => {
     if (!user) return;
     setIsLoading(true);
@@ -134,10 +157,14 @@ export const TeacherDashboard: React.FC = () => {
       if (!user) return false;
       const hasEFAI = user.educationLevels?.some(level => ['EFAI', 'Ed. Infantil'].includes(level));
       
-      // Permite acesso se o subject contiver "POLIVALENTE", se houver turmas atribuídas ou se for o admin
+      const specificNames = ['ALICIA', 'LEILA', 'JULIANA'];
+      const nameMatch = user.name ? specificNames.some(n => user.name.toUpperCase().includes(n)) : false;
+
+      // Permite acesso se o subject contiver "POLIVALENTE", se houver turmas atribuídas ou se for o admin ou se for uma das professoras especificas
       return (user.subject && user.subject.includes('POLIVALENTE')) || 
              (user.classes && user.classes.length > 0) || 
              hasEFAI ||
+             nameMatch ||
              user.email === 'ruan.wss@gmail.com';
   };
 
@@ -785,7 +812,7 @@ export const TeacherDashboard: React.FC = () => {
                             <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Selecione a Turma</label>
                             <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={attendanceClass} onChange={(e) => { setAttendanceClass(e.target.value); setAttendanceRecords({}); }}>
                                 <option value="">-- Escolha uma turma --</option>
-                                {(user?.classes && user.classes.length > 0 ? user.classes : CLASSES).map(c => <option key={c} value={c}>{c}</option>)}
+                                {getTeacherClasses().map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
                         {attendanceClass && (
