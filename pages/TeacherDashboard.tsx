@@ -132,9 +132,12 @@ export const TeacherDashboard: React.FC = () => {
 
   const isEligibleForAttendance = () => {
       if (!user) return false;
+      const hasEFAI = user.educationLevels?.some(level => ['EFAI', 'Ed. Infantil'].includes(level));
+      
       // Permite acesso se o subject contiver "POLIVALENTE", se houver turmas atribuídas ou se for o admin
       return (user.subject && user.subject.includes('POLIVALENTE')) || 
              (user.classes && user.classes.length > 0) || 
+             hasEFAI ||
              user.email === 'ruan.wss@gmail.com';
   };
 

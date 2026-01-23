@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
     saveStaffMember, 
@@ -8,11 +9,12 @@ import {
     listenToStaffLogs,
     createSystemUserAuth,
     updateSystemUserRoles,
+    updateSystemUserProfile,
     getDailySchoolLog,
     getMonthlySchoolLogs,
     getMonthlyStaffLogs
 } from '../services/firebaseService';
-import { StaffMember, StaffAttendanceLog, UserRole, DailySchoolLog } from '../types';
+import { StaffMember, StaffAttendanceLog, UserRole, DailySchoolLog, User } from '../types';
 import { Button } from '../components/Button';
 import { 
     Users, 
@@ -195,13 +197,28 @@ export const HRDashboard: React.FC = () => {
                 }
                 if (roles.length === 0) roles.push(UserRole.HR); 
 
+                const userDataUpdates: Partial<User> = {
+                    educationLevels: formData.educationLevels,
+                    classes: formData.classes
+                };
+                
+                // Extract subject from role for teachers
+                if (formData.isTeacher && formData.role) {
+                     const role = formData.role.toUpperCase();
+                     // Simple heuristic: remove 'PROFESSOR DE ' / 'PROFESSORA DE '
+                     const subject = role.replace(/^PROFESSORA? DE /, '').trim();
+                     if (subject) userDataUpdates.subject = subject;
+                }
+
                 if (createLogin) {
                     try {
                         await createSystemUserAuth(formData.email, formData.name || 'Funcionário', roles);
+                        await updateSystemUserProfile(formData.email, userDataUpdates);
                         alert("Login criado com sucesso!");
                     } catch (err: any) {
                         if (err.code === 'auth/email-already-in-use') {
                              await updateSystemUserRoles(formData.email, roles);
+                             await updateSystemUserProfile(formData.email, userDataUpdates);
                              alert("Cadastro salvo. As permissões de acesso foram atualizadas.");
                         } else {
                              alert("Aviso: Cadastro salvo, mas houve erro ao criar login: " + err.message);
@@ -210,6 +227,7 @@ export const HRDashboard: React.FC = () => {
                 } 
                 else if (editingId) {
                     await updateSystemUserRoles(formData.email, roles);
+                    await updateSystemUserProfile(formData.email, userDataUpdates);
                 }
             }
 

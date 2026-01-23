@@ -279,10 +279,19 @@ export const getStudents = async (): Promise<Student[]> => {
     return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
 };
 
-export const getUserProfile = async (uid: string): Promise<User | null> => {
+export const getUserProfile = async (uid: string, email?: string): Promise<User | null> => {
+    // Try by UID first
     const docRef = doc(db, USERS_COLLECTION, uid);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) return { id: docSnap.id, ...docSnap.data() } as User;
+
+    // If not found and email provided, try by email-based ID (legacy/hr created)
+    if (email) {
+         const emailId = email.replace(/[^a-zA-Z0-9]/g, '_');
+         const emailDocRef = doc(db, USERS_COLLECTION, emailId);
+         const emailDocSnap = await getDoc(emailDocRef);
+         if (emailDocSnap.exists()) return { id: emailDocSnap.id, ...emailDocSnap.data() } as User;
+    }
     return null;
 };
 
@@ -536,6 +545,11 @@ export const updateSystemUserRoles = async (email: string, roles: UserRole[]): P
         const userDoc = snapshot.docs[0];
         await updateDoc(userDoc.ref, { roles: roles, role: roles[0] });
     }
+};
+
+export const updateSystemUserProfile = async (email: string, data: Partial<User>): Promise<void> => {
+    const id = email.replace(/[^a-zA-Z0-9]/g, '_');
+    await setDoc(doc(db, USERS_COLLECTION, id), data, { merge: true });
 };
 
 export const saveInfantilReport = async (report: InfantilReport): Promise<void> => {

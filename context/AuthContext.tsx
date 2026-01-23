@@ -135,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
           }
           else {
-              const userProfile = await getUserProfile(firebaseUser.uid);
+              const userProfile = await getUserProfile(firebaseUser.uid, firebaseUser.email || undefined);
               if (userProfile) {
                 setUser(userProfile);
               } else {
