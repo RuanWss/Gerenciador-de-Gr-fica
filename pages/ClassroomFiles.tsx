@@ -7,13 +7,16 @@ import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 import { 
     Folder, Download, FileText, Image as ImageIcon, 
     Bell, AlertTriangle, ArrowLeft, LogOut, Search, 
-    Grid, List as ListIcon, Clock, ChevronRight, Lock, LogIn, LayoutGrid, FolderOpen
+    Grid, List as ListIcon, Clock, ChevronRight, Lock, LogIn, LayoutGrid, FolderOpen, Delete
 } from 'lucide-react';
 
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+const ACCESS_PIN = '020116';
+const CLASSROOM_USER_EMAIL = 'cemal.salas@ceprofmal.com';
+const CLASSROOM_USER_PASS = 'cemal#2016';
 
 export const ClassroomFiles: React.FC = () => {
-    const { user, logout } = useAuth();
+    const { user, login, logout } = useAuth();
     
     // State
     const [selectedClassName, setSelectedClassName] = useState<string>('');
@@ -24,6 +27,11 @@ export const ClassroomFiles: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [permissionDenied, setPermissionDenied] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+
+    // PIN Auth State
+    const [pin, setPin] = useState('');
+    const [pinError, setPinError] = useState(false);
+    const [isAuthenticating, setIsAuthenticating] = useState(false);
 
     const isFirstLoad = useRef(true);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -62,7 +70,7 @@ export const ClassroomFiles: React.FC = () => {
 
     // Listener de Materiais
     useEffect(() => {
-        if (!selectedClassName) return;
+        if (!selectedClassName || !user) return; // Só busca se tiver usuário logado
 
         setIsLoading(true);
         setError(null);
@@ -106,7 +114,7 @@ export const ClassroomFiles: React.FC = () => {
         );
 
         return () => unsubscribe();
-    }, [selectedClassName]);
+    }, [selectedClassName, user]);
 
     const playNotification = () => {
         if (audioRef.current) {
@@ -141,6 +149,124 @@ export const ClassroomFiles: React.FC = () => {
         if (type.includes('image')) return <ImageIcon size={28} className="text-blue-500" />;
         return <FileText size={28} className="text-gray-400" />;
     };
+
+    // --- PIN AUTHENTICATION LOGIC ---
+    if (!user) {
+        const handlePinClick = (num: string) => {
+            if (pin.length < 6) {
+                const newPin = pin + num;
+                setPin(newPin);
+                if (newPin.length === 6) {
+                    verifyPin(newPin);
+                }
+            }
+        };
+
+        const handleBackspace = () => {
+            setPin(pin.slice(0, -1));
+            setPinError(false);
+        };
+
+        const verifyPin = async (finalPin: string) => {
+            if (finalPin === ACCESS_PIN) {
+                setIsAuthenticating(true);
+                const success = await login(CLASSROOM_USER_EMAIL, CLASSROOM_USER_PASS);
+                if (!success) {
+                    setPinError(true);
+                    setPin('');
+                    setIsAuthenticating(false);
+                }
+            } else {
+                setPinError(true);
+                setTimeout(() => {
+                    setPin('');
+                    setPinError(false);
+                }, 500);
+            }
+        };
+
+        return (
+            <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center p-4 relative overflow-hidden">
+                {/* Background effects */}
+                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-black via-red-950/20 to-black pointer-events-none" />
+                
+                <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in duration-500">
+                    <div className="text-center mb-10">
+                        <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-24 mx-auto mb-8 drop-shadow-2xl" alt="Logo"/>
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-2">Arquivos da Turma</h2>
+                        <p className="text-gray-500 font-bold uppercase text-xs tracking-[0.3em]">Acesso Restrito via PIN</p>
+                    </div>
+
+                    <div className="bg-[#18181b] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden">
+                        {isAuthenticating && (
+                            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600 mb-4"></div>
+                                <p className="text-white font-bold uppercase tracking-widest text-xs">Autenticando...</p>
+                            </div>
+                        )}
+
+                        {/* PIN Display */}
+                        <div className="flex justify-center gap-4 mb-8">
+                            {[0, 1, 2, 3, 4, 5].map((i) => (
+                                <div 
+                                    key={i} 
+                                    className={`w-4 h-4 rounded-full transition-all duration-300 ${
+                                        pinError 
+                                            ? 'bg-red-500 animate-bounce' 
+                                            : pin.length > i 
+                                                ? 'bg-white scale-110 shadow-[0_0_10px_white]' 
+                                                : 'bg-white/10'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Keypad */}
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                                <button
+                                    key={num}
+                                    onClick={() => handlePinClick(String(num))}
+                                    className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 active:bg-white/20 transition-all border border-white/5 text-xl font-bold text-white flex items-center justify-center shadow-lg"
+                                >
+                                    {num}
+                                </button>
+                            ))}
+                            <div className="col-start-2">
+                                <button
+                                    onClick={() => handlePinClick('0')}
+                                    className="w-full h-16 rounded-2xl bg-white/5 hover:bg-white/10 active:bg-white/20 transition-all border border-white/5 text-xl font-bold text-white flex items-center justify-center shadow-lg"
+                                >
+                                    0
+                                </button>
+                            </div>
+                            <div className="col-start-3">
+                                <button
+                                    onClick={handleBackspace}
+                                    className="w-full h-16 rounded-2xl bg-red-500/10 hover:bg-red-500/20 active:bg-red-500/30 transition-all border border-red-500/20 text-red-500 flex items-center justify-center shadow-lg"
+                                >
+                                    <ArrowLeft size={24} />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {pinError && (
+                            <p className="text-red-500 font-bold uppercase text-[10px] tracking-widest text-center mt-4 animate-pulse">
+                                PIN Incorreto
+                            </p>
+                        )}
+                    </div>
+                    
+                    <button 
+                        onClick={() => window.location.href = '/'}
+                        className="mt-10 text-gray-600 hover:text-white text-xs font-bold uppercase tracking-widest w-full text-center transition-colors"
+                    >
+                        Voltar ao Início
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-[#09090b] text-gray-100 font-sans selection:bg-red-500/30 flex flex-col">
@@ -186,7 +312,7 @@ export const ClassroomFiles: React.FC = () => {
 
                         {/* LOGOUT */}
                         {user && (
-                            <button onClick={logout} className="p-3 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-xl transition-all" title="Sair">
+                            <button onClick={logout} className="p-3 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-xl transition-all" title="Encerrar Acesso">
                                 <LogOut size={18} />
                             </button>
                         )}
@@ -212,10 +338,10 @@ export const ClassroomFiles: React.FC = () => {
                         <div className="bg-red-500/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
                             <Lock size={40} className="text-red-500"/>
                         </div>
-                        <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Acesso Restrito</h3>
-                        <p className="text-gray-400 text-sm mb-8 font-medium">Faça login com a conta da turma para visualizar os arquivos.</p>
-                        <button onClick={() => window.location.href = '/'} className="inline-flex items-center gap-2 px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-red-900/20">
-                            <LogIn size={16} /> Acessar Sistema
+                        <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Sessão Expirada</h3>
+                        <p className="text-gray-400 text-sm mb-8 font-medium">Por favor, reinicie o acesso com o PIN.</p>
+                        <button onClick={logout} className="inline-flex items-center gap-2 px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-red-900/20">
+                            <LogIn size={16} /> Reiniciar Acesso
                         </button>
                     </div>
                 )}

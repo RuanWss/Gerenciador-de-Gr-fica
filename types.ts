@@ -120,7 +120,7 @@ export interface SystemConfig {
   isBannerActive: boolean;
   tvStart?: string;
   tvEnd?: string;
-  lastScheduleSync?: number; // Added for TV Sync
+  lastScheduleSync?: number; 
 }
 
 export interface ScheduleEntry {
@@ -154,9 +154,49 @@ export interface LessonPlan {
   topic?: string;
   content?: string;
   type?: string;
+  
+  // --- CAMPOS BIMESTRAIS (Conforme Imagem) ---
+  bimester?: string;
+  justification?: string;
+  contents?: string;
+  cognitiveSkills?: string;
+  socioEmotionalSkills?: string;
+  didacticSituations?: string;
+  // Grid de Atividades
+  activitiesPrevious?: string;
+  activitiesAutodidactic?: string;
+  activitiesCooperative?: string;
+  activitiesComplementary?: string;
+  educationalPractices?: string;
+  educationalSpaces?: string;
+  didacticResources?: string;
+  evaluationStrategies?: string;
+  referenceSources?: string;
+
+  // --- CAMPOS PROJETO INOVA AI (Conforme PDF) ---
+  inovaTheme?: string;
+  guidingQuestion?: string; // Questão Norteadora
+  subprojectGoal?: string; // Objetivo
+  expectedResults?: string[]; // Resultados Esperados (Checklist)
+  finalProductType?: string; // Produto Final (Select/Radio)
+  finalProductDescription?: string; // Descrição do produto
+  projectSteps?: { // Checklist de Execução
+    sensitize: boolean;
+    investigate: boolean;
+    create: boolean;
+    test: boolean;
+    present: boolean;
+    register: boolean;
+  };
+  schedule?: string; // Cronograma (pode ser texto livre ou estruturado)
+  resourcesNeeded?: string;
+  // Uso de IA
+  aiTools?: string; // Ferramentas (ChatGPT, Gemini...)
+  aiPurpose?: string[]; // Ideias, Roteiro, Texto...
+  aiCare?: string; // Cuidado adotado
+  evidence?: string; // Evidências de execução
 }
 
-// Added LessonPlanType to resolve Page error
 export type LessonPlanType = string;
 
 export interface SchoolEvent {
@@ -260,7 +300,6 @@ export interface InfantilReport {
   descriptiveText: Record<string, string>;
 }
 
-// Added missing interfaces to resolve firebaseService and HRDashboard errors
 export interface AnswerKey {
   id: string;
   title: string;
@@ -303,8 +342,8 @@ export interface AEEAppointment {
   id: string;
   studentId: string;
   studentName: string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:mm
+  date: string; 
+  time: string; 
   period: 'Manhã' | 'Tarde' | 'Contraturno';
   description?: string;
   createdAt: number;
