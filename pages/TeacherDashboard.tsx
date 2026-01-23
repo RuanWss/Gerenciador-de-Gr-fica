@@ -26,7 +26,8 @@ import {
   Plus, List, PlusCircle, X, Trash2, FileUp, AlertCircle, 
   BookOpen, Save, ArrowLeft, Heart, FileText, Eye, Clock, UploadCloud, ChevronRight,
   LayoutTemplate, Download, Users, Edit3, MessageSquare, Sparkles, BookMarked,
-  Layers, MapPin, Search, Bot, Smile, AlertTriangle, Edit, Folder, BookOpenCheck
+  Layers, MapPin, Search, Bot, Smile, AlertTriangle, Edit, Folder, BookOpenCheck,
+  FileCheck, ShieldAlert
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES } from '../constants';
 
@@ -131,7 +132,10 @@ export const TeacherDashboard: React.FC = () => {
 
   const isEligibleForAttendance = () => {
       if (!user) return false;
-      return user.subject === 'POLIVALENTE (INFANTIL/EFAI)' || user.email === 'ruan.wss@gmail.com';
+      // Permite acesso se o subject contiver "POLIVALENTE", se houver turmas atribuídas ou se for o admin
+      return (user.subject && user.subject.includes('POLIVALENTE')) || 
+             (user.classes && user.classes.length > 0) || 
+             user.email === 'ruan.wss@gmail.com';
   };
 
   const getSubjectsForClass = (cls: string) => {
@@ -653,23 +657,78 @@ export const TeacherDashboard: React.FC = () => {
                         <h2 className="text-xl font-black text-white uppercase tracking-tight mb-6 flex items-center gap-3"><Heart size={24} className="text-red-500"/> Meus Alunos em Acompanhamento</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {students.filter(student => filterAEEStudents(student)).map(student => (
-                                <div key={student.id} className="bg-[#18181b] border border-red-900/30 p-6 rounded-[2rem] shadow-xl relative group hover:border-red-500/50 transition-all flex flex-col">
-                                    <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest">AEE</div>
-                                    <div className="flex items-center gap-4 mb-4">
-                                        <div className="h-16 w-16 rounded-2xl bg-black/40 overflow-hidden border border-white/10 flex items-center justify-center shrink-0">{student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover"/> : <Users className="text-gray-600"/>}</div>
-                                        <div><h3 className="text-lg font-black text-white uppercase tracking-tight leading-none mb-1">{student.name}</h3><p className="text-xs text-gray-500 font-bold uppercase">{student.className}</p></div>
+                                <div key={student.id} className="bg-[#18181b] border-2 border-white/5 rounded-[2.5rem] p-8 shadow-xl relative overflow-hidden group hover:border-red-600/30 transition-all flex flex-col">
+                                    <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest shadow-lg">AEE</div>
+                                    
+                                    {/* PHOTO & HEADER */}
+                                    <div className="flex items-center gap-6 mb-8">
+                                        <div className="h-28 w-28 rounded-[1.5rem] bg-gray-900 border-2 border-white/10 overflow-hidden shrink-0 group-hover:scale-105 transition-transform shadow-2xl relative">
+                                            {student.photoUrl ? (
+                                                <img src={student.photoUrl} className="w-full h-full object-cover"/>
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-black">
+                                                    <Users className="text-gray-600" size={32}/>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className="font-black text-white text-2xl uppercase tracking-tight leading-none mb-2 line-clamp-2">{String(student.name || '')}</h3>
+                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest bg-white/5 inline-block px-3 py-1 rounded-lg">{String(student.className || '')}</p>
+                                        </div>
                                     </div>
-                                    <div className="bg-black/20 p-4 rounded-xl border border-white/5 space-y-3 mb-4 flex-1">
-                                        <div><p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-1">Diagnóstico</p><p className="text-xs text-gray-300 font-bold">{student.disorder || (student.disorders && student.disorders.length > 0 ? student.disorders.join(", ") : "Não informado")}</p></div>
-                                        {(student.skills || student.weaknesses) && (
-                                            <div className="grid grid-cols-2 gap-2 mt-2">
-                                                <div className="bg-green-900/10 p-2 rounded-lg border border-green-500/10"><span className="text-green-500 text-[8px] font-black uppercase block mb-1">Habilidades</span><p className="text-[10px] text-gray-400 line-clamp-2">{student.skills || '-'}</p></div>
-                                                <div className="bg-red-900/10 p-2 rounded-lg border border-red-500/10"><span className="text-red-500 text-[8px] font-black uppercase block mb-1">Dificuldades</span><p className="text-[10px] text-gray-400 line-clamp-2">{student.weaknesses || '-'}</p></div>
+
+                                    <div className="space-y-4 mb-8 flex-1">
+                                        {/* DIAGNOSIS */}
+                                        <div className="bg-red-950/20 p-5 rounded-2xl border border-red-900/30 relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
+                                            <span className="block text-[9px] font-black text-red-500 uppercase tracking-[0.2em] mb-1">Diagnóstico(s)</span>
+                                            <div className="flex flex-wrap gap-1">
+                                                {(student.disorders && student.disorders.length > 0) ? (
+                                                    student.disorders.map((d, i) => (
+                                                        <span key={i} className="text-sm font-black text-white uppercase tracking-tight leading-tight block w-full">• {d}</span>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-lg font-black text-white uppercase tracking-tight leading-tight">{student.disorder || 'Não informado'}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* SKILLS & WEAKNESSES */}
+                                        <div className="grid grid-cols-1 gap-4">
+                                            <div className="bg-emerald-950/20 p-5 rounded-2xl border border-emerald-900/30 relative overflow-hidden">
+                                                <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                                                <span className="block text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-2">Habilidades</span>
+                                                <p className="text-xs font-medium text-gray-300 leading-relaxed">
+                                                    {student.skills || 'Não registrado.'}
+                                                </p>
+                                            </div>
+                                            <div className="bg-amber-950/20 p-5 rounded-2xl border border-amber-900/30 relative overflow-hidden">
+                                                <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                                                <span className="block text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] mb-2">Fragilidades</span>
+                                                <p className="text-xs font-medium text-gray-300 leading-relaxed">
+                                                    {student.weaknesses || 'Não registrado.'}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* LAUDO STATUS */}
+                                        {student.reportUrl ? (
+                                            <a href={student.reportUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 text-[10px] font-black text-green-400 uppercase tracking-widest bg-green-900/10 p-4 rounded-xl border border-green-900/20 hover:bg-green-900/20 transition-all">
+                                                <FileCheck size={16}/> Laudo Digital Disponível
+                                            </a>
+                                        ) : (
+                                            <div className="flex items-center justify-center gap-2 text-[10px] font-black text-orange-500 uppercase tracking-widest bg-orange-900/10 p-4 rounded-xl border border-orange-900/20">
+                                                <ShieldAlert size={16}/> Laudo Pendente
                                             </div>
                                         )}
-                                        {student.reportUrl ? (<a href={student.reportUrl} target="_blank" className="block text-center py-2 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] text-blue-400 font-black uppercase tracking-widest transition-all"><FileText size={12} className="inline mr-2"/> Ver Laudo</a>) : (<div className="text-center py-2 text-[10px] text-gray-600 font-bold uppercase tracking-widest border border-dashed border-gray-700 rounded-lg">Laudo Pendente</div>)}
                                     </div>
-                                    <Button onClick={() => openPEIModal(student)} className="w-full bg-red-600 hover:bg-red-700 h-12 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-red-900/20"><Plus size={16} className="mr-2"/> Criar PEI</Button>
+
+                                    <button 
+                                        onClick={() => openPEIModal(student)}
+                                        className="w-full py-5 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-red-900/30 uppercase text-xs tracking-[0.15em] hover:scale-[1.02]"
+                                    >
+                                        <Plus size={18}/> Criar PEI
+                                    </button>
                                 </div>
                             ))}
                             {students.filter(student => filterAEEStudents(student)).length === 0 && (<div className="col-span-full py-10 text-center opacity-30 font-black uppercase tracking-[0.4em] text-sm text-gray-600 border-2 border-dashed border-white/5 rounded-[2rem]">Nenhum aluno AEE vinculado às suas turmas</div>)}
@@ -723,7 +782,7 @@ export const TeacherDashboard: React.FC = () => {
                             <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Selecione a Turma</label>
                             <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={attendanceClass} onChange={(e) => { setAttendanceClass(e.target.value); setAttendanceRecords({}); }}>
                                 <option value="">-- Escolha uma turma --</option>
-                                {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                {(user?.classes && user.classes.length > 0 ? user.classes : CLASSES).map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
                         {attendanceClass && (
