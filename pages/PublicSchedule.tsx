@@ -70,6 +70,36 @@ export const PublicSchedule: React.FC = () => {
     const lastPlayedSlotIds = useRef<Record<string, string>>({});
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
+    const handlePin = (n: string) => {
+        setPin(prev => {
+            const next = prev + n;
+            if (next.length > 4) return prev;
+            if (next.length === 4) {
+                if (next === DEFAULT_PIN) {
+                    setIsAuthorized(true);
+                    sessionStorage.setItem('monitor_auth', 'true');
+                } else {
+                    setPinError(true);
+                    setTimeout(() => { setPin(''); setPinError(false); }, 800);
+                }
+            }
+            return next;
+        });
+    };
+
+    useEffect(() => {
+        if (isAuthorized) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key >= '0' && e.key <= '9') {
+                handlePin(e.key);
+            } else if (e.key === 'Backspace') {
+                setPin(prev => prev.slice(0, -1));
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isAuthorized]);
+
     useEffect(() => {
         audioRef.current = new Audio(SOUND_SCHOOL_BELL);
     }, []);
@@ -79,7 +109,6 @@ export const PublicSchedule: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Carrossel de turmas (Muda a cada 15 segundos se houver mais que 8 turmas)
     useEffect(() => {
         const timer = setInterval(() => {
             setCarouselIndex(prev => prev + 1);
@@ -115,7 +144,6 @@ export const PublicSchedule: React.FC = () => {
         const activeClassesInShift = ALL_CLASSES.filter(c => c.shift === (isMorning ? 'morning' : 'afternoon'));
 
         const cards = activeClassesInShift.map(cls => {
-            // Seleciona os slots corretos baseado no nível da turma
             const levelSlots = cls.level === 'EFAI' ? SLOTS_EFAI_MORNING : 
                               cls.level === 'EFAF' ? SLOTS_EFAF_MORNING : 
                               SLOTS_EM_AFTERNOON;
@@ -142,10 +170,9 @@ export const PublicSchedule: React.FC = () => {
             };
         });
 
-        // Paginação do carrossel (8 cards por vez no máximo para legibilidade)
         const itemsPerPage = 8;
         const totalPages = Math.ceil(cards.length / itemsPerPage);
-        const actualPageIndex = carouselIndex % totalPages;
+        const actualPageIndex = totalPages > 0 ? carouselIndex % totalPages : 0;
         const visibleCards = cards.slice(actualPageIndex * itemsPerPage, (actualPageIndex + 1) * itemsPerPage);
 
         return { 
@@ -156,16 +183,13 @@ export const PublicSchedule: React.FC = () => {
         };
     }, [currentTime, schedule, carouselIndex]);
 
-    // Lógica do sinal sonoro por nível (opcional, aqui simplificado)
     useEffect(() => {
-        // Verifica se algum slot mudou para tocar o sinal
         const morningEFafSlot = SLOTS_EFAF_MORNING.find(s => {
             const nowMins = currentTime.getHours() * 60 + currentTime.getMinutes();
             return nowMins === timeToMins(s.start);
         });
 
         if (morningEFafSlot && audioEnabled) {
-             // Toca apenas no minuto exato do início
              if (currentTime.getSeconds() === 0) {
                 audioRef.current?.play().catch(() => {});
              }
@@ -173,20 +197,6 @@ export const PublicSchedule: React.FC = () => {
     }, [currentTime, audioEnabled]);
 
     if (!isAuthorized) {
-        const handlePin = (n: string) => {
-            const next = pin + n;
-            setPin(next);
-            if (next.length === 4) {
-                if (next === DEFAULT_PIN) {
-                    setIsAuthorized(true);
-                    sessionStorage.setItem('monitor_auth', 'true');
-                } else {
-                    setPinError(true);
-                    setTimeout(() => { setPin(''); setPinError(false); }, 800);
-                }
-            }
-        };
-
         return (
             <div className="fixed inset-0 bg-black flex items-center justify-center font-sans z-[1000]">
                 <div className="text-center space-y-8">
@@ -209,10 +219,8 @@ export const PublicSchedule: React.FC = () => {
 
     return (
         <div className="fixed inset-0 bg-[#000000] text-white font-sans overflow-hidden cursor-none selection:bg-none">
-            {/* BACKGROUND ANIMADO */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full bg-[radial-gradient(circle_at_50%_-20%,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black opacity-80 pointer-events-none" />
 
-            {/* HEADER */}
             <div className="h-[30vh] flex flex-col items-center justify-center relative z-10 pt-4">
                 <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-12 mb-2 opacity-80" alt="Logo" />
                 
@@ -238,9 +246,7 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             </div>
 
-            {/* GRID AREA */}
             <div className="h-[65vh] w-full px-12 flex flex-col items-center justify-center pb-12">
-                
                 {dashboardData.isLunchTime ? (
                     <div className="flex flex-col items-center justify-center animate-pulse">
                         <Clock size={80} className="text-blue-500 mb-6 opacity-80" />
@@ -292,7 +298,6 @@ export const PublicSchedule: React.FC = () => {
                             ))}
                         </div>
                         
-                        {/* Indicador de Páginas do Carrossel */}
                         {dashboardData.pageInfo.total > 1 && (
                             <div className="mt-10 flex items-center gap-6">
                                 <span className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em]">Exibindo Grupo {dashboardData.pageInfo.current} de {dashboardData.pageInfo.total}</span>
@@ -307,7 +312,6 @@ export const PublicSchedule: React.FC = () => {
                 )}
             </div>
 
-            {/* MARQUEE AVISOS */}
             {sysConfig?.isBannerActive && (
                 <div className="absolute bottom-0 w-full bg-red-600 py-4 overflow-hidden z-50 border-t border-white/20 shadow-[0_-20px_50px_rgba(220,38,38,0.3)]">
                     <div className="animate-marquee whitespace-nowrap">
@@ -317,7 +321,6 @@ export const PublicSchedule: React.FC = () => {
                 </div>
             )}
 
-            {/* CONTROLES ESCONDIDOS */}
             <div className="fixed bottom-10 right-10 flex gap-4 opacity-0 hover:opacity-100 transition-opacity z-[100]">
                 <button onClick={() => setAudioEnabled(!audioEnabled)} className="p-4 bg-white/5 border border-white/10 rounded-full text-white hover:bg-white/20">
                     {audioEnabled ? <Volume2 size={24}/> : <VolumeX size={24}/>}
