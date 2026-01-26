@@ -95,10 +95,18 @@ export const TeacherDashboard: React.FC = () => {
   useEffect(() => { fetchData(); }, [user, activeTab]);
 
   useEffect(() => {
-      const unsubS = listenToStudents(setStudents);
+      // PREVENÇÃO DE ERRO: Só ativa listeners se houver usuário autenticado
+      if (!user) return;
+
+      const unsubS = listenToStudents(
+          setStudents, 
+          (err) => console.warn('Students listener restricted:', err.code)
+      );
+      
       const unsubO = listenToOccurrences((all) => {
           if (user?.name) setTeacherOccurrences(all.filter(o => o.reportedBy === user.name));
-      });
+      }, (err) => console.warn('Occurrences listener restricted:', err.code));
+      
       return () => { unsubS(); unsubO(); };
   }, [user]);
 
@@ -140,21 +148,31 @@ export const TeacherDashboard: React.FC = () => {
             const allExams = await getExams(user.id);
             setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
         } else if (activeTab === 'materials') {
-            // FIX: Busca todos os materiais primeiro e filtra localmente para garantir
-            // que materiais antigos (onde o ID pode ter mudado) sejam encontrados pelo nome.
-            const allMats = await getClassMaterials();
+            let allMats: ClassMaterial[] = [];
+            try {
+                // Tenta buscar TODOS os materiais para fazer o filtro local (fix para IDs antigos)
+                allMats = await getClassMaterials(); 
+            } catch (err: any) {
+                // FALLBACK: Se der erro de permissão (ex: regras impedem ler tudo), busca apenas os do professor
+                if (err.code === 'permission-denied' || err.code === 'mismatched-header') {
+                    console.warn("Acesso restrito a todos os materiais. Buscando apenas do usuário.");
+                    try {
+                        allMats = await getClassMaterials(user.id);
+                    } catch (e) { console.error("Erro no fallback de materiais:", e); }
+                } else {
+                    console.error("Erro ao buscar materiais:", err);
+                }
+            }
             
             const myMats = allMats.filter(m => {
                 const isIdMatch = m.teacherId === user.id;
                 
-                // Normalização para comparação flexível de nomes (ignora títulos e case)
-                // Remove prefixos comuns como "Prof.", "Profa.", "Professor" para comparar apenas o nome
+                // Normalização para comparação flexível de nomes
                 const dbName = (m.teacherName || '').trim().toUpperCase()
                     .replace(/^PROF[\.]?\s+|^PROFA[\.]?\s+|^PROFESSOR\s+|^PROFESSORA\s+/g, '');
                 const sessionName = (user.name || '').trim().toUpperCase()
                     .replace(/^PROF[\.]?\s+|^PROFA[\.]?\s+|^PROFESSOR\s+|^PROFESSORA\s+/g, '');
                 
-                // Match exato ou parcial seguro (se o nome tiver tamanho razoável)
                 const isNameMatch = dbName && sessionName && (
                     dbName === sessionName || 
                     (sessionName.length > 3 && dbName.includes(sessionName)) ||

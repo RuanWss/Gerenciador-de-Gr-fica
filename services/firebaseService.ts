@@ -151,7 +151,7 @@ export const updateSystemUserProfile = async (email: string, data: any) => {
 
 // --- SYSTEM CONFIG ---
 
-export const listenToSystemConfig = (callback: (config: SystemConfig) => void) => {
+export const listenToSystemConfig = (callback: (config: SystemConfig) => void, onError?: (error: any) => void) => {
   const docRef = doc(db, SYSTEM_CONFIG_COLLECTION, 'global');
   return onSnapshot(docRef, (doc) => {
     if (doc.exists()) {
@@ -159,6 +159,9 @@ export const listenToSystemConfig = (callback: (config: SystemConfig) => void) =
     } else {
       callback({ bannerMessage: '', bannerType: 'info', isBannerActive: false });
     }
+  }, (error) => {
+    if (onError) onError(error);
+    else console.error("Error listening to system config:", error);
   });
 };
 
@@ -180,10 +183,13 @@ export const getExams = async (teacherId?: string): Promise<ExamRequest[]> => {
   return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExamRequest));
 };
 
-export const listenToExams = (callback: (exams: ExamRequest[]) => void) => {
+export const listenToExams = (callback: (exams: ExamRequest[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, EXAMS_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ExamRequest)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to exams:", error);
     });
 };
 
@@ -210,10 +216,13 @@ export const getStudents = async (): Promise<Student[]> => {
   return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
 };
 
-export const listenToStudents = (callback: (students: Student[]) => void) => {
+export const listenToStudents = (callback: (students: Student[]) => void, onError?: (error: any) => void) => {
   const q = query(collection(db, STUDENTS_COLLECTION));
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+  }, (error) => {
+    if (onError) onError(error);
+    else console.error("Error listening to students:", error);
   });
 };
 
@@ -247,10 +256,13 @@ export const uploadReportFile = async (file: File, studentName: string): Promise
 
 // --- STAFF ---
 
-export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void) => {
+export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, STAFF_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to staff:", error);
     });
 };
 
@@ -276,10 +288,13 @@ export const uploadStaffPhoto = async (file: File): Promise<string> => {
 
 // --- SCHEDULE ---
 
-export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void) => {
+export const listenToSchedule = (callback: (schedule: ScheduleEntry[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, SCHEDULE_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleEntry)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to schedule:", error);
     });
 };
 
@@ -317,10 +332,13 @@ export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
     return true;
 };
 
-export const listenToAttendanceLogs = (date: string, callback: (logs: AttendanceLog[]) => void) => {
+export const listenToAttendanceLogs = (date: string, callback: (logs: AttendanceLog[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, ATTENDANCE_COLLECTION), where("dateString", "==", date));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to attendance:", error);
     });
 };
 
@@ -342,10 +360,13 @@ export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<strin
     return 'success';
 };
 
-export const listenToStaffLogs = (date: string, callback: (logs: StaffAttendanceLog[]) => void) => {
+export const listenToStaffLogs = (date: string, callback: (logs: StaffAttendanceLog[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, STAFF_LOGS_COLLECTION), where("dateString", "==", date));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StaffAttendanceLog)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to staff logs:", error);
     });
 };
 
@@ -375,10 +396,13 @@ export const getMonthlySchoolLogs = async (month: string): Promise<DailySchoolLo
 
 // --- OCCURRENCES ---
 
-export const listenToOccurrences = (callback: (occurrences: StudentOccurrence[]) => void) => {
+export const listenToOccurrences = (callback: (occurrences: StudentOccurrence[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, OCCURRENCES_COLLECTION), orderBy('timestamp', 'desc'));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as StudentOccurrence)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to occurrences:", error);
     });
 };
 
@@ -413,12 +437,13 @@ export const deleteLessonPlan = async (id: string) => {
     await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
 };
 
-export const listenToAllLessonPlans = (callback: (plans: LessonPlan[]) => void) => {
+export const listenToAllLessonPlans = (callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, LESSON_PLANS_COLLECTION), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan)));
     }, (error) => {
-        console.error("Error listening to lesson plans", error);
+        if (onError) onError(error);
+        else console.error("Error listening to lesson plans", error);
     });
 };
 
@@ -469,10 +494,13 @@ export const listenToClassMaterials = (className: string, callback: (materials: 
 
 // --- AEE APPOINTMENTS ---
 
-export const listenToAEEAppointments = (callback: (appointments: AEEAppointment[]) => void) => {
+export const listenToAEEAppointments = (callback: (appointments: AEEAppointment[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, AEE_APPOINTMENTS_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AEEAppointment)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to AEE appointments:", error);
     });
 };
 
@@ -513,7 +541,7 @@ export const saveInfantilReport = async (report: InfantilReport) => {
     await setDoc(docRef, { ...report, id: docRef.id });
 };
 
-export const listenToInfantilReports = (teacherId: string, callback: (reports: InfantilReport[]) => void) => {
+export const listenToInfantilReports = (teacherId: string, callback: (reports: InfantilReport[]) => void, onError?: (error: any) => void) => {
     // If teacherId is empty/admin, maybe show all? assuming teacher sees their own or admin sees all
     let q;
     if (teacherId) {
@@ -523,6 +551,9 @@ export const listenToInfantilReports = (teacherId: string, callback: (reports: I
     }
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InfantilReport)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to infantil reports:", error);
     });
 };
 
@@ -532,10 +563,13 @@ export const deleteInfantilReport = async (id: string) => {
 
 // --- LIBRARY ---
 
-export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
+export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, LIBRARY_BOOKS_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to library books:", error);
     });
 };
 
@@ -548,10 +582,13 @@ export const deleteLibraryBook = async (id: string) => {
     await deleteDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id));
 };
 
-export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) => {
+export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, LIBRARY_LOANS_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to library loans:", error);
     });
 };
 
