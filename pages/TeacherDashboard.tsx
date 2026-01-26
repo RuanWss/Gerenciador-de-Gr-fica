@@ -219,7 +219,8 @@ export const TeacherDashboard: React.FC = () => {
       setIsSaving(true);
       try {
           const url = await uploadExamFile(materialFile, user?.name || 'Professor');
-          const finalSubject = (materialSubject || user?.subject || 'Geral').toUpperCase();
+          // Normaliza o assunto: Trim e Uppercase para evitar duplicidade de pastas
+          const finalSubject = (materialSubject || user?.subject || 'Geral').trim().toUpperCase();
           const material: ClassMaterial = {
               id: '',
               teacherId: user?.id || '',

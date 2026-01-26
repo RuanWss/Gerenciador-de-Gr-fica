@@ -45,10 +45,13 @@ export const ClassroomFiles: React.FC = () => {
         ];
     }, [selectedClassName]);
 
+    // Função auxiliar para normalizar nomes de disciplinas (remove espaços extras e força maiúsculas)
+    const normalizeSubject = (s: string | undefined | null) => (s || 'GERAL').trim().toUpperCase();
+
     const displaySubjects = useMemo(() => {
-        // Normalize subjects to Uppercase to merge folders with different casing (e.g. "Matemática" vs "MATEMÁTICA")
-        const materialSubjects = new Set(materials.map(m => (m.subject || 'GERAL').toUpperCase()));
-        const defaultSubjects = new Set(currentSubjectsList);
+        // Normaliza disciplinas dos materiais e da lista padrão para garantir agrupamento correto
+        const materialSubjects = new Set(materials.map(m => normalizeSubject(m.subject)));
+        const defaultSubjects = new Set(currentSubjectsList.map(s => s.trim().toUpperCase()));
         return Array.from(new Set([...defaultSubjects, ...materialSubjects])).sort();
     }, [materials, currentSubjectsList]);
 
@@ -149,8 +152,10 @@ export const ClassroomFiles: React.FC = () => {
 
     const filteredMaterials = useMemo(() => {
         let filtered = materials;
-        // Case-insensitive filtering for subject
-        if (selectedSubject) filtered = filtered.filter(m => (m.subject || 'GERAL').toUpperCase() === selectedSubject);
+        // Filtragem insensível a maiúsculas/minúsculas e espaços
+        if (selectedSubject) {
+            filtered = filtered.filter(m => normalizeSubject(m.subject) === selectedSubject);
+        }
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             filtered = filtered.filter(m => m.title.toLowerCase().includes(q) || m.teacherName.toLowerCase().includes(q));
@@ -158,7 +163,7 @@ export const ClassroomFiles: React.FC = () => {
         return filtered;
     }, [materials, selectedSubject, searchQuery]);
 
-    const getFileCount = (subject: string) => materials.filter(m => (m.subject || 'GERAL').toUpperCase() === subject).length;
+    const getFileCount = (subject: string) => materials.filter(m => normalizeSubject(m.subject) === subject).length;
 
     const getFileIcon = (type: string) => {
         if (type.includes('pdf')) return <FileText size={28} className="text-red-500" />;
