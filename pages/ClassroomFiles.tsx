@@ -45,23 +45,36 @@ export const ClassroomFiles: React.FC = () => {
         ];
     }, [selectedClassName]);
 
-    // Função ROBUSTA para normalizar nomes de disciplinas
-    // Remove espaços extras, força maiúsculas e trata nulos/undefined como 'GERAL'
-    const normalizeSubject = (s: string | undefined | null) => {
-        if (!s || !s.trim()) return 'GERAL';
-        return s.trim().toUpperCase();
+    // Função inteligente para determinar a categoria (Pasta) do arquivo
+    // 1. Normaliza espaços e maiúsculas.
+    // 2. Se não tiver assunto (ou for GERAL), tenta extrair do nome do professor (ex: "Fulano - História").
+    const getFileCategory = (file: ClassMaterial) => {
+        let subject = file.subject;
+
+        // Tenta recuperar categoria de arquivos antigos/mal formatados
+        if (!subject || subject.toUpperCase() === 'GERAL' || subject.trim() === '') {
+            // Tenta extrair do nome do professor se houver hífen (Padrão: Nome - Matéria)
+            if (file.teacherName && file.teacherName.includes(' - ')) {
+                const parts = file.teacherName.split(' - ');
+                if (parts.length > 1) {
+                    subject = parts[1]; // Pega a parte após o hífen
+                }
+            }
+        }
+
+        if (!subject || !subject.trim()) return 'GERAL';
+        return subject.trim().toUpperCase();
     };
 
     const displaySubjects = useMemo(() => {
-        // Coleta todas as disciplinas presentes nos arquivos, normalizando-as
-        // Isso garante que se um arquivo tiver "matematica " ele vá para "MATEMÁTICA"
-        // E se tiver uma disciplina exótica não listada, ela cria uma pasta nova automaticamente
-        const materialSubjects = new Set(materials.map(m => normalizeSubject(m.subject)));
+        // Coleta todas as categorias calculadas dos arquivos atuais
+        const materialSubjects = new Set(materials.map(m => getFileCategory(m)));
         
-        // Adiciona as disciplinas padrão da turma
+        // Adiciona as disciplinas padrão da turma (normalizadas)
         const defaultSubjects = new Set(currentSubjectsList.map(s => s.trim().toUpperCase()));
         
-        // Une tudo e ordena
+        // Une tudo e ordena. Isso garante que se um arquivo tiver uma disciplina "Exótica",
+        // uma pasta será criada automaticamente para ele.
         return Array.from(new Set([...defaultSubjects, ...materialSubjects])).sort();
     }, [materials, currentSubjectsList]);
 
@@ -165,10 +178,9 @@ export const ClassroomFiles: React.FC = () => {
     const filteredMaterials = useMemo(() => {
         let filtered = materials;
         
-        // Filtragem usando a MESMA normalização das pastas
-        // Isso garante que o arquivo "matemática" apareça dentro da pasta "MATEMÁTICA"
+        // Filtra usando a mesma lógica de categoria usada para gerar as pastas
         if (selectedSubject) {
-            filtered = filtered.filter(m => normalizeSubject(m.subject) === selectedSubject);
+            filtered = filtered.filter(m => getFileCategory(m) === selectedSubject);
         }
         
         if (searchQuery) {
@@ -178,7 +190,7 @@ export const ClassroomFiles: React.FC = () => {
         return filtered;
     }, [materials, selectedSubject, searchQuery]);
 
-    const getFileCount = (subject: string) => materials.filter(m => normalizeSubject(m.subject) === subject).length;
+    const getFileCount = (subject: string) => materials.filter(m => getFileCategory(m) === subject).length;
 
     const getFileIcon = (type: string) => {
         if (type.includes('pdf')) return <FileText size={28} className="text-red-500" />;
