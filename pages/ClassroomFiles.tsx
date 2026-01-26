@@ -46,7 +46,8 @@ export const ClassroomFiles: React.FC = () => {
     }, [selectedClassName]);
 
     const displaySubjects = useMemo(() => {
-        const materialSubjects = new Set(materials.map(m => m.subject));
+        // Normalize subjects to Uppercase to merge folders with different casing (e.g. "Matemática" vs "MATEMÁTICA")
+        const materialSubjects = new Set(materials.map(m => (m.subject || 'GERAL').toUpperCase()));
         const defaultSubjects = new Set(currentSubjectsList);
         return Array.from(new Set([...defaultSubjects, ...materialSubjects])).sort();
     }, [materials, currentSubjectsList]);
@@ -148,7 +149,8 @@ export const ClassroomFiles: React.FC = () => {
 
     const filteredMaterials = useMemo(() => {
         let filtered = materials;
-        if (selectedSubject) filtered = filtered.filter(m => m.subject === selectedSubject);
+        // Case-insensitive filtering for subject
+        if (selectedSubject) filtered = filtered.filter(m => (m.subject || 'GERAL').toUpperCase() === selectedSubject);
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             filtered = filtered.filter(m => m.title.toLowerCase().includes(q) || m.teacherName.toLowerCase().includes(q));
@@ -156,7 +158,7 @@ export const ClassroomFiles: React.FC = () => {
         return filtered;
     }, [materials, selectedSubject, searchQuery]);
 
-    const getFileCount = (subject: string) => materials.filter(m => m.subject === subject).length;
+    const getFileCount = (subject: string) => materials.filter(m => (m.subject || 'GERAL').toUpperCase() === subject).length;
 
     const getFileIcon = (type: string) => {
         if (type.includes('pdf')) return <FileText size={28} className="text-red-500" />;

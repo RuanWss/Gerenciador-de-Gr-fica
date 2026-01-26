@@ -219,13 +219,14 @@ export const TeacherDashboard: React.FC = () => {
       setIsSaving(true);
       try {
           const url = await uploadExamFile(materialFile, user?.name || 'Professor');
+          const finalSubject = (materialSubject || user?.subject || 'Geral').toUpperCase();
           const material: ClassMaterial = {
               id: '',
               teacherId: user?.id || '',
               teacherName: user?.name || '',
               className: materialClass,
               title: materialTitle,
-              subject: materialSubject || user?.subject || 'Geral',
+              subject: finalSubject,
               fileUrl: url,
               fileName: materialFile.name,
               fileType: materialFile.type,
@@ -631,6 +632,7 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* Restante do código das abas... */}
             {activeTab === 'plans' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
                     <header className="mb-12">
