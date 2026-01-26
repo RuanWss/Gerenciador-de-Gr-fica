@@ -220,7 +220,7 @@ export const TeacherDashboard: React.FC = () => {
       try {
           const url = await uploadExamFile(materialFile, user?.name || 'Professor');
           // Normaliza o assunto: Trim e Uppercase para evitar duplicidade de pastas
-          const finalSubject = (materialSubject || user?.subject || 'Geral').trim().toUpperCase();
+          const finalSubject = (materialSubject || user?.subject || 'GERAL').trim().toUpperCase();
           const material: ClassMaterial = {
               id: '',
               teacherId: user?.id || '',
@@ -764,7 +764,7 @@ export const TeacherDashboard: React.FC = () => {
                                     </button>
                                 </div>
                             ))}
-                            {students.filter(student => filterAEEStudents(student)).length === 0 && (<div className="col-span-full py-10 text-center opacity-30 font-black uppercase tracking-[0.4em] text-sm text-gray-600 border-2 border-dashed border-white/5 rounded-[2rem]">Nenhum aluno AEE vinculado às suas turmas</div>)}
+                            {students.filter(student => filterAEEStudents(student)).length === 0 && (<div className="col-span-full py-40 text-center opacity-30 font-black uppercase tracking-[0.4em] text-xl text-gray-600">Nenhum aluno AEE vinculado às suas turmas</div>)}
                         </div>
                     </div>
                     <div>

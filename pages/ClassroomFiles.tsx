@@ -6,8 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 import { 
     Folder, Download, FileText, Image as ImageIcon, 
-    Bell, AlertTriangle, ArrowLeft, LogOut, Search, 
-    Grid, List as ListIcon, Clock, ChevronRight, Lock, LogIn, LayoutGrid, FolderOpen, Delete
+    AlertTriangle, ArrowLeft, LogOut, Search, 
+    LayoutGrid, FolderOpen, Lock, LogIn, ChevronRight
 } from 'lucide-react';
 
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
@@ -45,13 +45,23 @@ export const ClassroomFiles: React.FC = () => {
         ];
     }, [selectedClassName]);
 
-    // Função auxiliar para normalizar nomes de disciplinas (remove espaços extras e força maiúsculas)
-    const normalizeSubject = (s: string | undefined | null) => (s || 'GERAL').trim().toUpperCase();
+    // Função ROBUSTA para normalizar nomes de disciplinas
+    // Remove espaços extras, força maiúsculas e trata nulos/undefined como 'GERAL'
+    const normalizeSubject = (s: string | undefined | null) => {
+        if (!s || !s.trim()) return 'GERAL';
+        return s.trim().toUpperCase();
+    };
 
     const displaySubjects = useMemo(() => {
-        // Normaliza disciplinas dos materiais e da lista padrão para garantir agrupamento correto
+        // Coleta todas as disciplinas presentes nos arquivos, normalizando-as
+        // Isso garante que se um arquivo tiver "matematica " ele vá para "MATEMÁTICA"
+        // E se tiver uma disciplina exótica não listada, ela cria uma pasta nova automaticamente
         const materialSubjects = new Set(materials.map(m => normalizeSubject(m.subject)));
+        
+        // Adiciona as disciplinas padrão da turma
         const defaultSubjects = new Set(currentSubjectsList.map(s => s.trim().toUpperCase()));
+        
+        // Une tudo e ordena
         return Array.from(new Set([...defaultSubjects, ...materialSubjects])).sort();
     }, [materials, currentSubjectsList]);
 
@@ -123,6 +133,7 @@ export const ClassroomFiles: React.FC = () => {
         setPermissionDenied(false);
         setSelectedSubject(null); 
         localStorage.setItem('classroom_selected_class', selectedClassName);
+        
         const unsubscribe = listenToClassMaterials(
             selectedClassName, 
             (newMaterials) => {
@@ -130,6 +141,7 @@ export const ClassroomFiles: React.FC = () => {
                 setError(null);
                 setPermissionDenied(false);
                 newMaterials.sort((a, b) => b.createdAt - a.createdAt);
+                
                 if (!isFirstLoad.current && newMaterials.length > 0) {
                      const latestFile = newMaterials[0];
                      const currentLatestId = materials.length > 0 ? materials[0].id : null;
@@ -152,10 +164,13 @@ export const ClassroomFiles: React.FC = () => {
 
     const filteredMaterials = useMemo(() => {
         let filtered = materials;
-        // Filtragem insensível a maiúsculas/minúsculas e espaços
+        
+        // Filtragem usando a MESMA normalização das pastas
+        // Isso garante que o arquivo "matemática" apareça dentro da pasta "MATEMÁTICA"
         if (selectedSubject) {
             filtered = filtered.filter(m => normalizeSubject(m.subject) === selectedSubject);
         }
+        
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             filtered = filtered.filter(m => m.title.toLowerCase().includes(q) || m.teacherName.toLowerCase().includes(q));
