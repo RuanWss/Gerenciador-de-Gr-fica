@@ -1,10 +1,11 @@
 
+// ... existing imports ...
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { listenToSchedule, listenToSystemConfig } from '../services/firebaseService';
 import { ScheduleEntry, TimeSlot, SystemConfig } from '../types';
 import { Wifi, WifiOff, Clock, Calendar, Volume2, VolumeX, Maximize2, Monitor, ChevronRight, ChevronLeft, Bell, AlertCircle } from 'lucide-react';
 
-// --- CONFIGURAÇÃO DE SONS ---
+// ... (Constants like SOUND_SCHOOL_BELL, SLOTS_EFAF_MORNING etc. remain unchanged) ...
 const SOUND_SCHOOL_BELL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 // --- CONFIGURAÇÃO DE HORÁRIOS ---
@@ -55,6 +56,7 @@ const ALL_CLASSES = [
 const DEFAULT_PIN = "2016";
 
 export const PublicSchedule: React.FC = () => {
+    // ... (State declarations remain unchanged) ...
     const [isAuthorized, setIsAuthorized] = useState(() => sessionStorage.getItem('monitor_auth') === 'true');
     const [pin, setPin] = useState('');
     const [pinError, setPinError] = useState(false);
@@ -139,11 +141,20 @@ export const PublicSchedule: React.FC = () => {
 
     useEffect(() => {
         if (!isAuthorized) return;
-        const unsubscribe = listenToSchedule((data) => {
-            setSchedule([...data]);
-            setConnectionStatus(true);
-        });
-        const unsubscribeConfig = listenToSystemConfig(setSysConfig);
+        
+        const unsubscribe = listenToSchedule(
+            (data) => {
+                setSchedule([...data]);
+                setConnectionStatus(true);
+            },
+            (err) => console.warn("Schedule listener error:", err.code)
+        );
+        
+        const unsubscribeConfig = listenToSystemConfig(
+            setSysConfig,
+            (err) => console.warn("Config listener error:", err.code)
+        );
+        
         return () => {
             unsubscribe();
             unsubscribeConfig();
@@ -206,6 +217,7 @@ export const PublicSchedule: React.FC = () => {
     }, [currentTime, schedule, carouselIndex]);
 
     if (!isAuthorized) {
+        // ... (Unauthorized view remains unchanged) ...
         return (
             <div className="fixed inset-0 bg-[#09090b] flex items-center justify-center font-sans z-[1000] overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-950/20 via-transparent to-transparent opacity-50" />

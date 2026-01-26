@@ -18,7 +18,8 @@ import {
     saveClassMaterial,
     getClassMaterials,
     deleteClassMaterial,
-    logAttendance
+    logAttendance,
+    uploadClassMaterial
 } from '../services/firebaseService';
 import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, ClassMaterial, AttendanceLog, UserRole } from '../types';
 import { Button } from '../components/Button';
@@ -258,7 +259,7 @@ export const TeacherDashboard: React.FC = () => {
       if (!materialTitle || !materialClass || !materialFile) return alert("Preencha todos os campos.");
       setIsSaving(true);
       try {
-          const url = await uploadExamFile(materialFile, user?.name || 'Professor');
+          const url = await uploadClassMaterial(materialFile, materialClass);
           // Normaliza o assunto: Trim e Uppercase para evitar duplicidade de pastas
           const finalSubject = (materialSubject || user?.subject || 'GERAL').trim().toUpperCase();
           const material: ClassMaterial = {
@@ -274,12 +275,13 @@ export const TeacherDashboard: React.FC = () => {
               createdAt: Date.now()
           };
           await saveClassMaterial(material);
-          alert("Material compartilhado!");
+          alert("Material compartilhado com sucesso!");
           setMaterialTitle('');
           setMaterialFile(null);
           fetchData();
-      } catch (e) {
-          alert("Erro ao salvar material.");
+      } catch (e: any) {
+          console.error(e);
+          alert(`Erro ao salvar material: ${e.message}`);
       } finally {
           setIsSaving(false);
       }

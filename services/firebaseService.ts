@@ -84,9 +84,7 @@ export const getUserProfile = async (uid: string, email?: string): Promise<User 
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() } as User;
     }
-    // Fallback if user exists in Auth but not in Firestore (e.g. system accounts)
     if (email) {
-       // Check if there is a doc with this email as ID (legacy) or query by email
        const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
        const querySnapshot = await getDocs(q);
        if (!querySnapshot.empty) {
@@ -101,7 +99,6 @@ export const getUserProfile = async (uid: string, email?: string): Promise<User 
 };
 
 export const createSystemUserAuth = async (email: string, name: string, roles: UserRole[]) => {
-    // Initialize a secondary app to create users without logging out the current user
     const secondaryApp = initializeApp(firebaseConfig, "Secondary");
     const secondaryAuth = getAuth(secondaryApp);
     
@@ -119,14 +116,11 @@ export const createSystemUserAuth = async (email: string, name: string, roles: U
         await setDoc(doc(db, USERS_COLLECTION, user.id), user);
         await signOut(secondaryAuth);
     } catch (e: any) {
-        // If email already exists in Auth, just update Firestore roles
         if (e.code !== 'auth/email-already-in-use') {
             throw e;
         }
         await updateSystemUserRoles(email, roles);
     } 
-    // Note: We cannot easily delete the secondary app instance in v9 modular SDK, 
-    // but it's lightweight enough for occasional use.
 };
 
 export const updateSystemUserRoles = async (email: string, roles: UserRole[]) => {
@@ -204,7 +198,8 @@ export const updateExamStatus = async (examId: string, status: ExamStatus) => {
 };
 
 export const uploadExamFile = async (file: File, folderName: string): Promise<string> => {
-  const storageRef = ref(storage, `exams/${folderName}/${Date.now()}_${file.name}`);
+  const safeFolder = folderName.replace(/[^a-zA-Z0-9À-ÿ -]/g, "").trim(); 
+  const storageRef = ref(storage, `exams/${safeFolder}/${Date.now()}_${file.name}`);
   await uploadBytes(storageRef, file);
   return await getDownloadURL(storageRef);
 };
@@ -227,7 +222,6 @@ export const listenToStudents = (callback: (students: Student[]) => void, onErro
 };
 
 export const saveStudent = async (student: Student) => {
-    // Use student ID as doc ID if provided, otherwise auto-id (but usually we want ID to match matricula)
     const docRef = student.id ? doc(db, STUDENTS_COLLECTION, student.id) : doc(collection(db, STUDENTS_COLLECTION));
     await setDoc(docRef, { ...student, id: docRef.id });
 };
@@ -315,18 +309,6 @@ export const deleteScheduleEntry = async (id: string) => {
 // --- ATTENDANCE (STUDENTS) ---
 
 export const logAttendance = async (log: AttendanceLog): Promise<boolean> => {
-    // Check for duplicate within short timeframe if needed, but for now just add
-    const q = query(
-        collection(db, ATTENDANCE_COLLECTION), 
-        where("studentId", "==", log.studentId),
-        where("dateString", "==", log.dateString)
-    );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-        // Already logged for today (simplified logic, real world might allow multiple entries)
-        // return false; 
-    }
-    
     const docRef = doc(collection(db, ATTENDANCE_COLLECTION));
     await setDoc(docRef, { ...log, id: docRef.id });
     return true;
@@ -345,7 +327,6 @@ export const listenToAttendanceLogs = (date: string, callback: (logs: Attendance
 // --- ATTENDANCE (STAFF) ---
 
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<string> => {
-    // Check recent logs to prevent double tap
     const recentLimit = Date.now() - (2 * 60 * 1000); // 2 minutes
     const q = query(
         collection(db, STAFF_LOGS_COLLECTION),
@@ -371,7 +352,6 @@ export const listenToStaffLogs = (date: string, callback: (logs: StaffAttendance
 };
 
 export const getMonthlyStaffLogs = async (month: string): Promise<StaffAttendanceLog[]> => {
-    // month format YYYY-MM
     const start = `${month}-01`;
     const end = `${month}-31`;
     const q = query(
@@ -384,13 +364,10 @@ export const getMonthlyStaffLogs = async (month: string): Promise<StaffAttendanc
 };
 
 export const getDailySchoolLog = async (date: string): Promise<DailySchoolLog | null> => {
-    // This assumes a separate collection for daily consolidation if it exists
-    // For now, return mock or null if not implemented in DB structure
     return null;
 };
 
 export const getMonthlySchoolLogs = async (month: string): Promise<DailySchoolLog[]> => {
-    // Placeholder
     return [];
 };
 
@@ -470,6 +447,20 @@ export const saveClassMaterial = async (material: ClassMaterial) => {
     await setDoc(docRef, { ...material, id: docRef.id });
 };
 
+export const uploadClassMaterial = async (file: File, className: string): Promise<string> => {
+    // Sanitize class name to ensure valid storage path (avoiding special chars in folder names)
+    const safeClass = className.replace(/[^a-zA-Z0-9À-ÿ -]/g, "_").trim();
+    const storageRef = ref(storage, `materials/${safeClass}/${Date.now()}_${file.name}`);
+    
+    try {
+        const snapshot = await uploadBytes(storageRef, file);
+        return await getDownloadURL(snapshot.ref);
+    } catch (error) {
+        console.error("Error uploading class material:", error);
+        throw error;
+    }
+};
+
 export const getClassMaterials = async (teacherId?: string): Promise<ClassMaterial[]> => {
     let q;
     if (teacherId) {
@@ -542,7 +533,6 @@ export const saveInfantilReport = async (report: InfantilReport) => {
 };
 
 export const listenToInfantilReports = (teacherId: string, callback: (reports: InfantilReport[]) => void, onError?: (error: any) => void) => {
-    // If teacherId is empty/admin, maybe show all? assuming teacher sees their own or admin sees all
     let q;
     if (teacherId) {
         q = query(collection(db, INFANTIL_REPORTS_COLLECTION), where("teacherId", "==", teacherId));
@@ -593,7 +583,6 @@ export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void, o
 };
 
 export const createLoan = async (loan: LibraryLoan) => {
-    // Decrement book quantity
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
     const bookSnap = await getDoc(bookRef);
     if (bookSnap.exists()) {
@@ -633,13 +622,10 @@ export const syncAllDataWithGennera = async (onProgress: (msg: string) => void) 
             onProgress(`Processando turma: ${cls.name}...`);
             const students = await fetchGenneraStudentsByClass(cls.id, cls.name);
             
-            // Batch update or sequential update
             for (const student of students) {
-                // Update or create student in Firestore
                 const studentRef = doc(db, STUDENTS_COLLECTION, student.id);
                 await setDoc(studentRef, {
                     ...student,
-                    // Keep existing data if present (like photoUrl if not from ERP)
                 }, { merge: true });
             }
             totalStudents += students.length;

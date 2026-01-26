@@ -16,9 +16,17 @@ export const Login: React.FC = () => {
   const [sysConfig, setSysConfig] = useState<SystemConfig | null>(null);
 
   useEffect(() => {
-    const unsubscribe = listenToSystemConfig((config) => {
+    const unsubscribe = listenToSystemConfig(
+      (config) => {
         setSysConfig(config);
-    });
+      },
+      (error) => {
+        // Silently fail if permission denied on login screen
+        if (error.code !== 'permission-denied') {
+            console.warn("System config listener error:", error);
+        }
+      }
+    );
     return () => unsubscribe();
   }, []);
 
