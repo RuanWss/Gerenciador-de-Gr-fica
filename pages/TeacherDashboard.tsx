@@ -140,8 +140,30 @@ export const TeacherDashboard: React.FC = () => {
             const allExams = await getExams(user.id);
             setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
         } else if (activeTab === 'materials') {
-            const mats = await getClassMaterials(user.id);
-            setTeacherMaterials(mats.sort((a,b) => b.createdAt - a.createdAt));
+            // FIX: Busca todos os materiais primeiro e filtra localmente para garantir
+            // que materiais antigos (onde o ID pode ter mudado) sejam encontrados pelo nome.
+            const allMats = await getClassMaterials();
+            
+            const myMats = allMats.filter(m => {
+                const isIdMatch = m.teacherId === user.id;
+                
+                // Normalização para comparação flexível de nomes (ignora títulos e case)
+                // Remove prefixos comuns como "Prof.", "Profa.", "Professor" para comparar apenas o nome
+                const dbName = (m.teacherName || '').trim().toUpperCase()
+                    .replace(/^PROF[\.]?\s+|^PROFA[\.]?\s+|^PROFESSOR\s+|^PROFESSORA\s+/g, '');
+                const sessionName = (user.name || '').trim().toUpperCase()
+                    .replace(/^PROF[\.]?\s+|^PROFA[\.]?\s+|^PROFESSOR\s+|^PROFESSORA\s+/g, '');
+                
+                // Match exato ou parcial seguro (se o nome tiver tamanho razoável)
+                const isNameMatch = dbName && sessionName && (
+                    dbName === sessionName || 
+                    (sessionName.length > 3 && dbName.includes(sessionName)) ||
+                    (dbName.length > 3 && sessionName.includes(dbName))
+                );
+
+                return isIdMatch || isNameMatch;
+            });
+            setTeacherMaterials(myMats.sort((a,b) => b.createdAt - a.createdAt));
         } else if (activeTab === 'plans') {
             const plans = await getLessonPlans(user.id);
             setLessonPlans(plans.sort((a,b) => b.createdAt - a.createdAt));
@@ -607,7 +629,7 @@ export const TeacherDashboard: React.FC = () => {
                             </div>
                         </div>
                         <div className="lg:col-span-2 space-y-4">
-                            {teacherMaterials.map(mat => (
+                            {teacherMaterials.length > 0 ? teacherMaterials.map(mat => (
                                 <div key={mat.id} className="bg-[#18181b] border border-white/5 p-6 rounded-[2rem] hover:border-white/10 transition-all group flex items-center justify-between">
                                     <div className="flex items-center gap-6">
                                         <div className="h-14 w-14 bg-red-900/10 text-red-500 rounded-2xl flex items-center justify-center border border-red-500/10"><FileText size={24}/></div>
@@ -621,8 +643,7 @@ export const TeacherDashboard: React.FC = () => {
                                         <button onClick={async () => { if(confirm("Excluir?")) await deleteClassMaterial(mat.id); fetchData(); }} className="h-12 w-12 flex items-center justify-center rounded-xl bg-white/5 hover:bg-red-600/20 text-gray-400 hover:text-red-500 transition-all border border-white/5" title="Excluir"><Trash2 size={20}/></button>
                                     </div>
                                 </div>
-                            ))}
-                            {teacherMaterials.length === 0 && (
+                            )) : (
                                 <div className="flex flex-col items-center justify-center py-20 opacity-30">
                                     <Folder size={64} className="mb-4 text-gray-600" />
                                     <p className="text-gray-500 font-black uppercase tracking-widest">Nenhum material publicado</p>

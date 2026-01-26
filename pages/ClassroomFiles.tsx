@@ -51,19 +51,34 @@ export const ClassroomFiles: React.FC = () => {
     const getFileCategory = (file: ClassMaterial) => {
         let subject = file.subject;
 
-        // Tenta recuperar categoria de arquivos antigos/mal formatados
-        if (!subject || subject.toUpperCase() === 'GERAL' || subject.trim() === '') {
-            // Tenta extrair do nome do professor se houver hífen (Padrão: Nome - Matéria)
-            if (file.teacherName && file.teacherName.includes(' - ')) {
-                const parts = file.teacherName.split(' - ');
-                if (parts.length > 1) {
-                    subject = parts[1]; // Pega a parte após o hífen
+        // Normalização inicial
+        if (subject) subject = subject.trim().toUpperCase();
+
+        // Lógica de recuperação de categoria para arquivos legados
+        if (!subject || subject === 'GERAL' || subject === '') {
+            if (file.teacherName) {
+                // Tenta extrair do nome do professor (ex: "João - Matemática")
+                // Adicionado mais separadores e lógica de limpeza
+                const separators = [' - ', ' – ', ': ', ' | ', ' • ', ' / '];
+                for (const sep of separators) {
+                    if (file.teacherName.includes(sep)) {
+                        const parts = file.teacherName.split(sep);
+                        if (parts.length > 1) {
+                            // Assume que a última parte é a disciplina
+                            const potentialSubject = parts[parts.length - 1].trim();
+                            // Validação básica para evitar pegar sobrenomes compostos errados se não for um separador claro
+                            if (potentialSubject.length > 2) {
+                                subject = potentialSubject.toUpperCase();
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
 
         if (!subject || !subject.trim()) return 'GERAL';
-        return subject.trim().toUpperCase();
+        return subject;
     };
 
     const displaySubjects = useMemo(() => {
