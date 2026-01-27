@@ -51,7 +51,8 @@ import {
   InfantilReport, 
   LibraryBook, 
   LibraryLoan,
-  DailySchoolLog
+  DailySchoolLog,
+  GradebookEntry
 } from '../types';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
@@ -74,6 +75,7 @@ const INFANTIL_REPORTS_COLLECTION = 'infantilReports';
 const LIBRARY_BOOKS_COLLECTION = 'libraryBooks';
 const LIBRARY_LOANS_COLLECTION = 'libraryLoans';
 const USERS_COLLECTION = 'users';
+const GRADEBOOK_COLLECTION = 'gradebooks';
 
 // --- USERS & AUTH ---
 
@@ -549,6 +551,40 @@ export const listenToInfantilReports = (teacherId: string, callback: (reports: I
 
 export const deleteInfantilReport = async (id: string) => {
     await deleteDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id));
+};
+
+// --- GRADEBOOK (DIÁRIO DE CLASSE) ---
+
+export const saveGradebook = async (data: GradebookEntry) => {
+    // Generate a composite ID if not present: class_subject_bimester
+    const docId = data.id || `${data.className}_${data.subject}_${data.bimester}`.replace(/[^a-zA-Z0-9]/g, '_');
+    const docRef = doc(db, GRADEBOOK_COLLECTION, docId);
+    await setDoc(docRef, { ...data, id: docId, updatedAt: Date.now() }, { merge: true });
+};
+
+export const listenToGradebook = (
+    className: string, 
+    subject: string, 
+    bimester: string, 
+    callback: (data: GradebookEntry | null) => void
+) => {
+    const docId = `${className}_${subject}_${bimester}`.replace(/[^a-zA-Z0-9]/g, '_');
+    const docRef = doc(db, GRADEBOOK_COLLECTION, docId);
+    
+    return onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            callback(docSnap.data() as GradebookEntry);
+        } else {
+            callback(null);
+        }
+    });
+};
+
+export const getGradebook = async (className: string, subject: string, bimester: string): Promise<GradebookEntry | null> => {
+    const docId = `${className}_${subject}_${bimester}`.replace(/[^a-zA-Z0-9]/g, '_');
+    const docRef = doc(db, GRADEBOOK_COLLECTION, docId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? (docSnap.data() as GradebookEntry) : null;
 };
 
 // --- LIBRARY ---

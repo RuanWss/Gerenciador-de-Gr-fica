@@ -19,16 +19,18 @@ import {
     getClassMaterials,
     deleteClassMaterial,
     logAttendance,
-    uploadClassMaterial
+    uploadClassMaterial,
+    saveGradebook,
+    listenToGradebook
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, ClassMaterial, AttendanceLog, UserRole } from '../types';
+import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, ClassMaterial, AttendanceLog, UserRole, GradebookEntry, AV1Activity } from '../types';
 import { Button } from '../components/Button';
 import { 
   Plus, List, PlusCircle, X, Trash2, FileUp, AlertCircle, 
   BookOpen, Save, ArrowLeft, Heart, FileText, Eye, Clock, UploadCloud, ChevronRight,
   LayoutTemplate, Download, Users, Edit3, MessageSquare, Sparkles, BookMarked,
   Layers, MapPin, Search, Bot, Smile, AlertTriangle, Edit, Folder, BookOpenCheck,
-  FileCheck, ShieldAlert
+  FileCheck, ShieldAlert, GraduationCap, Calculator, Calendar
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES } from '../constants';
 
@@ -40,7 +42,7 @@ const TEMPLATES = [
 
 export const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'plans' | 'occurrences' | 'pei' | 'materials' | 'attendance'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'plans' | 'occurrences' | 'pei' | 'materials' | 'attendance' | 'grades'>('requests');
   const [activePlanTab, setActivePlanTab] = useState<'daily' | 'bimester' | 'inova'>('daily');
   
   const [exams, setExams] = useState<ExamRequest[]>([]);
@@ -77,6 +79,14 @@ export const TeacherDashboard: React.FC = () => {
   const [peiDocuments, setPeiDocuments] = useState<PEIDocument[]>([]);
   const [showPeiModal, setShowPeiModal] = useState(false);
   const [editingPei, setEditingPei] = useState<Partial<PEIDocument> | null>(null);
+
+  // Gradebook State
+  const [gradeClass, setGradeClass] = useState('');
+  const [gradeSubject, setGradeSubject] = useState('');
+  const [gradeBimester, setGradeBimester] = useState('1º BIMESTRE');
+  const [gradebookData, setGradebookData] = useState<GradebookEntry | null>(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [newActivity, setNewActivity] = useState<AV1Activity>({ id: '', name: '', date: '', deliveryDate: '', maxScore: 1.0 });
 
   // Lesson Plan State
   const [showPlanModal, setShowPlanModal] = useState(false);
@@ -118,6 +128,29 @@ export const TeacherDashboard: React.FC = () => {
       }
   }, [examGrade, students, activeTab]);
 
+  // Gradebook Listener
+  useEffect(() => {
+      if (activeTab === 'grades' && gradeClass && gradeSubject && gradeBimester) {
+          const unsub = listenToGradebook(gradeClass, gradeSubject, gradeBimester, (data) => {
+              if (data) {
+                  setGradebookData(data);
+              } else {
+                  // Init empty if not exists
+                  setGradebookData({
+                      id: '',
+                      className: gradeClass,
+                      subject: gradeSubject,
+                      bimester: gradeBimester,
+                      av1Config: [],
+                      grades: {},
+                      updatedAt: Date.now()
+                  });
+              }
+          });
+          return () => unsub();
+      }
+  }, [activeTab, gradeClass, gradeSubject, gradeBimester]);
+
   const getTeacherClasses = () => {
       if (!user) return CLASSES;
       if (user.classes && user.classes.length > 0) return user.classes;
@@ -132,11 +165,17 @@ export const TeacherDashboard: React.FC = () => {
 
   // Efeito para selecionar automaticamente a turma se houver apenas uma
   useEffect(() => {
-      if (activeTab === 'attendance') {
+      if (activeTab === 'attendance' || activeTab === 'grades') {
           const classes = getTeacherClasses();
           if (classes.length === 1) {
-              setAttendanceClass(classes[0]);
-              setAttendanceRecords({});
+              if (activeTab === 'attendance') setAttendanceClass(classes[0]);
+              if (activeTab === 'grades') {
+                  setGradeClass(classes[0]);
+                  // Tenta auto-selecionar disciplina se disponível
+                  if (user?.subject && user.subject !== 'POLIVALENTE') {
+                      setGradeSubject(user.subject);
+                  }
+              }
           }
       }
   }, [activeTab, user]);
@@ -260,7 +299,6 @@ export const TeacherDashboard: React.FC = () => {
       setIsSaving(true);
       try {
           const url = await uploadClassMaterial(materialFile, materialClass);
-          // Normaliza o assunto: Trim e Uppercase para evitar duplicidade de pastas
           const finalSubject = (materialSubject || user?.subject || 'GERAL').trim().toUpperCase();
           const material: ClassMaterial = {
               id: '',
@@ -457,6 +495,89 @@ export const TeacherDashboard: React.FC = () => {
       }
   };
 
+  // --- GRADEBOOK LOGIC ---
+
+  const handleAddAV1Activity = async () => {
+      if (!gradebookData) return;
+      if (!newActivity.name || !newActivity.date || newActivity.maxScore <= 0) return alert("Preencha todos os campos da atividade.");
+      
+      const currentAV1Sum = gradebookData.av1Config.reduce((acc, curr) => acc + curr.maxScore, 0);
+      if (currentAV1Sum + newActivity.maxScore > 10.0) {
+          return alert(`A soma das atividades da AV1 não pode ultrapassar 10.0 pontos. Soma atual: ${currentAV1Sum}.`);
+      }
+      if (gradebookData.av1Config.length >= 7) {
+          return alert("Máximo de 7 atividades para AV1 atingido.");
+      }
+
+      const activity: AV1Activity = { ...newActivity, id: Date.now().toString() };
+      const updatedConfig = [...gradebookData.av1Config, activity];
+      
+      const updatedData = { ...gradebookData, av1Config: updatedConfig };
+      setGradebookData(updatedData);
+      await saveGradebook(updatedData);
+      
+      setShowActivityModal(false);
+      setNewActivity({ id: '', name: '', date: '', deliveryDate: '', maxScore: 1.0 });
+  };
+
+  const handleRemoveAV1Activity = async (activityId: string) => {
+      if (!gradebookData || !confirm("Remover esta atividade e todas as notas associadas?")) return;
+      const updatedConfig = gradebookData.av1Config.filter(a => a.id !== activityId);
+      
+      // Clean up grades for this activity
+      const updatedGrades = { ...gradebookData.grades };
+      Object.keys(updatedGrades).forEach(studentId => {
+          if (updatedGrades[studentId]?.av1) {
+              delete updatedGrades[studentId].av1[activityId];
+          }
+      });
+
+      const updatedData = { ...gradebookData, av1Config: updatedConfig, grades: updatedGrades };
+      setGradebookData(updatedData);
+      await saveGradebook(updatedData);
+  };
+
+  const handleUpdateGrade = async (studentId: string, type: 'av1', activityId: string, value: number) => {
+      if (!gradebookData) return;
+      
+      const updatedGrades = { ...gradebookData.grades };
+      if (!updatedGrades[studentId]) updatedGrades[studentId] = { av1: {} };
+      if (!updatedGrades[studentId].av1) updatedGrades[studentId].av1 = {};
+
+      updatedGrades[studentId].av1[activityId] = value;
+
+      const updatedData = { ...gradebookData, grades: updatedGrades };
+      setGradebookData(updatedData); // Optimistic update
+      // Debounce could be added here for performance
+      await saveGradebook(updatedData);
+  };
+
+  // Added function to allow teachers to update AV3
+  const handleUpdateExamGrade = async (studentId: string, type: 'av2' | 'av3', value: number) => {
+      if (!gradebookData) return;
+      
+      const updatedGrades = { ...gradebookData.grades };
+      if (!updatedGrades[studentId]) updatedGrades[studentId] = { av1: {} };
+      
+      updatedGrades[studentId][type] = value;
+
+      const updatedData = { ...gradebookData, grades: updatedGrades };
+      setGradebookData(updatedData);
+      await saveGradebook(updatedData);
+  };
+
+  const calculateFinalGrade = (studentId: string) => {
+      if (!gradebookData) return 0;
+      const studentGrades = gradebookData.grades[studentId];
+      if (!studentGrades) return 0;
+
+      const av1Total = Object.values(studentGrades.av1 || {}).reduce((a: number, b: number) => a + b, 0);
+      const av2 = studentGrades.av2 || 0;
+      const av3 = studentGrades.av3 || 0;
+
+      return ((av1Total + av2 + av3) / 3).toFixed(1);
+  };
+
   const SidebarButton = ({ tab, label, icon: IconComponent }: { tab: any, label: string, icon: React.ElementType }) => (
     <button 
         onClick={() => setActiveTab(tab)} 
@@ -485,6 +606,7 @@ export const TeacherDashboard: React.FC = () => {
                 <SidebarButton tab="create" label="Enviar p/ Gráfica" icon={PlusCircle} />
                 <SidebarButton tab="materials" label="Materiais de Aula" icon={Folder} />
                 <SidebarButton tab="plans" label="Planejamentos" icon={BookOpen} />
+                <SidebarButton tab="grades" label="Diário de Classe" icon={Calculator} />
                 <SidebarButton tab="pei" label="PEI / AEE" icon={Heart} />
                 <SidebarButton tab="occurrences" label="Ocorrências" icon={AlertCircle} />
                 {isEligibleForAttendance() && (
@@ -494,6 +616,7 @@ export const TeacherDashboard: React.FC = () => {
         </div>
         
         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+            {/* ... (Existing Tabs: requests, create, materials, plans, pei, occurrences, attendance) ... */}
             {activeTab === 'requests' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
                     <header className="mb-12">
@@ -503,7 +626,13 @@ export const TeacherDashboard: React.FC = () => {
                     <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
                         <table className="w-full text-left">
                             <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-[0.2em]">
-                                <tr><th className="p-8">Data</th><th className="p-8">Atividade</th><th className="p-8">Turma / Qtd</th><th className="p-8">Status</th></tr>
+                                <tr>
+                                    <th className="p-8">Data</th>
+                                    <th className="p-8">Atividade</th>
+                                    <th className="p-8">Turma / Qtd</th>
+                                    <th className="p-8">Status</th>
+                                    <th className="p-8 text-right">Arquivo</th>
+                                </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {exams.length > 0 ? exams.map(exam => (
@@ -520,9 +649,27 @@ export const TeacherDashboard: React.FC = () => {
                                                 {exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Imprimindo' : 'Pronto'}
                                             </span>
                                         </td>
+                                        <td className="p-8 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                {exam.fileUrls && exam.fileUrls.length > 0 ? exam.fileUrls.map((url, idx) => (
+                                                    <a 
+                                                        key={idx} 
+                                                        href={url} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer" 
+                                                        className="h-10 w-10 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-all border border-white/5" 
+                                                        title="Visualizar Material"
+                                                    >
+                                                        <Eye size={18} />
+                                                    </a>
+                                                )) : (
+                                                    <span className="text-[10px] text-gray-600 font-bold uppercase">Sem arquivo</span>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 )) : (
-                                    <tr><td colSpan={4} className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-40">Nenhuma solicitação encontrada</td></tr>
+                                    <tr><td colSpan={5} className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-40">Nenhuma solicitação encontrada</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -530,6 +677,172 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
+            {/* --- GRADEBOOK TAB --- */}
+            {activeTab === 'grades' && (
+                <div className="animate-in fade-in slide-in-from-right-4">
+                    <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div>
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Classe</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Lançamento de notas e avaliações</p>
+                        </div>
+                        <div className="flex flex-wrap gap-4">
+                            <select className="bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-red-600" value={gradeClass} onChange={e => setGradeClass(e.target.value)}>
+                                <option value="">Selecione a Turma</option>
+                                {getTeacherClasses().map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <select className="bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-red-600" value={gradeSubject} onChange={e => setGradeSubject(e.target.value)}>
+                                <option value="">Selecione a Disciplina</option>
+                                {getSubjectsForClass(gradeClass).map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <select className="bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-red-600" value={gradeBimester} onChange={e => setGradeBimester(e.target.value)}>
+                                <option value="1º BIMESTRE">1º BIMESTRE</option>
+                                <option value="2º BIMESTRE">2º BIMESTRE</option>
+                                <option value="3º BIMESTRE">3º BIMESTRE</option>
+                                <option value="4º BIMESTRE">4º BIMESTRE</option>
+                            </select>
+                        </div>
+                    </header>
+
+                    {gradeClass && gradeSubject ? (
+                        <div className="space-y-8">
+                            {/* AV1 CONFIGURATION */}
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl">
+                                <div className="flex justify-between items-center mb-6">
+                                    <div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3"><Calculator className="text-red-500"/> Composição da AV1</h3>
+                                        <p className="text-xs text-gray-500 font-bold mt-1">
+                                            Soma Atual: <span className={(gradebookData?.av1Config.reduce((a,b) => a+b.maxScore, 0) || 0) > 10 ? 'text-red-500' : 'text-green-500'}>{(Number(gradebookData?.av1Config.reduce((a,b) => a+b.maxScore, 0) || 0)).toFixed(1)}</span> / 10.0
+                                        </p>
+                                    </div>
+                                    <Button onClick={() => setShowActivityModal(true)} className="bg-white/5 border border-white/10 hover:bg-white/10 h-10 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest text-white">
+                                        <Plus size={14} className="mr-2"/> Add Atividade
+                                    </Button>
+                                </div>
+                                <div className="flex gap-4 overflow-x-auto pb-2">
+                                    {gradebookData?.av1Config.map((activity, idx) => (
+                                        <div key={activity.id} className="min-w-[180px] bg-black/40 border border-white/10 p-4 rounded-2xl relative group">
+                                            <button onClick={() => handleRemoveAV1Activity(activity.id)} className="absolute top-2 right-2 text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>
+                                            <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Atividade {idx + 1}</p>
+                                            <p className="text-sm font-bold text-white truncate" title={activity.name}>{activity.name}</p>
+                                            <div className="flex justify-between items-end mt-2">
+                                                <span className="text-[10px] text-gray-500">{new Date(activity.date).toLocaleDateString()}</span>
+                                                <span className="text-xs font-black text-white bg-white/10 px-2 py-0.5 rounded">Val: {activity.maxScore}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {gradebookData?.av1Config.length === 0 && <p className="text-gray-600 text-xs italic py-4">Nenhuma atividade configurada para AV1.</p>}
+                                </div>
+                            </div>
+
+                            {/* GRADES TABLE */}
+                            <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] shadow-xl overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-black/40 text-[9px] font-black text-gray-500 uppercase tracking-widest">
+                                            <tr>
+                                                <th className="p-6 border-b border-white/5 sticky left-0 bg-[#121214] z-10 w-64">Aluno</th>
+                                                {gradebookData?.av1Config.map((act, i) => (
+                                                    <th key={act.id} className="p-6 border-b border-white/5 text-center min-w-[100px]">
+                                                        <div className="truncate w-24 mx-auto" title={act.name}>{i+1}. {act.name}</div>
+                                                        <div className="text-[8px] opacity-50">({act.maxScore} pts)</div>
+                                                    </th>
+                                                ))}
+                                                <th className="p-6 border-b border-white/5 text-center bg-red-900/10 text-red-400">Total AV1</th>
+                                                <th className="p-6 border-b border-white/5 text-center bg-blue-900/10 text-blue-400">AV2 (Simulado)</th>
+                                                <th className="p-6 border-b border-white/5 text-center bg-purple-900/10 text-purple-400">AV3 (Prova)</th>
+                                                <th className="p-6 border-b border-white/5 text-center bg-green-900/10 text-green-400 font-bold text-xs">Média Final</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {students.filter(s => s.className === gradeClass).sort((a,b) => a.name.localeCompare(b.name)).map(student => {
+                                                const sGrades = (gradebookData?.grades[student.id] || { av1: {} }) as { av1: Record<string, number>, av2?: number, av3?: number };
+                                                const av1Total = Object.values(sGrades.av1 || {}).reduce((a: number, b: number) => a + b, 0);
+                                                
+                                                return (
+                                                    <tr key={student.id} className="hover:bg-white/[0.02]">
+                                                        <td className="p-6 sticky left-0 bg-[#18181b] z-10 border-r border-white/5">
+                                                            <p className="font-bold text-xs text-white uppercase truncate w-60">{student.name}</p>
+                                                        </td>
+                                                        {gradebookData?.av1Config.map(act => (
+                                                            <td key={act.id} className="p-4 text-center">
+                                                                <input 
+                                                                    type="number" 
+                                                                    min="0" 
+                                                                    max={act.maxScore} 
+                                                                    step="0.1"
+                                                                    className="w-16 bg-black/40 border border-white/10 rounded-lg p-2 text-center text-white font-bold outline-none focus:border-red-500 text-xs"
+                                                                    value={sGrades.av1?.[act.id] ?? ''}
+                                                                    onChange={e => handleUpdateGrade(student.id, 'av1', act.id, Math.min(Number(e.target.value), act.maxScore))}
+                                                                />
+                                                            </td>
+                                                        ))}
+                                                        <td className="p-6 text-center font-black text-red-400 bg-red-900/5">{av1Total.toFixed(1)}</td>
+                                                        <td className="p-6 text-center font-bold text-gray-400 bg-blue-900/5 cursor-not-allowed" title="Preenchido pelo Administrativo">
+                                                            {sGrades.av2 !== undefined ? sGrades.av2.toFixed(1) : '-'}
+                                                        </td>
+                                                        <td className="p-6 text-center">
+                                                            <input 
+                                                                type="number" 
+                                                                min="0" 
+                                                                max="10" 
+                                                                step="0.1"
+                                                                className="w-20 bg-purple-900/10 border border-purple-500/20 rounded-lg p-2 text-center text-purple-400 font-bold outline-none focus:border-purple-500 text-sm"
+                                                                value={sGrades.av3 ?? ''}
+                                                                onChange={e => handleUpdateExamGrade(student.id, 'av3', Math.min(Number(e.target.value), 10))}
+                                                            />
+                                                        </td>
+                                                        <td className="p-6 text-center font-black text-green-400 bg-green-900/5 text-sm">
+                                                            {calculateFinalGrade(student.id)}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="py-40 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
+                            <Calculator size={64} className="mx-auto mb-4 text-gray-500" />
+                            <p className="font-black uppercase tracking-widest text-sm text-gray-500">Selecione Turma e Disciplina para abrir o diário</p>
+                        </div>
+                    )}
+
+                    {/* ACTIVITY MODAL */}
+                    {showActivityModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                            <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95">
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-6">Nova Atividade AV1</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Nome da Atividade</label>
+                                        <input autoFocus className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" placeholder="Ex: Trabalho em Grupo" value={newActivity.name} onChange={e => setNewActivity({...newActivity, name: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Data de Realização</label>
+                                        <input type="date" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" value={newActivity.date} onChange={e => setNewActivity({...newActivity, date: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Data de Entrega</label>
+                                        <input type="date" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" value={newActivity.deliveryDate || ''} onChange={e => setNewActivity({...newActivity, deliveryDate: e.target.value})} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Valor (Max Pontos)</label>
+                                        <input type="number" step="0.1" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" value={newActivity.maxScore} onChange={e => setNewActivity({...newActivity, maxScore: Number(e.target.value)})} />
+                                    </div>
+                                    <div className="flex gap-3 pt-4">
+                                        <Button variant="outline" onClick={() => setShowActivityModal(false)} className="flex-1 h-12 rounded-xl font-black text-[10px] uppercase">Cancelar</Button>
+                                        <Button onClick={handleAddAV1Activity} className="flex-1 h-12 bg-red-600 rounded-xl font-black text-[10px] uppercase">Adicionar</Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ... (Other existing tabs and modals preserved) ... */}
             {activeTab === 'create' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto space-y-8">
                     <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
@@ -674,7 +987,6 @@ export const TeacherDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* Restante do código das abas... */}
             {activeTab === 'plans' && (
                 <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
                     <header className="mb-12">
@@ -723,6 +1035,7 @@ export const TeacherDashboard: React.FC = () => {
 
             {activeTab === 'pei' && (
                 <div className="animate-in fade-in slide-in-from-right-4">
+                    {/* ... PEI Tab Content ... */}
                     <header className="mb-12">
                         <h1 className="text-4xl font-black text-white uppercase tracking-tighter">PEI / AEE</h1>
                         <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Planos de Ensino Individualizado</p>

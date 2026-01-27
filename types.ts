@@ -329,15 +329,6 @@ export interface DailySchoolLog {
   }>;
 }
 
-export interface PedagogicalProject {
-  id: string;
-  teacherId: string;
-  teacherName: string;
-  title: string;
-  description: string;
-  createdAt: number;
-}
-
 export interface AEEAppointment {
   id: string;
   studentId: string;
@@ -347,4 +338,29 @@ export interface AEEAppointment {
   period: 'Manhã' | 'Tarde' | 'Contraturno';
   description?: string;
   createdAt: number;
+}
+
+// --- GRADEBOOK TYPES ---
+
+export interface AV1Activity {
+  id: string;
+  name: string;
+  date: string;
+  deliveryDate?: string;
+  maxScore: number;
+}
+
+export interface GradebookEntry {
+  id: string;
+  className: string;
+  subject: string;
+  bimester: string;
+  av1Config: AV1Activity[];
+  // Map: studentId -> scores
+  grades: Record<string, {
+    av1: Record<string, number>; // activityId -> score
+    av2?: number; // Simulado (0-10)
+    av3?: number; // Prova (0-10)
+  }>;
+  updatedAt: number;
 }

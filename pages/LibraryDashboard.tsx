@@ -28,6 +28,7 @@ import {
     AlertCircle, 
     Printer 
 } from 'lucide-react';
+import { CLASSES } from '../constants';
 
 export const LibraryDashboard: React.FC = () => {
     const { user } = useAuth();
@@ -54,6 +55,7 @@ export const LibraryDashboard: React.FC = () => {
         bookId: '',
         dueDate: ''
     });
+    const [loanClassFilter, setLoanClassFilter] = useState('');
 
     // Filters
     const filteredBooks = books.filter(b => 
@@ -154,6 +156,7 @@ export const LibraryDashboard: React.FC = () => {
 
         setShowLoanModal(false);
         setLoanForm({ studentId: '', bookId: '', dueDate: '' });
+        setLoanClassFilter('');
     };
 
     const handleReturnLoan = async (loan: LibraryLoan) => {
@@ -431,49 +434,54 @@ export const LibraryDashboard: React.FC = () => {
                                 <button onClick={() => setShowLoanModal(false)} className="text-gray-400 hover:text-white"><X size={20}/></button>
                             </div>
                             <div className="space-y-4">
+                                {/* ADDED CLASS FILTER */}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Selecione a Turma</label>
+                                    <select 
+                                        className="w-full bg-black/30 border border-gray-700 rounded-lg p-2 text-white text-sm outline-none focus:border-red-500 appearance-none" 
+                                        value={loanClassFilter} 
+                                        onChange={e => setLoanClassFilter(e.target.value)}
+                                    >
+                                        <option value="">Todas as Turmas</option>
+                                        {CLASSES.map(cls => (
+                                            <option key={cls} value={cls}>{cls}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Selecione o Aluno</label>
                                     <select 
-                                        className="w-full bg-black/30 border border-gray-700 rounded-lg p-2 text-white text-sm outline-none focus:border-red-500" 
+                                        className="w-full bg-black/30 border border-gray-700 rounded-lg p-2 text-white text-sm outline-none focus:border-red-500 appearance-none" 
                                         value={loanForm.studentId} 
                                         onChange={e => setLoanForm({...loanForm, studentId: e.target.value})}
                                     >
                                         <option value="">-- Selecione --</option>
-                                        {students.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name} ({s.className})</option>
-                                        ))}
+                                        {students
+                                            .filter(s => !loanClassFilter || s.className === loanClassFilter)
+                                            .sort((a,b) => a.name.localeCompare(b.name))
+                                            .map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                                        }
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Selecione a Obra (Disponíveis)</label>
-                                    <select 
-                                        className="w-full bg-black/30 border border-gray-700 rounded-lg p-2 text-white text-sm outline-none focus:border-red-500" 
-                                        value={loanForm.bookId} 
-                                        onChange={e => setLoanForm({...loanForm, bookId: e.target.value})}
-                                    >
+                                    <select className="w-full bg-black/30 border border-gray-700 rounded-lg p-2 text-white text-sm outline-none focus:border-red-500 appearance-none" value={loanForm.bookId} onChange={e => setLoanForm({...loanForm, bookId: e.target.value})}>
                                         <option value="">-- Selecione --</option>
-                                        {books.filter(b => b.availableQuantity > 0).map(b => (
-                                            <option key={b.id} value={b.id}>{b.title} (Disp: {b.availableQuantity})</option>
-                                        ))}
+                                        {books.filter(b => b.availableQuantity > 0).map(b => <option key={b.id} value={b.id}>{b.title} (Disp: {b.availableQuantity})</option>)}
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Data de Devolução Prevista</label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full bg-black/30 border border-gray-700 rounded-lg p-2 text-white text-sm outline-none focus:border-red-500" 
-                                        value={loanForm.dueDate} 
-                                        onChange={e => setLoanForm({...loanForm, dueDate: e.target.value})} 
-                                    />
+                                    <input type="date" className="w-full bg-black/30 border border-gray-700 rounded-lg p-2 text-white text-sm outline-none focus:border-red-500" value={loanForm.dueDate} onChange={e => setLoanForm({...loanForm, dueDate: e.target.value})} />
                                 </div>
                             </div>
-                            <div className="flex justify-end gap-3 mt-6">
-                                <Button onClick={handleCreateLoan}><Save size={16} className="mr-2"/> Confirmar Empréstimo</Button>
+                            <div className="flex justify-end mt-6">
+                                <Button onClick={handleCreateLoan} className="bg-red-600 hover:bg-red-700"><Save size={16} className="mr-2"/> Confirmar Empréstimo</Button>
                             </div>
                         </div>
                     </div>
                 )}
-
             </div>
         </div>
     );
