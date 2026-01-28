@@ -1,9 +1,9 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize the Gemini API client using the required named parameter
+// Initialize the Gemini API client using the required named parameter and process.env.API_KEY directly
 const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 export const generateStructuredQuestions = async (
@@ -13,8 +13,9 @@ export const generateStructuredQuestions = async (
 ) => {
   try {
     const ai = getAiClient();
+    // Updated to gemini-3-flash-preview as per guidelines for basic text tasks
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-lite-preview-02-05',
+      model: 'gemini-3-flash-preview',
       contents: `Crie ${quantity} questões de múltipla escolha sobre "${topic}" para o nível "${gradeLevel}".`,
       config: {
         responseMimeType: "application/json",
@@ -56,8 +57,9 @@ export const suggestExamInstructions = async (examType: string): Promise<string>
     try {
         const ai = getAiClient();
         const prompt = `Escreva instruções curtas e formais para o cabeçalho de uma prova escolar do tipo: "${examType}".`;
+        // Updated to gemini-3-flash-preview for text generation
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-lite-preview-02-05',
+            model: 'gemini-3-flash-preview',
             contents: prompt
         });
         // Access the text property directly on the response object
@@ -95,8 +97,9 @@ export const analyzeAnswerSheet = async (imageFile: File, numQuestions: number) 
             4. Se uma questão não estiver marcada ou estiver rasurada, use "X" como valor.
         `;
 
+        // Updated to gemini-3-flash-preview for multimodal task
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-lite-preview-02-05',
+            model: 'gemini-3-flash-preview',
             contents: {
                 parts: [
                     { inlineData: { mimeType: imageFile.type, data: base64Image } },
@@ -105,17 +108,7 @@ export const analyzeAnswerSheet = async (imageFile: File, numQuestions: number) 
             },
             config: {
                 responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        studentName: { type: Type.STRING },
-                        answers: { 
-                            type: Type.OBJECT,
-                            description: "Map of question number to selected option (A-E)",
-                            nullable: true
-                        }
-                    }
-                }
+                /* Removed responseSchema because map-like OBJECTs with dynamic keys are not supported and empty OBJECT schemas are invalid. The prompt is sufficient for JSON structure. */
             }
         });
 

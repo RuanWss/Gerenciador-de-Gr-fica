@@ -1,1375 +1,946 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
-    getExams, 
-    saveExam, 
-    uploadExamFile,
+    getExams, saveExam, uploadExamFile,
+    getClassMaterials, saveClassMaterial, deleteClassMaterial, uploadClassMaterial,
+    getLessonPlans, saveLessonPlan, deleteLessonPlan,
+    listenToOccurrences, saveOccurrence, deleteOccurrence,
     listenToStudents,
-    listenToOccurrences,
-    getLessonPlans,
-    saveLessonPlan,
-    deleteLessonPlan,
+    listenToGradebook, saveGradebook,
     getAllPEIs,
-    savePEIDocument,
-    deletePEIDocument,
-    saveOccurrence,
-    deleteOccurrence,
-    saveClassMaterial,
-    getClassMaterials,
-    deleteClassMaterial,
     logAttendance,
-    uploadClassMaterial,
-    saveGradebook,
-    listenToGradebook
+    savePEIDocument
 } from '../services/firebaseService';
-import { ExamRequest, ExamStatus, Student, StudentOccurrence, LessonPlan, PEIDocument, ClassMaterial, AttendanceLog, UserRole, GradebookEntry, AV1Activity } from '../types';
+import { 
+    ExamRequest, ExamStatus, ClassMaterial, LessonPlan, 
+    StudentOccurrence, Student, GradebookEntry, PEIDocument, AttendanceLog,
+    AV1Activity
+} from '../types';
 import { Button } from '../components/Button';
 import { 
-  Plus, List, PlusCircle, X, Trash2, FileUp, AlertCircle, 
-  BookOpen, Save, ArrowLeft, Heart, FileText, Eye, Clock, UploadCloud, ChevronRight,
-  LayoutTemplate, Download, Users, Edit3, MessageSquare, Sparkles, BookMarked,
-  Layers, MapPin, Search, Bot, Smile, AlertTriangle, Edit, Folder, BookOpenCheck,
-  FileCheck, ShieldAlert, GraduationCap, Calculator, Calendar
+    Printer, Plus, Eye, UploadCloud, X, 
+    CheckCircle, Clock, Hourglass, ClipboardCheck, FileText,
+    List, PlusCircle, Folder, BookOpen, Calculator, Heart, AlertCircle, CalendarClock,
+    Trash2, Save, Search, UserCheck, UserX, Download, BrainCircuit, Layout, Sparkles, ChevronRight,
+    Edit3, Info, FolderPlus, Smile, AlertTriangle, Calendar as CalendarIcon, FileDown, FileUp, Upload, MousePointerClick, Users, ShieldAlert, FileCheck,
+    BookMarked, History, Target, Cpu, CheckSquare, Layers, Rocket, Lightbulb, Box, Check, Briefcase, Camera
 } from 'lucide-react';
-import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES } from '../constants';
+import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
-const TEMPLATES = [
-    { title: 'Cabeçalho de Atividades', url: 'https://i.ibb.co/2Y0zfZ0W/3.png' },
-    { title: 'Cabeçalho Kronos', url: 'https://i.ibb.co/zTGFssJs/4.png' },
-    { title: 'Cabeçalho de Avaliação', url: 'https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png' },
-];
+const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
+    const statusInfo = {
+        [ExamStatus.PENDING]: { text: 'Pendente', icon: Hourglass, color: 'yellow' },
+        [ExamStatus.IN_PROGRESS]: { text: 'Em Produção', icon: Printer, color: 'blue' },
+        [ExamStatus.READY]: { text: 'Pronto p/ Retirada', icon: ClipboardCheck, color: 'purple' },
+        [ExamStatus.COMPLETED]: { text: 'Entregue', icon: CheckCircle, color: 'green' },
+    }[status] || { text: status, icon: Clock, color: 'gray' };
+
+    const Icon = statusInfo.icon;
+
+    return (
+        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border bg-${statusInfo.color}-500/10 text-${statusInfo.color}-500 border-${statusInfo.color}-500/20`}>
+            <Icon size={14} />
+            {statusInfo.text}
+        </span>
+    );
+};
 
 export const TeacherDashboard: React.FC = () => {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'requests' | 'create' | 'plans' | 'occurrences' | 'pei' | 'materials' | 'attendance' | 'grades'>('requests');
-  const [activePlanTab, setActivePlanTab] = useState<'daily' | 'bimester' | 'inova'>('daily');
-  
-  const [exams, setExams] = useState<ExamRequest[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [teacherOccurrences, setTeacherOccurrences] = useState<StudentOccurrence[]>([]);
-  const [lessonPlans, setLessonPlans] = useState<LessonPlan[]>([]);
-  const [teacherMaterials, setTeacherMaterials] = useState<ClassMaterial[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  
-  // Create Exam State
-  const [examTitle, setExamTitle] = useState('');
-  const [examGrade, setExamGrade] = useState('');
-  const [printQty, setPrintQty] = useState(30);
-  const [printInstructions, setPrintInstructions] = useState('');
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<'exams' | 'send_to_print' | 'materials' | 'planning' | 'gradebook' | 'pei' | 'occurrences' | 'attendance'>('exams');
+    const [isLoading, setIsLoading] = useState(false);
+    
+    // Planning Sub-tab state
+    const [planningTab, setPlanningTab] = useState<'diario' | 'bimestral' | 'inova'>('inova');
+    const [showPlanningModal, setShowPlanningModal] = useState(false);
 
-  // Material State
-  const [materialTitle, setMaterialTitle] = useState('');
-  const [materialClass, setMaterialClass] = useState('');
-  const [materialSubject, setMaterialSubject] = useState('');
-  const [materialFile, setMaterialFile] = useState<File | null>(null);
+    // Data Collections
+    const [exams, setExams] = useState<ExamRequest[]>([]);
+    const [materials, setMaterials] = useState<ClassMaterial[]>([]);
+    const [plans, setPlans] = useState<LessonPlan[]>([]);
+    const [occurrences, setOccurrences] = useState<StudentOccurrence[]>([]);
+    const [students, setStudents] = useState<Student[]>([]);
+    const [gradebookData, setGradebookData] = useState<GradebookEntry | null>(null);
+    const [peis, setPeis] = useState<PEIDocument[]>([]);
 
-  // Attendance State
-  const [attendanceClass, setAttendanceClass] = useState('');
-  const [attendanceRecords, setAttendanceRecords] = useState<Record<string, boolean>>({});
+    // Shared UI State
+    const [selectedClass, setSelectedClass] = useState('');
+    const [selectedSubject, setSelectedSubject] = useState(''); 
+    const [selectedBimester, setSelectedBimester] = useState('1º BIMESTRE');
 
-  // Occurrence State
-  const [showOccurrenceModal, setShowOccurrenceModal] = useState(false);
-  const [occurrenceClass, setOccurrenceClass] = useState('');
-  const [occurrenceForm, setOccurrenceForm] = useState({ studentId: '', category: 'indisciplina', description: '' });
+    // Attendance State
+    const [attendanceRecords, setAttendanceRecords] = useState<Record<string, boolean>>({});
 
-  // PEI State
-  const [peiDocuments, setPeiDocuments] = useState<PEIDocument[]>([]);
-  const [showPeiModal, setShowPeiModal] = useState(false);
-  const [editingPei, setEditingPei] = useState<Partial<PEIDocument> | null>(null);
+    // Forms State
+    const [examForm, setExamForm] = useState({ title: '', quantity: 25, gradeLevel: '', instructions: '' });
+    const [examFiles, setExamFiles] = useState<File[]>([]);
+    
+    // Planning Form State
+    const [planForm, setPlanForm] = useState<Partial<LessonPlan>>({
+        type: 'inova',
+        className: '',
+        subject: '',
+        bimester: '1º BIMESTRE',
+        date: new Date().toISOString().split('T')[0],
+        topic: '',
+        content: '',
+        // Bimestral fields
+        justification: '',
+        contents: '',
+        cognitiveSkills: '',
+        socioEmotionalSkills: '',
+        didacticSituations: '',
+        activitiesPrevious: '',
+        activitiesAutodidactic: '',
+        activitiesCooperative: '',
+        activitiesComplementary: '',
+        educationalPractices: '',
+        educationalSpaces: '',
+        didacticResources: '',
+        evaluationStrategies: '',
+        referenceSources: '',
+        // Inova fields
+        inovaTheme: '',
+        guidingQuestion: '',
+        subprojectGoal: '',
+        expectedResults: [],
+        finalProductType: '',
+        finalProductDescription: '',
+        projectSteps: { sensitize: false, investigate: false, create: false, test: false, present: false, register: false },
+        schedule: '',
+        resourcesNeeded: '',
+        aiTools: '',
+        aiPurpose: [],
+        aiCare: '',
+        evidence: []
+    });
 
-  // Gradebook State
-  const [gradeClass, setGradeClass] = useState('');
-  const [gradeSubject, setGradeSubject] = useState('');
-  const [gradeBimester, setGradeBimester] = useState('1º BIMESTRE');
-  const [gradebookData, setGradebookData] = useState<GradebookEntry | null>(null);
-  const [showActivityModal, setShowActivityModal] = useState(false);
-  const [newActivity, setNewActivity] = useState<AV1Activity>({ id: '', name: '', date: '', deliveryDate: '', maxScore: 1.0 });
+    // Material Form State
+    const [materialForm, setMaterialForm] = useState({ title: '', className: '', subject: '' });
+    const [materialFile, setMaterialFile] = useState<File | null>(null);
 
-  // Lesson Plan State
-  const [showPlanModal, setShowPlanModal] = useState(false);
-  const [newPlan, setNewPlan] = useState<Partial<LessonPlan>>({
-      className: '', subject: '', topic: '', content: '', type: 'daily',
-      bimester: '1º BIMESTRE', justification: '', contents: '', cognitiveSkills: '',
-      socioEmotionalSkills: '', didacticSituations: '', activitiesPrevious: '',
-      activitiesAutodidactic: '', activitiesCooperative: '', activitiesComplementary: '',
-      educationalPractices: '', educationalSpaces: '', didacticResources: '',
-      evaluationStrategies: '', referenceSources: '',
-      inovaTheme: '', guidingQuestion: '', subprojectGoal: '', expectedResults: [],
-      finalProductType: '', finalProductDescription: '', 
-      projectSteps: { sensitize: false, investigate: false, create: false, test: false, present: false, register: false },
-      schedule: '', resourcesNeeded: '', aiTools: '', aiPurpose: [], aiCare: ''
-  });
+    // Occurrences Form State
+    const [showOccModal, setShowOccModal] = useState(false);
+    const [isEditingOcc, setIsEditingOcc] = useState(false);
+    const [occForm, setOccForm] = useState<Partial<StudentOccurrence>>({
+        studentId: '',
+        category: 'indisciplina',
+        severity: 'low',
+        description: '',
+        date: new Date().toISOString().split('T')[0]
+    });
+    const [occSelectedClass, setOccSelectedClass] = useState('');
 
-  useEffect(() => { fetchData(); }, [user, activeTab]);
+    // PEI Modal State
+    const [showPeiForm, setShowPeiForm] = useState(false);
+    const [currentPeiStudent, setCurrentPeiStudent] = useState<Student | null>(null);
+    const [peiData, setPeiData] = useState<Partial<PEIDocument>>({
+        essentialCompetencies: '',
+        selectedContents: '',
+        didacticResources: '',
+        evaluation: '',
+        period: '1º BIMESTRE'
+    });
 
-  useEffect(() => {
-      // PREVENÇÃO DE ERRO: Só ativa listeners se houver usuário autenticado
-      if (!user) return;
+    // Gradebook AV1 Config
+    const [showAV1Modal, setShowAV1Modal] = useState(false);
+    const [newAV1, setNewAV1] = useState<Partial<AV1Activity>>({ activityName: '', applicationDate: '', deliveryDate: '', maxScore: 2 });
 
-      const unsubS = listenToStudents(
-          setStudents, 
-          (err) => console.warn('Students listener restricted:', err.code)
-      );
-      
-      const unsubO = listenToOccurrences((all) => {
-          if (user?.name) setTeacherOccurrences(all.filter(o => o.reportedBy === user.name));
-      }, (err) => console.warn('Occurrences listener restricted:', err.code));
-      
-      return () => { unsubS(); unsubO(); };
-  }, [user]);
+    // Initial Load
+    useEffect(() => {
+        if (!user) return;
+        listenToStudents(setStudents);
+    }, [user]);
 
-  useEffect(() => {
-      if (activeTab === 'create' && examGrade) {
-          const count = students.filter(s => s.className === examGrade).length;
-          if (count > 0) setPrintQty(count);
-      }
-  }, [examGrade, students, activeTab]);
+    // Lógica para ajustar a quantidade de cópias de acordo com os alunos matriculados
+    useEffect(() => {
+        if (examForm.gradeLevel && students.length > 0) {
+            const count = students.filter(s => s.className === examForm.gradeLevel).length;
+            if (count > 0) {
+                setExamForm(prev => ({ ...prev, quantity: count }));
+            }
+        }
+    }, [examForm.gradeLevel, students]);
 
-  // Gradebook Listener
-  useEffect(() => {
-      if (activeTab === 'grades' && gradeClass && gradeSubject && gradeBimester) {
-          const unsub = listenToGradebook(gradeClass, gradeSubject, gradeBimester, (data) => {
-              if (data) {
-                  setGradebookData(data);
-              } else {
-                  // Init empty if not exists
-                  setGradebookData({
-                      id: '',
-                      className: gradeClass,
-                      subject: gradeSubject,
-                      bimester: gradeBimester,
-                      av1Config: [],
-                      grades: {},
-                      updatedAt: Date.now()
-                  });
-              }
-          });
-          return () => unsub();
-      }
-  }, [activeTab, gradeClass, gradeSubject, gradeBimester]);
+    useEffect(() => {
+        if (!user) return;
+        const loadData = async () => {
+            if (activeTab === 'exams') setExams(await getExams(user.id));
+            if (activeTab === 'materials') setMaterials(await getClassMaterials(user.id));
+            if (activeTab === 'planning') setPlans(await getLessonPlans(user.id));
+            if (activeTab === 'occurrences') {
+                listenToOccurrences((data) => setOccurrences(data.filter(o => o.reportedBy === user.name)));
+            }
+            if (activeTab === 'pei') {
+                const all = await getAllPEIs();
+                setPeis(all);
+            }
+        };
+        loadData();
+    }, [user, activeTab, students]);
 
-  const getTeacherClasses = () => {
-      if (!user) return CLASSES;
-      if (user.classes && user.classes.length > 0) return user.classes;
-      
-      const name = user.name ? user.name.toUpperCase() : '';
-      if (name.includes('ALICIA')) return ['2º ANO EFAI'];
-      if (name.includes('LEILA')) return ['1º ANO EFAI'];
-      if (name.includes('JULIANA')) return ['3º ANO EFAI'];
+    useEffect(() => {
+        if (activeTab === 'gradebook' && selectedClass && selectedSubject) {
+            return listenToGradebook(selectedClass, selectedSubject, selectedBimester, setGradebookData);
+        }
+    }, [activeTab, selectedClass, selectedSubject, selectedBimester]);
 
-      return CLASSES;
-  };
+    const myClasses = useMemo(() => {
+        if (user?.email === 'ruan.wss@gmail.com') return CLASSES; 
+        return user?.classes && user.classes.length > 0 ? user.classes : CLASSES;
+    }, [user]);
 
-  // Efeito para selecionar automaticamente a turma se houver apenas uma
-  useEffect(() => {
-      if (activeTab === 'attendance' || activeTab === 'grades') {
-          const classes = getTeacherClasses();
-          if (classes.length === 1) {
-              if (activeTab === 'attendance') setAttendanceClass(classes[0]);
-              if (activeTab === 'grades') {
-                  setGradeClass(classes[0]);
-                  // Tenta auto-selecionar disciplina se disponível
-                  if (user?.subject && user.subject !== 'POLIVALENTE') {
-                      setGradeSubject(user.subject);
-                  }
-              }
-          }
-      }
-  }, [activeTab, user]);
+    const totalAV1Max = useMemo(() => {
+        if (!gradebookData || !gradebookData.av1Config) return 0;
+        return gradebookData.av1Config.reduce((acc, curr) => acc + (curr.maxScore || 0), 0);
+    }, [gradebookData]);
 
-  const fetchData = async () => {
-    if (!user) return;
-    setIsLoading(true);
-    try {
-        if (activeTab === 'requests') {
-            const allExams = await getExams(user.id);
-            setExams(allExams.sort((a,b) => b.createdAt - a.createdAt));
-        } else if (activeTab === 'materials') {
-            let allMats: ClassMaterial[] = [];
-            try {
-                // Tenta buscar TODOS os materiais para fazer o filtro local (fix para IDs antigos)
-                allMats = await getClassMaterials(); 
-            } catch (err: any) {
-                // FALLBACK: Se der erro de permissão (ex: regras impedem ler tudo), busca apenas os do professor
-                if (err.code === 'permission-denied' || err.code === 'mismatched-header') {
-                    console.warn("Acesso restrito a todos os materiais. Buscando apenas do usuário.");
-                    try {
-                        allMats = await getClassMaterials(user.id);
-                    } catch (e) { console.error("Erro no fallback de materiais:", e); }
-                } else {
-                    console.error("Erro ao buscar materiais:", err);
+    const monitoredStudents = useMemo(() => {
+        const teacherClasses = new Set(user?.classes || []);
+        return students.filter(s => s.isAEE && (teacherClasses.has(s.className) || user?.email === 'ruan.wss@gmail.com'));
+    }, [students, user]);
+
+    // --- HANDLERS ---
+
+    const handleSavePlan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        try {
+            const planToSave: LessonPlan = {
+                id: '',
+                teacherId: user!.id,
+                teacherName: user!.name,
+                createdAt: Date.now(),
+                type: planningTab,
+                className: planForm.className || '',
+                subject: planForm.subject || user!.subject || 'Geral',
+                ...planForm
+            } as LessonPlan;
+            await saveLessonPlan(planToSave);
+            alert("Planejamento salvo com sucesso!");
+            setShowPlanningModal(false);
+            setPlans(await getLessonPlans(user!.id));
+        } catch (e) {
+            alert("Erro ao salvar planejamento.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleExamSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (examFiles.length === 0) return alert("Por favor, anexe ao menos um arquivo.");
+        setIsLoading(true);
+        try {
+            const fileUrls: string[] = [];
+            const fileNames: string[] = [];
+            for (const f of examFiles) {
+                const url = await uploadExamFile(f, user?.name || 'teacher');
+                fileUrls.push(url);
+                fileNames.push(f.name);
+            }
+            await saveExam({
+                id: '', teacherId: user!.id, teacherName: user!.name, subject: user!.subject || 'Geral',
+                title: examForm.title, quantity: examForm.quantity, gradeLevel: examForm.gradeLevel,
+                instructions: examForm.instructions, fileNames, fileUrls, status: ExamStatus.PENDING,
+                createdAt: Date.now(), dueDate: new Date(Date.now() + 7*24*60*1000).toISOString()
+            });
+            alert("Solicitação enviada para a gráfica!");
+            setExamForm({ title: '', quantity: 25, gradeLevel: '', instructions: '' });
+            setExamFiles([]);
+            setActiveTab('exams');
+            setExams(await getExams(user!.id));
+        } catch (e) { alert("Erro ao enviar."); } finally { setIsLoading(false); }
+    };
+
+    const handleMaterialSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!materialFile) return alert("Anexe um arquivo.");
+        setIsLoading(true);
+        try {
+            const url = await uploadClassMaterial(materialFile, materialForm.className);
+            await saveClassMaterial({
+                id: '',
+                teacherId: user!.id,
+                teacherName: user!.name,
+                className: materialForm.className,
+                title: materialForm.title,
+                subject: materialForm.subject,
+                fileUrl: url,
+                fileName: materialFile.name,
+                fileType: materialFile.type,
+                createdAt: Date.now()
+            });
+            alert("Material publicado!");
+            setMaterialForm({ title: '', className: '', subject: '' });
+            setMaterialFile(null);
+            setMaterials(await getClassMaterials(user!.id));
+        } catch (e) { alert("Erro ao publicar."); } finally { setIsLoading(false); }
+    };
+
+    const handleGradeUpdate = async (studentId: string, activityId: string, val: number, isAV1 = false) => {
+        if (!gradebookData) return;
+        const updatedGrades = { ...gradebookData.grades };
+        if (!updatedGrades[studentId]) updatedGrades[studentId] = { av1: {} };
+        
+        if (isAV1) updatedGrades[studentId].av1[activityId] = val;
+        else (updatedGrades[studentId] as any)[activityId] = val;
+
+        await saveGradebook({ ...gradebookData, grades: updatedGrades });
+    };
+
+    const handleAddAV1 = async () => {
+        if (!gradebookData || !newAV1.activityName) return;
+        
+        if ((gradebookData.av1Config || []).length >= 7) {
+            return alert("Limite de 7 colunas para AV1 atingido.");
+        }
+
+        const score = Number(newAV1.maxScore);
+        if (totalAV1Max + score > 10.1) {
+            return alert("A soma das atividades AV1 não pode ultrapassar 10.0.");
+        }
+
+        const activity: AV1Activity = { 
+            id: Math.random().toString(36).substr(2, 9), 
+            activityName: newAV1.activityName,
+            applicationDate: newAV1.applicationDate || 'Não informada',
+            deliveryDate: newAV1.deliveryDate || 'Não informada',
+            maxScore: score
+        };
+        
+        const updatedConfig = [...(gradebookData.av1Config || []), activity];
+        await saveGradebook({ ...gradebookData, av1Config: updatedConfig });
+        setShowAV1Modal(false);
+        setNewAV1({ activityName: '', maxScore: 2, applicationDate: '', deliveryDate: '' });
+    };
+
+    const handleSavePei = async () => {
+        if (!currentPeiStudent || !user) return;
+        setIsLoading(true);
+        try {
+            await savePEIDocument({
+                id: '',
+                studentId: currentPeiStudent.id,
+                studentName: currentPeiStudent.name,
+                teacherId: user.id,
+                teacherName: user.name,
+                subject: user.subject || 'Geral',
+                period: peiData.period || '1º BIMESTRE',
+                essentialCompetencies: peiData.essentialCompetencies || '',
+                selectedContents: peiData.selectedContents || '',
+                didacticResources: peiData.didacticResources || '',
+                evaluation: peiData.evaluation || '',
+                updatedAt: Date.now()
+            });
+            alert("PEI salvo com sucesso!");
+            setShowPeiForm(false);
+            setPeiData({ essentialCompetencies: '', selectedContents: '', didacticResources: '', evaluation: '', period: '1º BIMESTRE' });
+        } catch (e) {
+            alert("Erro ao salvar PEI.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleAttendanceSubmit = async () => {
+        if (!selectedClass) return alert("Selecione uma turma.");
+        setIsLoading(true);
+        try {
+            const today = new Date();
+            const dateString = today.toISOString().split('T')[0];
+            const classStudents = students.filter(s => s.className === selectedClass);
+            
+            for (const student of classStudents) {
+                if (attendanceRecords[student.id] !== undefined) {
+                    await logAttendance({
+                        id: '',
+                        studentId: student.id,
+                        studentName: student.name,
+                        className: student.className,
+                        timestamp: today.getTime(),
+                        dateString,
+                        type: attendanceRecords[student.id] ? 'entry' : 'exit'
+                    });
                 }
             }
-            
-            const myMats = allMats.filter(m => {
-                const isIdMatch = m.teacherId === user.id;
-                
-                // Normalização para comparação flexível de nomes
-                const dbName = (m.teacherName || '').trim().toUpperCase()
-                    .replace(/^PROF[\.]?\s+|^PROFA[\.]?\s+|^PROFESSOR\s+|^PROFESSORA\s+/g, '');
-                const sessionName = (user.name || '').trim().toUpperCase()
-                    .replace(/^PROF[\.]?\s+|^PROFA[\.]?\s+|^PROFESSOR\s+|^PROFESSORA\s+/g, '');
-                
-                const isNameMatch = dbName && sessionName && (
-                    dbName === sessionName || 
-                    (sessionName.length > 3 && dbName.includes(sessionName)) ||
-                    (dbName.length > 3 && sessionName.includes(dbName))
-                );
-
-                return isIdMatch || isNameMatch;
-            });
-            setTeacherMaterials(myMats.sort((a,b) => b.createdAt - a.createdAt));
-        } else if (activeTab === 'plans') {
-            const plans = await getLessonPlans(user.id);
-            setLessonPlans(plans.sort((a,b) => b.createdAt - a.createdAt));
-        } else if (activeTab === 'pei') {
-            const peis = await getAllPEIs();
-            setPeiDocuments(peis);
+            alert("Chamada registrada com sucesso!");
+            setAttendanceRecords({});
+        } catch (e) {
+            alert("Erro ao salvar frequência.");
+        } finally {
+            setIsLoading(false);
         }
-    } catch (e) { console.error(e); }
-    setIsLoading(false);
-  };
+    };
 
-  const isEligibleForAttendance = () => {
-      if (!user) return false;
-      const hasEFAI = user.educationLevels?.some(level => ['EFAI', 'Ed. Infantil'].includes(level));
-      
-      const specificNames = ['ALICIA', 'LEILA', 'JULIANA'];
-      const nameMatch = user.name ? specificNames.some(n => user.name.toUpperCase().includes(n)) : false;
+    // --- DOWNLOAD HEADERS ---
+    const handleDownloadHeader = (url: string, name: string) => {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
-      // Permite acesso se o subject contiver "POLIVALENTE", se houver turmas atribuídas ou se for o admin ou se for uma das professoras especificas
-      return (user.subject && user.subject.includes('POLIVALENTE')) || 
-             (user.classes && user.classes.length > 0) || 
-             hasEFAI ||
-             nameMatch ||
-             user.email === 'ruan.wss@gmail.com';
-  };
+    // --- OCCURRENCES LOGIC ---
+    const openOccModal = (occ?: StudentOccurrence) => {
+        if (occ) {
+            setIsEditingOcc(true);
+            setOccForm(occ);
+            const student = students.find(s => s.id === occ.studentId);
+            setOccSelectedClass(student?.className || '');
+        } else {
+            setIsEditingOcc(false);
+            setOccForm({
+                studentId: '',
+                category: 'indisciplina',
+                severity: 'low',
+                description: '',
+                date: new Date().toISOString().split('T')[0]
+            });
+            setOccSelectedClass('');
+        }
+        setShowOccModal(true);
+    };
 
-  const getSubjectsForClass = (cls: string) => {
-      if (!cls) return [];
-      if (cls.includes('SÉRIE') || cls.includes('EM')) return EM_SUBJECTS;
-      if (cls.includes('EFAF')) return EFAF_SUBJECTS;
-      return ["GERAL", "LÍNGUA PORTUGUESA", "MATEMÁTICA", "HISTÓRIA", "GEOGRAFIA", "CIÊNCIAS", "ARTE", "INGLÊS", "EDUCAÇÃO FÍSICA", "ENSINO RELIGIOSO", "PROJETOS", "AVALIAÇÕES"];
-  };
-
-  const finalizeExam = async () => {
-      if (!examTitle || !examGrade || uploadedFiles.length === 0) return alert("Preencha título, turma e anexe arquivos.");
-      setIsSaving(true);
-      try {
-          const fileUrls: string[] = [];
-          const fileNames: string[] = [];
-          for (const file of uploadedFiles) {
-              const url = await uploadExamFile(file, user?.name || 'Professor');
-              fileUrls.push(url);
-              fileNames.push(file.name);
-          }
-          const request: ExamRequest = {
-              id: '',
-              teacherId: user?.id || '',
-              teacherName: user?.name || '',
-              subject: user?.subject || 'Geral',
-              title: examTitle,
-              quantity: printQty,
-              gradeLevel: examGrade,
-              instructions: printInstructions || 'Sem instruções',
-              fileNames,
-              fileUrls,
-              status: ExamStatus.PENDING,
-              createdAt: Date.now(),
-              dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-          };
-          await saveExam(request);
-          alert("Solicitação enviada!");
-          setExamTitle('');
-          setPrintInstructions('');
-          setUploadedFiles([]);
-          setActiveTab('requests');
-      } catch (e) {
-          alert("Erro ao enviar.");
-      } finally {
-          setIsSaving(false);
-      }
-  };
-
-  const handleSaveMaterial = async () => {
-      if (!materialTitle || !materialClass || !materialFile) return alert("Preencha todos os campos.");
-      setIsSaving(true);
-      try {
-          const url = await uploadClassMaterial(materialFile, materialClass);
-          const finalSubject = (materialSubject || user?.subject || 'GERAL').trim().toUpperCase();
-          const material: ClassMaterial = {
-              id: '',
-              teacherId: user?.id || '',
-              teacherName: user?.name || '',
-              className: materialClass,
-              title: materialTitle,
-              subject: finalSubject,
-              fileUrl: url,
-              fileName: materialFile.name,
-              fileType: materialFile.type,
-              createdAt: Date.now()
-          };
-          await saveClassMaterial(material);
-          alert("Material compartilhado com sucesso!");
-          setMaterialTitle('');
-          setMaterialFile(null);
-          fetchData();
-      } catch (e: any) {
-          console.error(e);
-          alert(`Erro ao salvar material: ${e.message}`);
-      } finally {
-          setIsSaving(false);
-      }
-  };
-
-  const handleSavePEI = async () => {
-      if (!editingPei?.studentId || !editingPei?.essentialCompetencies) return alert("Preencha os campos obrigatórios");
-      setIsSaving(true);
-      try {
-          const pei: PEIDocument = {
-              id: editingPei.id || '',
-              studentId: editingPei.studentId,
-              studentName: editingPei.studentName || '',
-              teacherId: user?.id || '',
-              teacherName: user?.name || '',
-              subject: editingPei.subject || user?.subject || 'Geral',
-              period: editingPei.period || '1º Bimestre',
-              essentialCompetencies: editingPei.essentialCompetencies,
-              selectedContents: editingPei.selectedContents || '',
-              didacticResources: editingPei.didacticResources || '',
-              evaluation: editingPei.evaluation || '',
-              updatedAt: Date.now()
-          };
-          await savePEIDocument(pei);
-          alert("PEI Salvo!");
-          setShowPeiModal(false);
-          setEditingPei(null);
-          fetchData();
-      } catch(e) {
-          alert("Erro ao salvar PEI");
-      } finally {
-          setIsSaving(false);
-      }
-  };
-
-  const handleDeletePEI = async (id: string) => {
-      if(confirm("Excluir este documento PEI?")) {
-          await deletePEIDocument(id);
-          fetchData();
-      }
-  };
-
-  const openPEIModal = (student?: Student, existingPei?: PEIDocument) => {
-      if (existingPei) {
-          setEditingPei(existingPei);
-      } else if (student) {
-          setEditingPei({
-              studentId: student.id,
-              studentName: student.name,
-              subject: user?.subject || '',
-              period: '1º Bimestre'
-          });
-      }
-      setShowPeiModal(true);
-  };
-
-  const filterAEEStudents = (student: Student) => {
-      if (!student.isAEE) return false;
-      if (!user) return false;
-      if (user.roles?.includes(UserRole.AEE) || user.email === 'ruan.wss@gmail.com') return true;
-      if (user.classes && user.classes.length > 0) return user.classes.includes(student.className);
-      if (user.educationLevels && user.educationLevels.length > 0) {
-          const levels = user.educationLevels;
-          const sClass = student.className;
-          if (levels.includes('Ed. Infantil') && INFANTIL_CLASSES.includes(sClass)) return true;
-          if (levels.includes('EFAI') && EFAI_CLASSES.includes(sClass)) return true;
-          if (levels.includes('EFAF') && ['6º', '7º', '8º', '9º'].some(prefix => sClass.includes(prefix))) return true;
-          if (levels.includes('Médio') && (sClass.includes('SÉRIE') || sClass.includes('EM'))) return true;
-          return false;
-      }
-      return true; 
-  };
-
-  const handleSaveOccurrence = async () => {
-      if (!occurrenceForm.studentId || !occurrenceForm.description) return alert("Selecione o aluno e descreva a ocorrência.");
-      setIsSaving(true);
-      try {
-          const student = students.find(s => s.id === occurrenceForm.studentId);
-          const occurrence: StudentOccurrence = {
-              id: '',
-              studentId: occurrenceForm.studentId,
-              studentName: student?.name || 'Aluno',
-              studentClass: student?.className || occurrenceClass,
-              category: occurrenceForm.category as any,
-              severity: 'low',
-              description: occurrenceForm.description,
-              date: new Date().toISOString().split('T')[0],
-              timestamp: Date.now(),
-              reportedBy: user?.name || 'Professor'
-          };
-          await saveOccurrence(occurrence);
-          alert("Ocorrência registrada!");
-          setShowOccurrenceModal(false);
-          setOccurrenceForm({ studentId: '', category: 'indisciplina', description: '' });
-      } catch (e) {
-          alert("Erro ao salvar.");
-      } finally {
-          setIsSaving(false);
-      }
-  };
-
-  const handleSaveAttendance = async () => {
-      if (!attendanceClass) return;
-      setIsSaving(true);
-      try {
-          const today = new Date();
-          const dateString = today.toISOString().split('T')[0];
-          const classStudents = students.filter(s => s.className === attendanceClass);
-          for (const student of classStudents) {
-              if (attendanceRecords[student.id] !== undefined) {
-                  const log: AttendanceLog = {
-                      id: '',
-                      studentId: student.id,
-                      studentName: student.name,
-                      className: student.className,
-                      timestamp: today.getTime(),
-                      dateString,
-                      type: attendanceRecords[student.id] ? 'entry' : 'exit'
-                  };
-                  await logAttendance(log);
-              }
-          }
-          alert("Frequência registrada!");
-          setAttendanceClass('');
-          setAttendanceRecords({});
-      } catch (e) {
-          alert("Erro ao registrar frequência.");
-      } finally {
-          setIsSaving(false);
-      }
-  };
-
-  const handleSavePlan = async () => {
-      if (!newPlan.className) return alert("Selecione a turma.");
-      if (newPlan.type === 'daily' && !newPlan.topic) return alert("Preencha o tema.");
-      if (newPlan.type === 'inova' && !newPlan.inovaTheme) return alert("Preencha o tema do subprojeto.");
-      setIsSaving(true);
-      try {
-          const planData = {
-              ...newPlan,
-              id: '',
-              teacherId: user?.id || '',
-              teacherName: user?.name || '',
-              subject: newPlan.subject || user?.subject || 'Geral',
-              createdAt: Date.now(),
-              type: newPlan.type || activePlanTab,
-              topic: newPlan.type === 'inova' ? newPlan.inovaTheme : newPlan.topic
-          };
-          await saveLessonPlan(planData as LessonPlan);
-          alert("Planejamento salvo!");
-          setShowPlanModal(false);
-          setNewPlan({ 
-              className: '', subject: '', topic: '', content: '', type: activePlanTab,
-              bimester: '1º BIMESTRE', justification: '', contents: '', cognitiveSkills: '',
-              socioEmotionalSkills: '', didacticSituations: '', activitiesPrevious: '',
-              activitiesAutodidactic: '', activitiesCooperative: '', activitiesComplementary: '',
-              educationalPractices: '', educationalSpaces: '', didacticResources: '',
-              evaluationStrategies: '', referenceSources: '',
-              inovaTheme: '', guidingQuestion: '', subprojectGoal: '', expectedResults: [],
-              finalProductType: '', finalProductDescription: '', 
-              projectSteps: { sensitize: false, investigate: false, create: false, test: false, present: false, register: false },
-              schedule: '', resourcesNeeded: '', aiTools: '', aiPurpose: [], aiCare: ''
-          });
-          fetchData();
-      } catch(e) { alert("Erro ao salvar."); }
-      finally { setIsSaving(false); }
-  };
-
-  const handleDeletePlan = async (id: string) => {
-      if(confirm("Excluir planejamento?")) {
-          await deleteLessonPlan(id);
-          fetchData();
-      }
-  };
-
-  // --- GRADEBOOK LOGIC ---
-
-  const handleAddAV1Activity = async () => {
-      if (!gradebookData) return;
-      if (!newActivity.name || !newActivity.date || newActivity.maxScore <= 0) return alert("Preencha todos os campos da atividade.");
-      
-      const currentAV1Sum = gradebookData.av1Config.reduce((acc, curr) => acc + curr.maxScore, 0);
-      if (currentAV1Sum + newActivity.maxScore > 10.0) {
-          return alert(`A soma das atividades da AV1 não pode ultrapassar 10.0 pontos. Soma atual: ${currentAV1Sum}.`);
-      }
-      if (gradebookData.av1Config.length >= 7) {
-          return alert("Máximo de 7 atividades para AV1 atingido.");
-      }
-
-      const activity: AV1Activity = { ...newActivity, id: Date.now().toString() };
-      const updatedConfig = [...gradebookData.av1Config, activity];
-      
-      const updatedData = { ...gradebookData, av1Config: updatedConfig };
-      setGradebookData(updatedData);
-      await saveGradebook(updatedData);
-      
-      setShowActivityModal(false);
-      setNewActivity({ id: '', name: '', date: '', deliveryDate: '', maxScore: 1.0 });
-  };
-
-  const handleRemoveAV1Activity = async (activityId: string) => {
-      if (!gradebookData || !confirm("Remover esta atividade e todas as notas associadas?")) return;
-      const updatedConfig = gradebookData.av1Config.filter(a => a.id !== activityId);
-      
-      // Clean up grades for this activity
-      const updatedGrades = { ...gradebookData.grades };
-      Object.keys(updatedGrades).forEach(studentId => {
-          if (updatedGrades[studentId]?.av1) {
-              delete updatedGrades[studentId].av1[activityId];
-          }
-      });
-
-      const updatedData = { ...gradebookData, av1Config: updatedConfig, grades: updatedGrades };
-      setGradebookData(updatedData);
-      await saveGradebook(updatedData);
-  };
-
-  const handleUpdateGrade = async (studentId: string, type: 'av1', activityId: string, value: number) => {
-      if (!gradebookData) return;
-      
-      const updatedGrades = { ...gradebookData.grades };
-      if (!updatedGrades[studentId]) updatedGrades[studentId] = { av1: {} };
-      if (!updatedGrades[studentId].av1) updatedGrades[studentId].av1 = {};
-
-      updatedGrades[studentId].av1[activityId] = value;
-
-      const updatedData = { ...gradebookData, grades: updatedGrades };
-      setGradebookData(updatedData); // Optimistic update
-      // Debounce could be added here for performance
-      await saveGradebook(updatedData);
-  };
-
-  // Added function to allow teachers to update AV3
-  const handleUpdateExamGrade = async (studentId: string, type: 'av2' | 'av3', value: number) => {
-      if (!gradebookData) return;
-      
-      const updatedGrades = { ...gradebookData.grades };
-      if (!updatedGrades[studentId]) updatedGrades[studentId] = { av1: {} };
-      
-      updatedGrades[studentId][type] = value;
-
-      const updatedData = { ...gradebookData, grades: updatedGrades };
-      setGradebookData(updatedData);
-      await saveGradebook(updatedData);
-  };
-
-  const calculateFinalGrade = (studentId: string) => {
-      if (!gradebookData) return 0;
-      const studentGrades = gradebookData.grades[studentId];
-      if (!studentGrades) return 0;
-
-      const av1Total = Object.values(studentGrades.av1 || {}).reduce((a: number, b: number) => a + b, 0);
-      const av2 = studentGrades.av2 || 0;
-      const av3 = studentGrades.av3 || 0;
-
-      return ((av1Total + av2 + av3) / 3).toFixed(1);
-  };
-
-  const SidebarButton = ({ tab, label, icon: IconComponent }: { tab: any, label: string, icon: React.ElementType }) => (
-    <button 
-        onClick={() => setActiveTab(tab)} 
-        className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-2 text-xs font-black uppercase tracking-widest transition-all ${
-            activeTab === tab ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'
-        }`}
-    >
-        <IconComponent size={18} /> 
-        <span>{label}</span>
-    </button>
-  );
-
-  const InovaCheckbox: React.FC<{ label: string, checked: boolean, onChange: (v: boolean) => void }> = ({ label, checked, onChange }) => (
-      <label className="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/5 cursor-pointer hover:bg-white/10 transition-colors">
-          <input type="checkbox" className="accent-red-600 w-4 h-4" checked={checked} onChange={e => onChange(e.target.checked)} />
-          <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wide">{label}</span>
-      </label>
-  );
-
-  return (
-    <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent text-white">
-        <div className="w-72 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
-            <div className="mb-6 flex-1 overflow-y-auto custom-scrollbar">
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-6 ml-2 opacity-50">Menu Professor</p>
-                <SidebarButton tab="requests" label="Fila da Gráfica" icon={List} />
-                <SidebarButton tab="create" label="Enviar p/ Gráfica" icon={PlusCircle} />
-                <SidebarButton tab="materials" label="Materiais de Aula" icon={Folder} />
-                <SidebarButton tab="plans" label="Planejamentos" icon={BookOpen} />
-                <SidebarButton tab="grades" label="Diário de Classe" icon={Calculator} />
-                <SidebarButton tab="pei" label="PEI / AEE" icon={Heart} />
-                <SidebarButton tab="occurrences" label="Ocorrências" icon={AlertCircle} />
-                {isEligibleForAttendance() && (
-                    <SidebarButton tab="attendance" label="Frequência" icon={Clock} />
-                )}
-            </div>
-        </div>
+    const handleSaveOccurrence = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!occForm.studentId || !occForm.description) return alert("Preencha todos os campos.");
         
-        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-            {/* ... (Existing Tabs: requests, create, materials, plans, pei, occurrences, attendance) ... */}
-            {activeTab === 'requests' && (
-                <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-12">
-                        <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Fila de Impressões</h1>
-                        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Acompanhamento de solicitações enviadas à gráfica</p>
-                    </header>
-                    <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-                        <table className="w-full text-left">
-                            <thead className="bg-black/40 text-gray-500 uppercase text-[9px] font-black tracking-[0.2em]">
-                                <tr>
-                                    <th className="p-8">Data</th>
-                                    <th className="p-8">Atividade</th>
-                                    <th className="p-8">Turma / Qtd</th>
-                                    <th className="p-8">Status</th>
-                                    <th className="p-8 text-right">Arquivo</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {exams.length > 0 ? exams.map(exam => (
-                                    <tr key={exam.id} className="hover:bg-white/[0.02]">
-                                        <td className="p-8 text-sm text-gray-500 font-bold">{new Date(exam.createdAt).toLocaleDateString()}</td>
-                                        <td className="p-8 font-black text-white uppercase tracking-tight text-sm">{exam.title}</td>
-                                        <td className="p-8"><span className="bg-white/5 px-3 py-1 rounded-full text-[10px] font-black text-gray-400 border border-white/5">{exam.gradeLevel} • {exam.quantity}x</span></td>
-                                        <td className="p-8">
-                                            <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
-                                                exam.status === ExamStatus.PENDING ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                                                exam.status === ExamStatus.IN_PROGRESS ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
-                                                'bg-green-500/10 text-green-500 border-green-500/20'
-                                            }`}>
-                                                {exam.status === ExamStatus.PENDING ? 'Aguardando' : exam.status === ExamStatus.IN_PROGRESS ? 'Imprimindo' : 'Pronto'}
-                                            </span>
-                                        </td>
-                                        <td className="p-8 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                {exam.fileUrls && exam.fileUrls.length > 0 ? exam.fileUrls.map((url, idx) => (
-                                                    <a 
-                                                        key={idx} 
-                                                        href={url} 
-                                                        target="_blank" 
-                                                        rel="noopener noreferrer" 
-                                                        className="h-10 w-10 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-all border border-white/5" 
-                                                        title="Visualizar Material"
-                                                    >
-                                                        <Eye size={18} />
-                                                    </a>
-                                                )) : (
-                                                    <span className="text-[10px] text-gray-600 font-bold uppercase">Sem arquivo</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )) : (
-                                    <tr><td colSpan={5} className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-40">Nenhuma solicitação encontrada</td></tr>
-                                )}
-                            </tbody>
-                        </table>
+        setIsLoading(true);
+        try {
+            const student = students.find(s => s.id === occForm.studentId);
+            const dataToSave: StudentOccurrence = {
+                id: occForm.id || '',
+                studentId: student!.id,
+                studentName: student!.name,
+                studentClass: student!.className,
+                category: occForm.category as any,
+                severity: occForm.severity as any,
+                description: occForm.description!,
+                date: occForm.date!,
+                timestamp: occForm.timestamp || Date.now(),
+                reportedBy: user!.name
+            };
+
+            await saveOccurrence(dataToSave);
+            setShowOccModal(false);
+            alert(isEditingOcc ? "Ocorrência atualizada!" : "Ocorrência registrada!");
+            listenToOccurrences((data) => setOccurrences(data.filter(o => o.reportedBy === user!.name)));
+        } catch (err) {
+            alert("Erro ao salvar ocorrência.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDeleteOccurrence = async (id: string) => {
+        if (!confirm("Tem certeza que deseja excluir esta ocorrência?")) return;
+        try {
+            await deleteOccurrence(id);
+            alert("Ocorrência removida.");
+            listenToOccurrences((data) => setOccurrences(data.filter(o => o.reportedBy === user!.name)));
+        } catch (err) {
+            alert("Erro ao excluir.");
+        }
+    };
+
+    const SidebarItem = ({ id, label, icon: Icon }: { id: typeof activeTab, label: string, icon: any }) => (
+        <button onClick={() => setActiveTab(id)} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+            <Icon size={18} /> {label}
+        </button>
+    );
+
+    const subjects = [...EFAF_SUBJECTS, ...EM_SUBJECTS];
+
+    return (
+        <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
+            <aside className="w-64 bg-[#18181b] border-r border-white/5 p-6 flex flex-col h-full z-20 shadow-2xl">
+                <div className="mb-8 pl-4"><p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Menu Professor</p></div>
+                <nav className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
+                    <SidebarItem id="exams" label="Fila da Gráfica" icon={List} />
+                    <SidebarItem id="send_to_print" label="Envio para Gráfica" icon={PlusCircle} />
+                    <SidebarItem id="materials" label="Materiais de Aula" icon={Folder} />
+                    <SidebarItem id="planning" label="Planejamentos" icon={BookOpen} />
+                    <SidebarItem id="gradebook" label="Diário de Classe" icon={Calculator} />
+                    <SidebarItem id="pei" label="PEI / AEE" icon={Heart} />
+                    <SidebarItem id="occurrences" label="Ocorrências" icon={AlertCircle} />
+                    <SidebarItem id="attendance" label="Frequência" icon={CalendarClock} />
+                </nav>
+            </aside>
+
+            <main className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                {activeTab === 'planning' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex justify-between items-start">
+                            <div>
+                                <h1 className="text-5xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-2">Gestão de conteúdos e projetos acadêmicos</p>
+                            </div>
+                            <Button 
+                                onClick={() => {
+                                    setPlanForm({ 
+                                        type: planningTab, 
+                                        className: '', 
+                                        subject: user?.subject || '', 
+                                        bimester: '1º BIMESTRE',
+                                        date: new Date().toISOString().split('T')[0],
+                                        topic: '',
+                                        content: '',
+                                        expectedResults: [],
+                                        aiPurpose: [],
+                                        evidence: [],
+                                        projectSteps: { sensitize: false, investigate: false, create: false, test: false, present: false, register: false }
+                                    });
+                                    setShowPlanningModal(true);
+                                }} 
+                                className="bg-[#E53935] hover:bg-red-700 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-950/40"
+                            >
+                                <Plus size={18} className="mr-3"/> Novo Planejamento
+                            </Button>
+                        </header>
+
+                        <div className="bg-[#18181b]/50 border border-white/5 rounded-3xl p-1.5 flex w-fit mb-12 shadow-2xl">
+                            <button 
+                                onClick={() => setPlanningTab('diario')}
+                                className={`flex items-center gap-3 px-8 py-4 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${planningTab === 'diario' ? 'bg-white/10 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                <History size={16} /> Diário
+                            </button>
+                            <button 
+                                onClick={() => setPlanningTab('bimestral')}
+                                className={`flex items-center gap-3 px-8 py-4 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${planningTab === 'bimestral' ? 'bg-white/10 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                <BookMarked size={16} /> Bimestral
+                            </button>
+                            <button 
+                                onClick={() => setPlanningTab('inova')}
+                                className={`flex items-center gap-3 px-10 py-4 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${planningTab === 'inova' ? 'bg-[#9D44FF] text-white shadow-[0_0_30px_rgba(157,68,255,0.4)]' : 'text-gray-500 hover:text-gray-300'}`}
+                            >
+                                <Sparkles size={16} /> Projeto Inova
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {plans.filter(p => p.type === planningTab).map(plan => (
+                                <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-white/10 transition-all flex flex-col relative overflow-hidden">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className={`p-4 rounded-2xl ${planningTab === 'inova' ? 'bg-[#9D44FF]/10 text-[#9D44FF]' : 'bg-red-600/10 text-red-500'}`}>
+                                            {planningTab === 'inova' ? <Sparkles size={24}/> : planningTab === 'bimestral' ? <BookMarked size={24}/> : <BookOpen size={24}/>}
+                                        </div>
+                                        <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{plan.className}</h3>
+                                    <p className="text-red-500 font-black uppercase text-[10px] tracking-widest mb-6">{plan.subject} • {plan.teacherName}</p>
+                                    <div className="mt-auto flex gap-3">
+                                        <button className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5">Visualizar</button>
+                                        <button onClick={async () => { if(confirm("Excluir?")) { await deleteLessonPlan(plan.id); setPlans(await getLessonPlans(user!.id)); } }} className="p-4 bg-white/5 hover:bg-red-600/10 text-gray-500 hover:text-red-500 rounded-2xl transition-all border border-white/5"><Trash2 size={18}/></button>
+                                    </div>
+                                </div>
+                            ))}
+                            {plans.filter(p => p.type === planningTab).length === 0 && (
+                                <div className="col-span-full py-40 text-center bg-white/[0.02] border-2 border-dashed border-white/5 rounded-[3rem] opacity-20">
+                                    <BookOpen size={64} className="mx-auto mb-6" />
+                                    <p className="text-xl font-black uppercase tracking-[0.4em]">Nenhum planejamento encontrado</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* --- GRADEBOOK TAB --- */}
-            {activeTab === 'grades' && (
-                <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                        <div>
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Classe</h1>
-                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Lançamento de notas e avaliações</p>
-                        </div>
-                        <div className="flex flex-wrap gap-4">
-                            <select className="bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-red-600" value={gradeClass} onChange={e => setGradeClass(e.target.value)}>
-                                <option value="">Selecione a Turma</option>
-                                {getTeacherClasses().map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                            <select className="bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-red-600" value={gradeSubject} onChange={e => setGradeSubject(e.target.value)}>
-                                <option value="">Selecione a Disciplina</option>
-                                {getSubjectsForClass(gradeClass).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                            <select className="bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-red-600" value={gradeBimester} onChange={e => setGradeBimester(e.target.value)}>
-                                <option value="1º BIMESTRE">1º BIMESTRE</option>
-                                <option value="2º BIMESTRE">2º BIMESTRE</option>
-                                <option value="3º BIMESTRE">3º BIMESTRE</option>
-                                <option value="4º BIMESTRE">4º BIMESTRE</option>
-                            </select>
-                        </div>
-                    </header>
-
-                    {gradeClass && gradeSubject ? (
-                        <div className="space-y-8">
-                            {/* AV1 CONFIGURATION */}
-                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl">
-                                <div className="flex justify-between items-center mb-6">
+                {/* MODAL DE PLANEJAMENTO */}
+                {showPlanningModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                        <div className="bg-[#121214] border border-white/10 w-full max-w-6xl max-h-[95vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                            <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
+                                <div className="flex items-center gap-6">
+                                    <div className="h-16 w-16 bg-red-600/10 border border-red-600/20 rounded-2xl flex items-center justify-center">
+                                        {planningTab === 'inova' ? <Sparkles className="text-purple-500" size={32} /> : <History className="text-red-600" size={32} />}
+                                    </div>
                                     <div>
-                                        <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3"><Calculator className="text-red-500"/> Composição da AV1</h3>
-                                        <p className="text-xs text-gray-500 font-bold mt-1">
-                                            Soma Atual: <span className={(gradebookData?.av1Config.reduce((a,b) => a+b.maxScore, 0) || 0) > 10 ? 'text-red-500' : 'text-green-500'}>{(Number(gradebookData?.av1Config.reduce((a,b) => a+b.maxScore, 0) || 0)).toFixed(1)}</span> / 10.0
+                                        <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Novo Planejamento</h3>
+                                        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">
+                                            {planningTab === 'diario' ? 'Registro de Aula' : planningTab === 'bimestral' ? 'Guia de Aprendizagem' : 'Projeto Acadêmico'}
                                         </p>
                                     </div>
-                                    <Button onClick={() => setShowActivityModal(true)} className="bg-white/5 border border-white/10 hover:bg-white/10 h-10 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest text-white">
-                                        <Plus size={14} className="mr-2"/> Add Atividade
-                                    </Button>
                                 </div>
-                                <div className="flex gap-4 overflow-x-auto pb-2">
-                                    {gradebookData?.av1Config.map((activity, idx) => (
-                                        <div key={activity.id} className="min-w-[180px] bg-black/40 border border-white/10 p-4 rounded-2xl relative group">
-                                            <button onClick={() => handleRemoveAV1Activity(activity.id)} className="absolute top-2 right-2 text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>
-                                            <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Atividade {idx + 1}</p>
-                                            <p className="text-sm font-bold text-white truncate" title={activity.name}>{activity.name}</p>
-                                            <div className="flex justify-between items-end mt-2">
-                                                <span className="text-[10px] text-gray-500">{new Date(activity.date).toLocaleDateString()}</span>
-                                                <span className="text-xs font-black text-white bg-white/10 px-2 py-0.5 rounded">Val: {activity.maxScore}</span>
+                                <button onClick={() => setShowPlanningModal(false)} className="text-gray-600 hover:text-white transition-colors p-2"><X size={32}/></button>
+                            </div>
+                            <form onSubmit={handleSavePlan} className="flex-1 overflow-y-auto p-10 space-y-12 custom-scrollbar">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Tipo</label>
+                                        <div className="relative group">
+                                            <select 
+                                                className="w-full bg-black/40 border-2 border-red-600/30 rounded-2xl p-4 text-white font-black uppercase text-xs tracking-widest outline-none focus:border-red-600 transition-all appearance-none cursor-pointer shadow-inner"
+                                                value={planningTab}
+                                                onChange={(e) => setPlanningTab(e.target.value as any)}
+                                            >
+                                                <option value="diario">Diário</option>
+                                                <option value="bimestral">Bimestral</option>
+                                                <option value="inova">Projeto Inova</option>
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-red-600/50 group-hover:text-red-600 transition-colors">
+                                                <ChevronRight size={14} className="rotate-90" />
                                             </div>
                                         </div>
-                                    ))}
-                                    {gradebookData?.av1Config.length === 0 && <p className="text-gray-600 text-xs italic py-4">Nenhuma atividade configurada para AV1.</p>}
-                                </div>
-                            </div>
-
-                            {/* GRADES TABLE */}
-                            <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] shadow-xl overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead className="bg-black/40 text-[9px] font-black text-gray-500 uppercase tracking-widest">
-                                            <tr>
-                                                <th className="p-6 border-b border-white/5 sticky left-0 bg-[#121214] z-10 w-64">Aluno</th>
-                                                {gradebookData?.av1Config.map((act, i) => (
-                                                    <th key={act.id} className="p-6 border-b border-white/5 text-center min-w-[100px]">
-                                                        <div className="truncate w-24 mx-auto" title={act.name}>{i+1}. {act.name}</div>
-                                                        <div className="text-[8px] opacity-50">({act.maxScore} pts)</div>
-                                                    </th>
-                                                ))}
-                                                <th className="p-6 border-b border-white/5 text-center bg-red-900/10 text-red-400">Total AV1</th>
-                                                <th className="p-6 border-b border-white/5 text-center bg-blue-900/10 text-blue-400">AV2 (Simulado)</th>
-                                                <th className="p-6 border-b border-white/5 text-center bg-purple-900/10 text-purple-400">AV3 (Prova)</th>
-                                                <th className="p-6 border-b border-white/5 text-center bg-green-900/10 text-green-400 font-bold text-xs">Média Final</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/5">
-                                            {students.filter(s => s.className === gradeClass).sort((a,b) => a.name.localeCompare(b.name)).map(student => {
-                                                const sGrades = (gradebookData?.grades[student.id] || { av1: {} }) as { av1: Record<string, number>, av2?: number, av3?: number };
-                                                const av1Total = Object.values(sGrades.av1 || {}).reduce((a: number, b: number) => a + b, 0);
-                                                
-                                                return (
-                                                    <tr key={student.id} className="hover:bg-white/[0.02]">
-                                                        <td className="p-6 sticky left-0 bg-[#18181b] z-10 border-r border-white/5">
-                                                            <p className="font-bold text-xs text-white uppercase truncate w-60">{student.name}</p>
-                                                        </td>
-                                                        {gradebookData?.av1Config.map(act => (
-                                                            <td key={act.id} className="p-4 text-center">
-                                                                <input 
-                                                                    type="number" 
-                                                                    min="0" 
-                                                                    max={act.maxScore} 
-                                                                    step="0.1"
-                                                                    className="w-16 bg-black/40 border border-white/10 rounded-lg p-2 text-center text-white font-bold outline-none focus:border-red-500 text-xs"
-                                                                    value={sGrades.av1?.[act.id] ?? ''}
-                                                                    onChange={e => handleUpdateGrade(student.id, 'av1', act.id, Math.min(Number(e.target.value), act.maxScore))}
-                                                                />
-                                                            </td>
-                                                        ))}
-                                                        <td className="p-6 text-center font-black text-red-400 bg-red-900/5">{av1Total.toFixed(1)}</td>
-                                                        <td className="p-6 text-center font-bold text-gray-400 bg-blue-900/5 cursor-not-allowed" title="Preenchido pelo Administrativo">
-                                                            {sGrades.av2 !== undefined ? sGrades.av2.toFixed(1) : '-'}
-                                                        </td>
-                                                        <td className="p-6 text-center">
-                                                            <input 
-                                                                type="number" 
-                                                                min="0" 
-                                                                max="10" 
-                                                                step="0.1"
-                                                                className="w-20 bg-purple-900/10 border border-purple-500/20 rounded-lg p-2 text-center text-purple-400 font-bold outline-none focus:border-purple-500 text-sm"
-                                                                value={sGrades.av3 ?? ''}
-                                                                onChange={e => handleUpdateExamGrade(student.id, 'av3', Math.min(Number(e.target.value), 10))}
-                                                            />
-                                                        </td>
-                                                        <td className="p-6 text-center font-black text-green-400 bg-green-900/5 text-sm">
-                                                            {calculateFinalGrade(student.id)}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="py-40 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
-                            <Calculator size={64} className="mx-auto mb-4 text-gray-500" />
-                            <p className="font-black uppercase tracking-widest text-sm text-gray-500">Selecione Turma e Disciplina para abrir o diário</p>
-                        </div>
-                    )}
-
-                    {/* ACTIVITY MODAL */}
-                    {showActivityModal && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                            <div className="bg-[#18181b] border border-white/10 w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 animate-in zoom-in-95">
-                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-6">Nova Atividade AV1</h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Nome da Atividade</label>
-                                        <input autoFocus className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" placeholder="Ex: Trabalho em Grupo" value={newActivity.name} onChange={e => setNewActivity({...newActivity, name: e.target.value})} />
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Data de Realização</label>
-                                        <input type="date" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" value={newActivity.date} onChange={e => setNewActivity({...newActivity, date: e.target.value})} />
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label>
+                                        <select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs transition-all" value={planForm.className} onChange={e => setPlanForm({...planForm, className: e.target.value})}>
+                                            <option value="">Selecionar...</option>
+                                            {myClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Data de Entrega</label>
-                                        <input type="date" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" value={newActivity.deliveryDate || ''} onChange={e => setNewActivity({...newActivity, deliveryDate: e.target.value})} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Valor (Max Pontos)</label>
-                                        <input type="number" step="0.1" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600 text-sm" value={newActivity.maxScore} onChange={e => setNewActivity({...newActivity, maxScore: Number(e.target.value)})} />
-                                    </div>
-                                    <div className="flex gap-3 pt-4">
-                                        <Button variant="outline" onClick={() => setShowActivityModal(false)} className="flex-1 h-12 rounded-xl font-black text-[10px] uppercase">Cancelar</Button>
-                                        <Button onClick={handleAddAV1Activity} className="flex-1 h-12 bg-red-600 rounded-xl font-black text-[10px] uppercase">Adicionar</Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* ... (Other existing tabs and modals preserved) ... */}
-            {activeTab === 'create' && (
-                <div className="animate-in fade-in slide-in-from-right-4 max-w-3xl mx-auto space-y-8">
-                    <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <LayoutTemplate size={120} />
-                        </div>
-                        <div className="relative z-10">
-                            <h2 className="text-2xl font-black text-white uppercase tracking-tighter mb-2">Modelos Padronizados</h2>
-                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mb-8">Faça o download dos cabeçalhos oficiais antes de imprimir</p>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {TEMPLATES.map((t, idx) => (
-                                    <a key={idx} href={t.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 bg-black/40 hover:bg-black/60 border border-white/5 hover:border-red-600/30 p-4 rounded-2xl transition-all group/btn">
-                                        <div className="h-10 w-10 rounded-xl bg-red-600/10 text-red-500 flex items-center justify-center group-hover/btn:bg-red-600 group-hover/btn:text-white transition-colors">
-                                            <Download size={18} />
-                                        </div>
-                                        <span className="text-[10px] font-black text-gray-300 uppercase tracking-wide leading-tight group-hover/btn:text-white">{t.title}</span>
-                                    </a>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-[#18181b] border border-white/5 p-8 md:p-12 rounded-[3.5rem] shadow-2xl relative overflow-hidden">
-                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-10 flex items-center gap-4"><UploadCloud className="text-red-600" size={40} /> Enviar p/ Gráfica</h2>
-                        <div className="space-y-8">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título do Material</label>
-                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all text-sm placeholder-gray-600" value={examTitle} onChange={e => setExamTitle(e.target.value)} placeholder="Ex: Prova Bimestral de Matemática" />
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label>
-                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none text-sm" value={examGrade} onChange={e => setExamGrade(e.target.value)}>
-                                        <option value="">-- Turma --</option>
-                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Quantidade</label>
-                                    <input type="number" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" value={printQty} onChange={e => setPrintQty(Number(e.target.value))} />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Instruções da Impressão</label>
-                                <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium outline-none focus:border-red-600 transition-all min-h-[120px] text-sm placeholder-gray-600" value={printInstructions} onChange={e => setPrintInstructions(e.target.value)} placeholder="Ex: Frente e verso, grampeado, papel A4..." />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Anexar Arquivo(s)</label>
-                                <div className="border-3 border-dashed border-white/10 rounded-[2.5rem] p-12 text-center hover:border-red-600 transition-all relative bg-black/20 group cursor-pointer">
-                                    <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files && setUploadedFiles(prev => [...prev, ...Array.from(e.target.files!)])} />
-                                    <FileUp className="mx-auto text-gray-600 mb-4 group-hover:text-red-500 group-hover:scale-110 transition-all" size={56} />
-                                    <p className="text-gray-500 font-black uppercase text-xs tracking-widest">Arraste seus arquivos PDF ou Imagens</p>
-                                </div>
-                                {uploadedFiles.length > 0 && (
-                                    <div className="mt-4 space-y-2">
-                                        {uploadedFiles.map((f, i) => (
-                                            <div key={i} className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10 animate-in slide-in-from-left-2">
-                                                <span className="text-xs text-gray-300 font-bold truncate pr-4 uppercase">{f.name}</span>
-                                                <button onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-400 p-2"><X size={18}/></button>
+                                    {planningTab === 'diario' && (
+                                        <>
+                                            <div className="space-y-2 animate-in fade-in">
+                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data da Aula</label>
+                                                <input type="date" required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" value={planForm.date} onChange={e => setPlanForm({...planForm, date: e.target.value})} />
                                             </div>
-                                        ))}
+                                            <div className="space-y-2 animate-in fade-in">
+                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Assunto / Tema</label>
+                                                <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" placeholder="Tema da aula..." value={planForm.topic} onChange={e => setPlanForm({...planForm, topic: e.target.value})} />
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                {planningTab === 'diario' && (
+                                    <div className="space-y-2 animate-in fade-in duration-500">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Conteúdo e Metodologia</label>
+                                        <textarea required className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-sm min-h-[300px] focus:border-red-600 outline-none transition-all resize-none shadow-inner" placeholder="Descreva os objetivos e etapas da aula..." value={planForm.content} onChange={e => setPlanForm({...planForm, content: e.target.value})} />
                                     </div>
                                 )}
-                            </div>
-                            <div className="pt-4">
-                                <Button onClick={finalizeExam} isLoading={isSaving} className="w-full h-20 rounded-[2rem] font-black uppercase tracking-[0.2em] bg-red-600 shadow-2xl shadow-red-900/40 hover:scale-[1.02] transition-transform">Confirmar Envio</Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'materials' && (
-                <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-10">
-                        <h1 className="text-4xl font-black text-white uppercase tracking-tighter leading-tight">Materiais de Aula</h1>
-                        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Compartilhe arquivos diretamente com os alunos</p>
-                    </header>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-1">
-                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl sticky top-8">
-                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-8 flex items-center gap-3"><UploadCloud className="text-red-500" size={24} /> Novo Material</h3>
-                                <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Título do Arquivo</label>
-                                        <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 transition-all" placeholder="Ex: Slide Aula 1" value={materialTitle} onChange={e => setMaterialTitle(e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Turma</label>
-                                        <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={materialClass} onChange={e => setMaterialClass(e.target.value)}>
-                                            <option value="">-- Selecione --</option>
-                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Pasta</label>
-                                        <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={materialSubject} onChange={e => setMaterialSubject(e.target.value)}>
-                                            <option value="">-- Geral --</option>
-                                            {getSubjectsForClass(materialClass).map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="border-2 border-dashed border-white/10 rounded-[2rem] p-8 text-center hover:border-red-500 transition-all relative bg-black/20 group cursor-pointer">
-                                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files && setMaterialFile(e.target.files[0])} />
-                                        {materialFile ? (
-                                            <div className="text-green-500 flex flex-col items-center">
-                                                <FileText size={32} className="mb-2" />
-                                                <p className="font-bold text-xs uppercase tracking-widest">{materialFile.name}</p>
+                                {planningTab === 'bimestral' && (
+                                    <div className="space-y-12 animate-in fade-in duration-500">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Breve Justificativa</label>
+                                                <textarea required className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.justification} onChange={e => setPlanForm({...planForm, justification: e.target.value})} placeholder="Descrição da importância pedagógica..."/>
                                             </div>
-                                        ) : (
-                                            <div className="text-gray-500 flex flex-col items-center group-hover:text-white transition-colors">
-                                                <FileUp size={32} className="mb-2" />
-                                                <p className="font-black uppercase text-[10px] tracking-widest">Clique para Anexar</p>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Conteúdos Prioritários</label>
+                                                <textarea required className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.contents} onChange={e => setPlanForm({...planForm, contents: e.target.value})} placeholder="Descrição dos conteúdos centrais..."/>
                                             </div>
-                                        )}
-                                    </div>
-                                    <Button onClick={handleSaveMaterial} isLoading={isSaving} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">Publicar Material</Button>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="lg:col-span-2 space-y-4">
-                            {teacherMaterials.length > 0 ? teacherMaterials.map(mat => (
-                                <div key={mat.id} className="bg-[#18181b] border border-white/5 p-6 rounded-[2rem] hover:border-white/10 transition-all group flex items-center justify-between">
-                                    <div className="flex items-center gap-6">
-                                        <div className="h-14 w-14 bg-red-900/10 text-red-500 rounded-2xl flex items-center justify-center border border-red-500/10"><FileText size={24}/></div>
-                                        <div>
-                                            <h3 className="font-black text-white text-lg uppercase tracking-tight">{mat.title}</h3>
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{mat.className} • {mat.subject} • {new Date(mat.createdAt).toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Habilidades Cognitivas</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.cognitiveSkills} onChange={e => setPlanForm({...planForm, cognitiveSkills: e.target.value})} placeholder="Quais habilidades mentais serão trabalhadas?"/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Habilidades Socioemocionais</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.socioEmotionalSkills} onChange={e => setPlanForm({...planForm, socioEmotionalSkills: e.target.value})} placeholder="Soft skills e inteligência emocional..."/>
+                                            </div>
+                                        </div>
+                                        <div className="bg-black/20 border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3 border-b border-white/5 pb-4"><CheckSquare size={18} className="text-red-500"/> Tipologia de Atividades</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                                {[{ key: 'Previous', label: 'Prévias' }, { key: 'Autodidactic', label: 'Autodidáticas' }, { key: 'Cooperative', label: 'Cooperativas' }, { key: 'Complementary', label: 'Complementares' }].map(item => (
+                                                    <div key={item.key} className="space-y-3">
+                                                        <span className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] block text-center">{item.label}</span>
+                                                        <textarea className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white text-xs min-h-[150px] focus:border-red-600 outline-none" value={(planForm as any)[`activities${item.key}`]} onChange={e => setPlanForm({...planForm, [`activities${item.key}`]: e.target.value})} />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Situações Didáticas</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.didacticSituations} onChange={e => setPlanForm({...planForm, didacticSituations: e.target.value})} placeholder="Descrição do cenário de aprendizagem..."/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Estratégias de Avaliação</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.evaluationStrategies} onChange={e => setPlanForm({...planForm, evaluationStrategies: e.target.value})} placeholder="Como o progresso será medido?"/>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Recursos Didáticos</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-red-600 outline-none" value={planForm.didacticResources} onChange={e => setPlanForm({...planForm, didacticResources: e.target.value})} placeholder="Materiais, softwares, ferramentas..."/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Fontes de Referência</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-red-600 outline-none" value={planForm.referenceSources} onChange={e => setPlanForm({...planForm, referenceSources: e.target.value})} placeholder="Livros, links, bibliografia..."/>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <a href={mat.fileUrl} target="_blank" rel="noreferrer" className="h-12 w-12 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all border border-white/5" title="Visualizar"><Eye size={20} /></a>
-                                        <button onClick={async () => { if(confirm("Excluir?")) await deleteClassMaterial(mat.id); fetchData(); }} className="h-12 w-12 flex items-center justify-center rounded-xl bg-white/5 hover:bg-red-600/20 text-gray-400 hover:text-red-500 transition-all border border-white/5" title="Excluir"><Trash2 size={20}/></button>
-                                    </div>
-                                </div>
-                            )) : (
-                                <div className="flex flex-col items-center justify-center py-20 opacity-30">
-                                    <Folder size={64} className="mb-4 text-gray-600" />
-                                    <p className="text-gray-500 font-black uppercase tracking-widest">Nenhum material publicado</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'plans' && (
-                <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto">
-                    <header className="mb-12">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-                            <div>
-                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos</h1>
-                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Gestão de conteúdos e projetos acadêmicos</p>
-                            </div>
-                            <Button onClick={() => { setNewPlan(prev => ({ ...prev, type: activePlanTab })); setShowPlanModal(true); }} className="bg-red-600 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40"><Plus size={18} className="mr-3"/> Novo Planejamento</Button>
-                        </div>
-                        <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/5 max-w-2xl overflow-hidden">
-                            <button onClick={() => setActivePlanTab('daily')} className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activePlanTab === 'daily' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><Clock size={16}/> Diário</button>
-                            <button onClick={() => setActivePlanTab('bimester')} className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activePlanTab === 'bimester' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><BookMarked size={16}/> Bimestral</button>
-                            <button onClick={() => setActivePlanTab('inova')} className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activePlanTab === 'inova' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><Sparkles size={16}/> Projeto Inova</button>
-                        </div>
-                    </header>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-                        {lessonPlans.filter(p => (p.type || 'daily') === activePlanTab).map(plan => (
-                            <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl hover:border-white/10 transition-all group relative flex flex-col">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className={`p-4 rounded-2xl ${activePlanTab === 'daily' ? 'bg-red-600/10 text-red-500' : activePlanTab === 'bimester' ? 'bg-blue-600/10 text-blue-500' : 'bg-purple-600/10 text-purple-400'}`}>{activePlanTab === 'daily' ? <Clock size={24}/> : activePlanTab === 'bimester' ? <BookMarked size={24}/> : <Sparkles size={24}/>}</div>
-                                    <div className="flex items-center gap-2">
-                                        <span className={`text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full border border-white/5 ${activePlanTab === 'daily' ? 'bg-red-950/20 text-red-400' : activePlanTab === 'bimester' ? 'bg-blue-950/20 text-blue-400' : 'bg-purple-950/20 text-purple-400'}`}>{activePlanTab === 'daily' ? 'Diário' : activePlanTab === 'bimester' ? 'Bimestral' : 'Inova'}</span>
-                                        <button onClick={() => handleDeletePlan(plan.id)} className="text-gray-600 hover:text-red-500 p-2 transition-colors"><Trash2 size={20}/></button>
-                                    </div>
-                                </div>
-                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 leading-tight">{plan.topic || plan.inovaTheme}</h3>
-                                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-6">{plan.className} • {plan.subject}</p>
-                                {plan.type === 'bimester' ? (
-                                    <div className="space-y-4">
-                                        <div className="bg-blue-900/10 p-4 rounded-xl border border-blue-500/20"><p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Justificativa:</p><p className="text-xs text-gray-300 line-clamp-2">{plan.justification}</p></div>
-                                        <div className="bg-black/20 p-4 rounded-xl border border-white/5 grid grid-cols-2 gap-4"><div><p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Bimestre:</p><p className="text-[10px] font-bold text-white">{plan.bimester}</p></div><div className="text-right"><p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Ações:</p><button className="text-[9px] text-blue-400 font-black uppercase hover:underline">Ver Completo</button></div></div>
-                                    </div>
-                                ) : plan.type === 'inova' ? (
-                                    <div className="space-y-4">
-                                        <div className="bg-purple-900/10 p-4 rounded-xl border border-purple-500/20"><p className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-1">Questão Norteadora:</p><p className="text-xs text-gray-300 line-clamp-2">{plan.guidingQuestion}</p></div>
-                                        <div className="bg-black/20 p-4 rounded-xl border border-white/5"><p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Ferramenta IA Utilizada:</p><p className="text-[10px] font-bold text-white flex items-center gap-2"><Bot size={12}/> {plan.aiTools}</p></div>
-                                    </div>
-                                ) : (<div className="bg-black/30 p-6 rounded-2xl border border-white/5 text-gray-400 text-sm leading-relaxed whitespace-pre-wrap flex-1 max-h-48 overflow-y-auto custom-scrollbar">{plan.content}</div>)}
-                                <div className="mt-6 pt-4 border-t border-white/5 flex justify-between items-center text-[9px] font-black text-gray-600 uppercase tracking-widest"><span>Criado em: {new Date(plan.createdAt).toLocaleDateString()}</span><span>Prof. {plan.teacherName.split(' ')[0]}</span></div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'pei' && (
-                <div className="animate-in fade-in slide-in-from-right-4">
-                    {/* ... PEI Tab Content ... */}
-                    <header className="mb-12">
-                        <h1 className="text-4xl font-black text-white uppercase tracking-tighter">PEI / AEE</h1>
-                        <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Planos de Ensino Individualizado</p>
-                    </header>
-                    <div className="mb-12">
-                        <h2 className="text-xl font-black text-white uppercase tracking-tight mb-6 flex items-center gap-3"><Heart size={24} className="text-red-500"/> Meus Alunos em Acompanhamento</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {students.filter(student => filterAEEStudents(student)).map(student => (
-                                <div key={student.id} className="bg-[#18181b] border-2 border-white/5 rounded-[2.5rem] p-8 shadow-xl relative overflow-hidden group hover:border-red-600/30 transition-all flex flex-col">
-                                    <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest shadow-lg">AEE</div>
-                                    
-                                    {/* PHOTO & HEADER */}
-                                    <div className="flex items-center gap-6 mb-8">
-                                        <div className="h-28 w-28 rounded-[1.5rem] bg-gray-900 border-2 border-white/10 overflow-hidden shrink-0 group-hover:scale-105 transition-transform shadow-2xl relative">
-                                            {student.photoUrl ? (
-                                                <img src={student.photoUrl} className="w-full h-full object-cover"/>
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-black">
-                                                    <Users className="text-gray-600" size={32}/>
+                                )}
+                                {planningTab === 'inova' && (
+                                    <div className="space-y-12 animate-in fade-in duration-500">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                            <div className="space-y-8">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Rocket size={14}/> 1. Tema do Subprojeto</label>
+                                                    <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-purple-600" value={planForm.inovaTheme} onChange={e => setPlanForm({...planForm, inovaTheme: e.target.value})} placeholder="Título criativo do projeto..." />
                                                 </div>
-                                            )}
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Lightbulb size={14}/> 2. Questão Norteadora</label>
+                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-purple-600 outline-none" value={planForm.guidingQuestion} onChange={e => setPlanForm({...planForm, guidingQuestion: e.target.value})} placeholder="Que problema real vamos investigar e melhorar?" />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Target size={14}/> 3. Objetivo Geral do Subprojeto</label>
+                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-purple-600 outline-none" value={planForm.subprojectGoal} onChange={e => setPlanForm({...planForm, subprojectGoal: e.target.value})} placeholder="Ao final, os alunos serão capazes de...?" />
+                                                </div>
+                                            </div>
+                                            <div className="bg-purple-900/10 border border-purple-500/20 rounded-[2.5rem] p-8">
+                                                <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest mb-6 flex items-center gap-3"><Sparkles size={18}/> 4. Resultados Esperados (marque 3–5)</h4>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {["Consciência ambiental/consumo responsável", "Criatividade e autoria (criar algo)", "Colaboração e protagonismo", "Comunicação (apresentar/explicar)", "Investigação (observação/pesquisa/dados)", "Uso responsável de tecnologia/IA"].map(res => (
+                                                        <label key={res} className="flex items-center gap-4 cursor-pointer group">
+                                                            <input type="checkbox" className="hidden" checked={planForm.expectedResults?.includes(res)} onChange={() => { const current = planForm.expectedResults || []; const updated = current.includes(res) ? current.filter(r => r !== res) : [...current, res]; setPlanForm({...planForm, expectedResults: updated}); }} />
+                                                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${planForm.expectedResults?.includes(res) ? 'bg-purple-600 border-purple-500 shadow-lg' : 'border-white/10 group-hover:border-purple-600'}`}>
+                                                                {planForm.expectedResults?.includes(res) && <Check size={14} className="text-white"/>}
+                                                            </div>
+                                                            <span className={`text-[11px] font-bold uppercase tracking-tight transition-colors ${planForm.expectedResults?.includes(res) ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`}>{res}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="font-black text-white text-2xl uppercase tracking-tight leading-none mb-2 line-clamp-2">{String(student.name || '')}</h3>
-                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest bg-white/5 inline-block px-3 py-1 rounded-lg">{String(student.className || '')}</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                            <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
+                                                <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3"><Box size={18} className="text-purple-500"/> 5. Produto Final</h4>
+                                                <div className="grid grid-cols-1 gap-2 mb-4">
+                                                    {["Painel/Cartaz", "Maquete Digital/Protótipo", "Experimento", "Podcast/Vídeo", "Campanha/Intervenção", "Seminário", "Outro"].map(prod => (
+                                                        <label key={prod} className="flex items-center gap-3 cursor-pointer">
+                                                            <input type="radio" className="hidden" name="productType" checked={planForm.finalProductType === prod} onChange={() => setPlanForm({...planForm, finalProductType: prod})} />
+                                                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${planForm.finalProductType === prod ? 'bg-purple-600 border-purple-500' : 'border-white/20'}`}>
+                                                                {planForm.finalProductType === prod && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                                            </div>
+                                                            <span className="text-[10px] font-bold uppercase text-gray-500">{prod}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm min-h-[80px] focus:border-purple-600 outline-none" value={planForm.finalProductDescription} onChange={e => setPlanForm({...planForm, finalProductDescription: e.target.value})} placeholder="Descrição do produto final (2-3 linhas)..." />
+                                            </div>
+                                            <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
+                                                <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3"><Layers size={18} className="text-purple-500"/> 6. Etapas do Projeto (Checklist)</h4>
+                                                <div className="grid grid-cols-1 gap-4">
+                                                    {[{ key: 'sensitize', label: '1. Sensibilizar (apresentar tema / combinar regras)' }, { key: 'investigate', label: '2. Investigar (observar/pesquisar/coletar)' }, { key: 'create', label: '3. Criar (produzir protótipo/peça/solução)' }, { key: 'test', label: '4. Testar e melhorar (ajustes)' }, { key: 'present', label: '5. Apresentar (mostra/seminário)' }, { key: 'register', label: '6. Registrar (portfólio/evidências)' }].map(step => (
+                                                        <label key={step.key} className="flex items-center gap-3 cursor-pointer group">
+                                                            <input type="checkbox" className="hidden" checked={planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps]} onChange={() => { const steps = planForm.projectSteps || { sensitize: false, investigate: false, create: false, test: false, present: false, register: false }; setPlanForm({...planForm, projectSteps: { ...steps, [step.key]: !steps[step.key as keyof typeof steps] }}); }} />
+                                                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps] ? 'bg-purple-600 border-purple-500' : 'border-white/20'}`}>
+                                                                {planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps] && <Check size={12} className="text-white"/>}
+                                                            </div>
+                                                            <span className="text-[10px] font-black uppercase text-gray-500 group-hover:text-gray-300">{step.label}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><CalendarIcon size={14}/> 7. Cronograma Mínimo (Descrição e Período)</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[200px] focus:border-purple-600 outline-none" value={planForm.schedule} onChange={e => setPlanForm({...planForm, schedule: e.target.value})} placeholder="Distribuição das etapas no tempo (Início, Diagnóstico, Mão na massa...)" />
+                                            </div>
+                                            <div className="space-y-4">
+                                                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Briefcase size={14}/> 8. Recursos Necessários</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[200px] focus:border-purple-600 outline-none" value={planForm.resourcesNeeded} onChange={e => setPlanForm({...planForm, resourcesNeeded: e.target.value})} placeholder="Liste materiais, ferramentas e espaços necessários..." />
+                                            </div>
+                                        </div>
+                                        <div className="bg-black/40 p-10 rounded-[3rem] border border-white/5 space-y-8">
+                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3 border-b border-white/5 pb-6"><Cpu size={20} className="text-purple-500"/> 9. Uso de IA (campo curto e obrigatório)</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest ml-1">Ferramenta(s)</label>
+                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiTools} onChange={e => setPlanForm({...planForm, aiTools: e.target.value})} placeholder="Ex: ChatGPT, GEMINI, IA STUDIO, ETC"/>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest ml-1">Cuidado adotado</label>
+                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiCare} onChange={e => setPlanForm({...planForm, aiCare: e.target.value})} placeholder="Descreva os cuidados éticos e pedagógicos adotados..."/>
+                                                </div>
+                                                <div className="bg-purple-900/5 p-6 rounded-2xl border border-purple-500/10">
+                                                    <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-4 block">Para quê? (Objetivo IA)</label>
+                                                    <div className="grid grid-cols-1 gap-2">
+                                                        {["Ideias", "Roteiro", "Texto", "Imagem", "Vídeo", "Dados/gráficos"].map(purp => (
+                                                            <label key={purp} className="flex items-center gap-3 cursor-pointer">
+                                                                <input type="checkbox" className="hidden" checked={planForm.aiPurpose?.includes(purp)} onChange={() => { const current = planForm.aiPurpose || []; const updated = current.includes(purp) ? current.filter(p => p !== purp) : [...current, purp]; setPlanForm({...planForm, aiPurpose: updated}); }} />
+                                                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${planForm.aiPurpose?.includes(purp) ? 'bg-purple-600 border-purple-500' : 'border-white/10'}`}>
+                                                                    {planForm.aiPurpose?.includes(purp) && <Check size={10} className="text-white"/>}
+                                                                </div>
+                                                                <span className="text-[10px] font-bold text-gray-500 uppercase">{purp}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
+                                            <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest flex items-center gap-3"><Camera size={18}/> 10. Evidências de Execução</h4>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                                                {["Fotos do processo", "Registro no caderno/diário", "Link de vídeo/podcast", "Tabelas/gráficos", "Relatório curto", "Portfólio da turma", "Outros"].map(evid => (
+                                                    <label key={evid} className="flex items-center gap-3 cursor-pointer group">
+                                                        <input type="checkbox" className="hidden" checked={planForm.evidence?.includes(evid)} onChange={() => { const current = planForm.evidence || []; const updated = current.includes(evid) ? current.filter(e => e !== evid) : [...current, evid]; setPlanForm({...planForm, evidence: updated}); }} />
+                                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${planForm.evidence?.includes(evid) ? 'bg-purple-600 border-purple-500' : 'border-white/20'}`}>
+                                                            {planForm.evidence?.includes(evid) && <Check size={12} className="text-white"/>}
+                                                        </div>
+                                                        <span className="text-[10px] font-bold uppercase text-gray-500 group-hover:text-gray-300">{evid}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
-
-                                    <div className="space-y-4 mb-8 flex-1">
-                                        {/* DIAGNOSIS */}
-                                        <div className="bg-red-950/20 p-5 rounded-2xl border border-red-900/30 relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
-                                            <span className="block text-[9px] font-black text-red-500 uppercase tracking-[0.2em] mb-1">Diagnóstico(s)</span>
-                                            <div className="flex flex-wrap gap-1">
-                                                {(student.disorders && student.disorders.length > 0) ? (
-                                                    student.disorders.map((d, i) => (
-                                                        <span key={i} className="text-sm font-black text-white uppercase tracking-tight leading-tight block w-full">• {d}</span>
-                                                    ))
-                                                ) : (
-                                                    <p className="text-lg font-black text-white uppercase tracking-tight leading-tight">{student.disorder || 'Não informado'}</p>
-                                                )}
-                                            </div>
-                                        </div>
-                                        
-                                        {/* SKILLS & WEAKNESSES */}
-                                        <div className="grid grid-cols-1 gap-4">
-                                            <div className="bg-emerald-950/20 p-5 rounded-2xl border border-emerald-900/30 relative overflow-hidden">
-                                                <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                                                <span className="block text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-2">Habilidades</span>
-                                                <p className="text-xs font-medium text-gray-300 leading-relaxed">
-                                                    {student.skills || 'Não registrado.'}
-                                                </p>
-                                            </div>
-                                            <div className="bg-amber-950/20 p-5 rounded-2xl border border-amber-900/30 relative overflow-hidden">
-                                                <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
-                                                <span className="block text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] mb-2">Fragilidades</span>
-                                                <p className="text-xs font-medium text-gray-300 leading-relaxed">
-                                                    {student.weaknesses || 'Não registrado.'}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {/* LAUDO STATUS */}
-                                        {student.reportUrl ? (
-                                            <a href={student.reportUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 text-[10px] font-black text-green-400 uppercase tracking-widest bg-green-900/10 p-4 rounded-xl border border-green-900/20 hover:bg-green-900/20 transition-all">
-                                                <FileCheck size={16}/> Laudo Digital Disponível
-                                            </a>
-                                        ) : (
-                                            <div className="flex items-center justify-center gap-2 text-[10px] font-black text-orange-500 uppercase tracking-widest bg-orange-900/10 p-4 rounded-xl border border-orange-900/20">
-                                                <ShieldAlert size={16}/> Laudo Pendente
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <button 
-                                        onClick={() => openPEIModal(student)}
-                                        className="w-full py-5 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-red-900/30 uppercase text-xs tracking-[0.15em] hover:scale-[1.02]"
-                                    >
-                                        <Plus size={18}/> Criar PEI
-                                    </button>
-                                </div>
-                            ))}
-                            {students.filter(student => filterAEEStudents(student)).length === 0 && (<div className="col-span-full py-40 text-center opacity-30 font-black uppercase tracking-[0.4em] text-xl text-gray-600">Nenhum aluno AEE vinculado às suas turmas</div>)}
-                        </div>
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-black text-white uppercase tracking-tight mb-6 flex items-center gap-3"><BookOpenCheck size={24} className="text-blue-500"/> Documentos PEI</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {peiDocuments.map(pei => (
-                                <div key={pei.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl relative group">
-                                    <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-black px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest">PEI Ativo</div>
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2">{pei.studentName}</h3><p className="text-xs text-gray-500 font-bold uppercase tracking-widest mb-6">{pei.subject} • {pei.period}</p>
-                                    <div className="space-y-3 mb-6"><div className="bg-black/30 p-4 rounded-xl border border-white/5"><p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Competências Essenciais</p><p className="text-xs text-gray-300 line-clamp-2">{pei.essentialCompetencies}</p></div></div>
-                                    <div className="flex gap-2 pt-4 border-t border-white/5"><button onClick={() => openPEIModal(undefined, pei)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-300 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all"><Edit size={14}/> Editar</button><button onClick={() => handleDeletePEI(pei.id)} className="flex-1 py-3 bg-white/5 hover:bg-red-600/20 text-gray-300 hover:text-red-500 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all"><Trash2 size={14}/> Excluir</button></div>
-                                </div>
-                            ))}
-                            {peiDocuments.length === 0 && (<div className="col-span-full py-40 text-center opacity-30 font-black uppercase tracking-[0.4em] text-xl text-gray-600">Nenhum PEI encontrado</div>)}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'occurrences' && (
-                <div className="animate-in fade-in slide-in-from-right-4">
-                    <header className="mb-12 flex justify-between items-center">
-                        <div>
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Ocorrências</h1>
-                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Registro disciplinar e pedagógico</p>
-                        </div>
-                        <Button onClick={() => setShowOccurrenceModal(true)} className="bg-red-600 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest"><Plus size={18} className="mr-3"/> Nova Ocorrência</Button>
-                    </header>
-                    <div className="space-y-6">
-                        {teacherOccurrences.map(occ => (
-                            <div key={occ.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl flex justify-between items-center">
-                                <div>
-                                    <div className="flex items-center gap-3 mb-2"><span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase border tracking-widest ${occ.category === 'indisciplina' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'}`}>{occ.category}</span><span className="text-[10px] text-gray-600 font-black uppercase">{new Date(occ.timestamp).toLocaleDateString()}</span></div>
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight">{occ.studentName}</h3><p className="text-xs text-gray-500 mt-2 italic">"{occ.description}"</p>
-                                </div>
-                                <button onClick={async () => { if(confirm("Excluir?")) await deleteOccurrence(occ.id); }} className="text-gray-600 hover:text-red-500 p-3 bg-white/5 rounded-xl transition-all"><Trash2 size={20}/></button>
+                                )}
+                            </form>
+                            <div className="p-8 border-t border-white/5 bg-black/20 flex justify-end">
+                                <Button onClick={handleSavePlan} isLoading={isLoading} className="px-12 h-16 bg-[#E53935] hover:bg-red-700 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-red-950/40">
+                                    <Save size={20} className="mr-3"/> Salvar Planejamento
+                                </Button>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'attendance' && (
-                <div className="animate-in fade-in slide-in-from-right-4 max-w-4xl mx-auto">
-                    <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Frequência</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Chamada diária simplificada</p></header>
-                    <div className="bg-[#18181b] border border-white/5 p-10 rounded-[3rem] shadow-2xl space-y-8">
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 ml-2">Selecione a Turma</label>
-                            <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all appearance-none" value={attendanceClass} onChange={(e) => { setAttendanceClass(e.target.value); setAttendanceRecords({}); }}>
-                                <option value="">-- Escolha uma turma --</option>
-                                {getTeacherClasses().map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
                         </div>
-                        {attendanceClass && (
-                            <div className="space-y-2">
-                                {students.filter(s => s.className === attendanceClass).sort((a,b) => a.name.localeCompare(b.name)).map(student => (
-                                    <div key={student.id} className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
-                                        <span className="font-black text-white uppercase tracking-tight text-sm">{student.name}</span>
-                                        <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
-                                            <button onClick={() => setAttendanceRecords({...attendanceRecords, [student.id]: true})} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${attendanceRecords[student.id] === true ? 'bg-green-600 text-white shadow-lg' : 'text-gray-600 hover:text-white'}`}>P</button>
-                                            <button onClick={() => setAttendanceRecords({...attendanceRecords, [student.id]: false})} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${attendanceRecords[student.id] === false ? 'bg-red-600 text-white shadow-lg' : 'text-gray-600 hover:text-white'}`}>F</button>
-                                        </div>
-                                    </div>
+                    </div>
+                )}
+
+                {activeTab === 'occurrences' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex justify-between items-center">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Ocorrências</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Gestão de registros disciplinares e acadêmicos</p>
+                            </div>
+                            <Button onClick={() => openOccModal()} className="bg-red-600 h-14 px-8 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
+                                <PlusCircle size={18} className="mr-2"/> Novo Registro
+                            </Button>
+                        </header>
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                            <table className="w-full text-left">
+                                <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
+                                    <tr><th className="p-8">Data</th><th className="p-8">Aluno / Turma</th><th className="p-8">Categoria</th><th className="p-8">Descrição</th><th className="p-8 text-right">Ações</th></tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {occurrences.map(occ => (
+                                        <tr key={occ.id} className="hover:bg-white/[0.02] transition-colors group">
+                                            <td className="p-8 text-xs font-bold text-gray-500 whitespace-nowrap">{new Date(occ.date + 'T12:00:00').toLocaleDateString()}</td>
+                                            <td className="p-8"><p className="font-black text-white uppercase text-sm">{occ.studentName}</p><p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">{occ.studentClass}</p></td>
+                                            <td className="p-8"><span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${occ.category === 'elogio' ? 'bg-green-500/10 text-green-500 border-green-500/20' : occ.category === 'indisciplina' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'}`}>{occ.category}</span></td>
+                                            <td className="p-8"><p className="text-xs text-gray-400 font-medium line-clamp-2 max-w-md">{occ.description}</p></td>
+                                            <td className="p-8 text-right"><div className="flex justify-end gap-2"><button onClick={() => openOccModal(occ)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-all"><Edit3 size={16} /></button><button onClick={() => handleDeleteOccurrence(occ.id)} className="p-3 bg-white/5 hover:bg-red-600/10 rounded-xl text-gray-400 hover:text-red-500 transition-all"><Trash2 size={16} /></button></div></td>
+                                        </tr>
+                                    ))}
+                                    {occurrences.length === 0 && (
+                                        <tr><td colSpan={5} className="p-20 text-center text-gray-600 font-black uppercase tracking-[0.4em] opacity-30">Nenhuma ocorrência registrada por você.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'attendance' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto space-y-12">
+                        <header><h1 className="text-6xl font-black text-white uppercase tracking-tighter">Frequência</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Chamada diária simplificada</p></header>
+                        <section className="bg-[#18181b] border border-white/5 rounded-[3rem] p-12 shadow-2xl">
+                            <div className="mb-10"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 block mb-4">Selecione a Turma</label><select className="w-full bg-black/40 border border-red-600/30 rounded-2xl p-6 text-white font-black uppercase tracking-widest outline-none focus:border-red-600 appearance-none text-xl cursor-pointer shadow-inner" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setAttendanceRecords({}); }}><option value="">-- Turma --</option>{myClasses.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                            {selectedClass ? (
+                                <div className="space-y-3">
+                                    {students.filter(s => s.className === selectedClass).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(student => (
+                                        <div key={student.id} className="bg-black/20 border border-white/5 rounded-2xl p-6 flex items-center justify-between group hover:border-white/10 transition-all"><span className="font-black text-white uppercase tracking-tight text-sm">{student.name}</span><div className="flex gap-2"><button onClick={() => setAttendanceRecords(prev => ({ ...prev, [student.id]: true }))} className={`w-12 h-12 flex items-center justify-center rounded-xl border-2 transition-all font-black text-xs ${attendanceRecords[student.id] === true ? 'bg-green-600 border-green-500 text-white shadow-lg' : 'bg-[#121214] border-white/5 text-gray-700 hover:text-white hover:border-white/10'}`}>P</button><button onClick={() => setAttendanceRecords(prev => ({ ...prev, [student.id]: false }))} className={`w-12 h-12 flex items-center justify-center rounded-xl border-2 transition-all font-black text-xs ${attendanceRecords[student.id] === false ? 'bg-red-600 border-red-500 text-white shadow-lg' : 'bg-[#121214] border-white/5 text-gray-700 hover:text-white hover:border-white/10'}`}>F</button></div></div>
+                                    ))}
+                                    <div className="pt-10"><Button onClick={handleAttendanceSubmit} isLoading={isLoading} className="w-full h-20 bg-red-600 hover:bg-red-700 rounded-[2rem] font-black uppercase text-sm tracking-[0.2em] shadow-2xl shadow-red-900/40">Finalizar Chamada</Button></div>
+                                </div>
+                            ) : (
+                                <div className="py-40 text-center opacity-20 flex flex-col items-center"><Users size={64} className="mb-4" /><p className="font-black uppercase tracking-[0.4em] text-sm">Selecione uma turma para iniciar</p></div>
+                            )}
+                        </section>
+                    </div>
+                )}
+
+                {activeTab === 'pei' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 space-y-12">
+                        <header><h1 className="text-5xl font-black text-white uppercase tracking-tighter">PEI / AEE</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Planos de Ensino Individualizado</p></header>
+                        <section><div className="flex items-center gap-4 mb-10"><Heart className="text-red-600 fill-red-600/10" size={28} /><h2 className="text-xl font-black text-white uppercase tracking-widest">Meus alunos em acompanhamento</h2></div><div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10">
+                                {monitoredStudents.map(student => (
+                                    <div key={student.id} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden group hover:border-red-600/20 transition-all flex flex-col"><div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-5 py-2 rounded-bl-2xl uppercase tracking-widest shadow-lg">AEE</div><div className="flex items-center gap-6 mb-10"><div className="h-28 w-28 rounded-[2rem] bg-[#121214] border-2 border-white/5 flex items-center justify-center text-gray-700 shadow-2xl group-hover:scale-105 transition-transform overflow-hidden shrink-0">{student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover" /> : <Users size={40} />}</div><div className="min-w-0"><h3 className="text-2xl font-black text-white uppercase tracking-tight leading-none mb-3 line-clamp-2">{student.name}</h3><span className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-xl text-[10px] font-black text-gray-500 uppercase tracking-widest">{student.className}</span></div></div><div className="space-y-4 mb-10 flex-1"><div className="bg-black/30 border-l-4 border-red-600 p-6 rounded-2xl"><span className="text-[9px] font-black text-red-500 uppercase tracking-widest block mb-2">Diagnóstico(s)</span><div className="space-y-1">{(student.disorders || [student.disorder]).filter(d => d).map((d, i) => <p key={i} className="text-sm font-black text-white uppercase tracking-tight">• {d}</p>) || <p className="text-xs text-gray-600 italic">Nenhum diagnóstico registrado.</p>}</div></div><div className="bg-black/30 border-l-4 border-emerald-600 p-6 rounded-2xl"><span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block mb-2">Habilidades</span><p className="text-xs font-bold text-gray-400 leading-relaxed">{student.skills || 'Não registrado.'}</p></div><div className="bg-black/30 border-l-4 border-amber-600 p-6 rounded-2xl"><span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block mb-2">Fragilidades</span><p className="text-xs font-bold text-gray-400 leading-relaxed">{student.weaknesses || 'Não registrado.'}</p></div><div className="bg-black/30 p-4 rounded-2xl flex items-center justify-center gap-3">{student.reportUrl ? <><FileCheck size={16} className="text-green-500" /><span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Laudo Digital Ok</span></> : <><ShieldAlert size={16} className="text-orange-500" /><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Laudo Pendente</span></>}</div></div><Button onClick={() => { setCurrentPeiStudent(student); setShowPeiForm(true); }} className="w-full h-16 bg-red-600 hover:bg-red-700 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-red-900/40"><Plus size={20} className="mr-3" /> Criar PEI</Button></div>
                                 ))}
-                                <Button onClick={handleSaveAttendance} isLoading={isSaving} className="w-full h-20 bg-red-600 rounded-3xl font-black uppercase tracking-widest shadow-2xl mt-8">Confirmar Chamada</Button>
-                            </div>
-                        )}
+                                {monitoredStudents.length === 0 && (
+                                    <div className="col-span-full py-40 text-center bg-[#18181b] border-2 border-dashed border-white/5 rounded-[3rem] opacity-20"><Heart size={80} className="mx-auto mb-6" /><p className="text-xl font-black uppercase tracking-[0.4em]">Nenhum aluno em acompanhamento AEE</p></div>
+                                )}
+                            </div></section>
                     </div>
-                </div>
+                )}
+
+                {activeTab === 'materials' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 space-y-10">
+                        <header><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Materiais de Aula</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-2">Compartilhe arquivos diretamente com os alunos</p></header>
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10"><div className="lg:col-span-4"><div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl"><div className="flex items-center gap-4 mb-10"><div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-600"><UploadCloud size={24} /></div><h2 className="text-xl font-black text-white uppercase tracking-tight">Novo Material</h2></div><form onSubmit={handleMaterialSubmit} className="space-y-8"><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título do Arquivo</label><input required className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={materialForm.title} onChange={e => setMaterialForm({...materialForm, title: e.target.value})} placeholder="Ex: Slide Aula 1" /></div><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select required className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 appearance-none cursor-pointer" value={materialForm.className} onChange={e => setMaterialForm({...materialForm, className: e.target.value})}><option value="">-- Selecione --</option>{myClasses.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Pasta</label><select required className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 appearance-none cursor-pointer" value={materialForm.subject} onChange={e => setMaterialForm({...materialForm, subject: e.target.value})}><option value="GERAL">-- Geral --</option>{subjects.map(s => <option key={s} value={s}>{s}</option>)}</select></div><div className="space-y-3"><div className="border-2 border-dashed border-white/5 rounded-[2rem] p-10 text-center hover:border-red-600/30 transition-all relative bg-black/20 group cursor-pointer"><input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files && setMaterialFile(e.target.files[0])} /><div className="flex flex-col items-center"><FileUp className="text-gray-700 group-hover:text-red-600 transition-all mb-4" size={40} /><p className="text-gray-500 font-black uppercase text-[10px] tracking-widest">{materialFile ? materialFile.name : 'Clique para anexar'}</p></div></div></div><Button type="submit" isLoading={isLoading} className="w-full h-16 rounded-[1.5rem] font-black uppercase tracking-widest bg-red-600 hover:bg-red-700 shadow-2xl shadow-red-900/40">Publicar Material</Button></form></div></div><div className="lg:col-span-8 space-y-4">
+                                {materials.length > 0 ? materials.map(mat => (
+                                    <div key={mat.id} className="bg-[#18181b] border border-white/5 rounded-[1.8rem] p-6 flex items-center justify-between group hover:border-red-600/20 transition-all shadow-xl"><div className="flex items-center gap-6"><div className="h-14 w-14 bg-black/40 rounded-2xl flex items-center justify-center text-gray-500 group-hover:text-red-500 transition-colors border border-white/5 shadow-inner"><FileText size={24} /></div><div><h3 className="font-black text-white uppercase tracking-tight text-lg mb-1">{mat.title}</h3><div className="flex items-center gap-3"><span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">{mat.className}</span><div className="h-1 w-1 rounded-full bg-gray-800" /><span className="text-[9px] font-black text-red-500 uppercase tracking-widest">{mat.subject}</span><div className="h-1 w-1 rounded-full bg-gray-800" /><span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">{new Date(mat.createdAt).toLocaleDateString()}</span></div></div></div><div className="flex items-center gap-3"><a href={mat.fileUrl} target="_blank" rel="noreferrer" className="h-12 w-12 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center text-gray-400 hover:text-white transition-all border border-white/5"><Eye size={20} /></a><button onClick={async () => { if(confirm("Deseja excluir este material?")) { await deleteClassMaterial(mat.id); setMaterials(await getClassMaterials(user!.id)); } }} className="h-12 w-12 bg-white/5 hover:bg-red-600/10 rounded-xl flex items-center justify-center text-gray-400 hover:text-red-500 transition-all border border-white/5"><Trash2 size={20} /></button></div></div>
+                                )) : (
+                                    <div className="bg-[#18181b] border border-dashed border-white/5 rounded-[2.5rem] p-20 text-center opacity-20"><Folder size={64} className="mx-auto mb-4" /><p className="font-black uppercase tracking-widest">Nenhum material publicado</p></div>
+                                )}
+                            </div></div>
+                    </div>
+                )}
+
+                {activeTab === 'exams' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex justify-between items-center"><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Fila de Impressões</h1><p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Acompanhamento da gráfica</p></div><Button onClick={() => setActiveTab('send_to_print')} className="bg-red-600 h-14 px-8 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40"><Plus size={18} className="mr-2"/> Nova</Button></header>
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl"><table className="w-full text-left"><thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]"><tr><th className="p-8">Data</th><th className="p-8">Atividade</th><th className="p-8">Turma</th><th className="p-8">Status</th><th className="p-8 text-right">Arquivo</th></tr></thead><tbody className="divide-y divide-white/5">
+                                    {exams.map(e => (
+                                        <tr key={e.id} className="hover:bg-white/[0.02]"><td className="p-8 text-xs font-bold text-gray-500">{new Date(e.createdAt).toLocaleDateString()}</td><td className="p-8"><p className="font-black text-white uppercase text-sm">{String(e.title || '')}</p></td><td className="p-8"><span className="bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-full text-[10px] font-black text-red-400 uppercase">{String(e.gradeLevel || '')}</span></td><td className="p-8"><StatusBadge status={e.status}/></td><td className="p-8 text-right"><div className="flex flex-col gap-2 items-end">{e.fileUrls?.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg text-gray-400 hover:text-white transition-all border border-white/5 group"><span className="text-[10px] font-bold uppercase truncate max-w-[150px]">{e.fileNames?.[i] || 'Ver'}</span><Eye size={12} className="group-hover:text-red-500"/></a>)}</div></td></tr>
+                                    ))}
+                                </tbody></table></div>
+                    </div>
+                )}
+
+                {activeTab === 'send_to_print' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto space-y-12">
+                        <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
+                            <div className="flex justify-between items-center mb-8"><div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Modelos Padronizados</h2><p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest">Faça o download dos cabeçalhos oficiais antes de imprimir</p></div><Layout className="text-gray-800" size={48} /></div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/P7S4V9F9/image.png', 'Cabeçalho_de_Atividades.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
+                                    <div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all"><Download size={20} /></div>
+                                    <span className="text-[10px] font-black text-white uppercase tracking-widest text-left leading-tight">Cabeçalho de Atividades</span>
+                                </button>
+                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/9R2CqM5q/image.png', 'Cabeçalho_Kronos.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
+                                    <div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all"><Download size={20} /></div>
+                                    <span className="text-[10px] font-black text-white uppercase tracking-widest text-left leading-tight">Cabeçalho Kronos</span>
+                                </button>
+                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/C3fWvFvN/image.png', 'Cabeçalho_de_Avaliação.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
+                                    <div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all"><Download size={20} /></div>
+                                    <span className="text-[10px] font-black text-white uppercase tracking-widest text-left leading-tight">Cabeçalho de Avaliação</span>
+                                </button>
+                            </div>
+                        </section>
+                        <section className="bg-[#18181b] border border-white/10 rounded-[3rem] p-12 shadow-2xl relative overflow-hidden"><div className="flex items-center gap-6 mb-12"><div className="h-16 w-16 bg-red-600/10 rounded-[1.5rem] flex items-center justify-center text-red-600"><UploadCloud size={40} /></div><h2 className="text-4xl font-black text-white uppercase tracking-tighter">Enviar p/ Gráfica</h2></div><form onSubmit={handleExamSubmit} className="space-y-10"><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título do Material</label><input required className="w-full bg-black/40 border border-white/5 rounded-2xl p-6 text-white font-bold outline-none focus:border-red-600 transition-all text-lg" value={examForm.title} onChange={e => setExamForm({...examForm, title: e.target.value})} placeholder="Ex: Prova Bimestral de Matemática" /></div><div className="grid grid-cols-2 gap-8"><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select required className="w-full bg-black/40 border border-white/5 rounded-2xl p-6 text-white font-bold outline-none focus:border-red-600 appearance-none text-lg cursor-pointer" value={examForm.gradeLevel} onChange={e => setExamForm({...examForm, gradeLevel: e.target.value})}><option value="">-- Turma --</option>{myClasses.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Quantidade</label><input type="number" required className="w-full bg-black/40 border border-white/5 rounded-2xl p-6 text-white font-bold outline-none focus:border-red-600 transition-all text-lg" value={examForm.quantity} onChange={e => setExamForm({...examForm, quantity: Number(e.target.value)})} placeholder="30" /></div></div><div className="space-y-3"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Instruções da Impressão</label><textarea className="w-full bg-black/40 border border-white/5 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 transition-all min-h-[150px]" value={examForm.instructions} onChange={e => setExamForm({...examForm, instructions: e.target.value})} placeholder="Ex: Frente e verso, grampeado, papel A4..." /></div><div className="space-y-4"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 block">Anexar Arquivo(s)</label><div className="border-3 border-dashed border-white/10 rounded-[2.5rem] p-20 text-center hover:border-red-600 transition-all relative bg-black/20 group cursor-pointer"><input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => e.target.files && setExamFiles([...examFiles, ...Array.from(e.target.files)])} /><div className="flex flex-col items-center"><FileUp className="text-gray-700 group-hover:text-red-600 transition-all mb-6" size={80} /><p className="text-gray-500 font-black uppercase text-sm tracking-widest">Arraste seus arquivos PDF ou Imagens</p></div></div>{examFiles.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">{examFiles.map((f, i) => <div key={i} className="flex justify-between items-center bg-white/5 p-5 rounded-2xl border border-white/5 text-xs text-white font-bold uppercase"><div className="flex items-center gap-3"><FileText size={18} className="text-red-500" /><span className="truncate max-w-[150px]">{f.name}</span></div><button type="button" onClick={() => setExamFiles(examFiles.filter((_, idx) => idx !== i))} className="text-gray-500 hover:text-red-500 p-1"><X size={18}/></button></div>)}</div>}</div><div className="pt-8"><Button type="submit" isLoading={isLoading} className="w-full h-20 rounded-[2rem] font-black uppercase tracking-[0.2em] bg-red-600 hover:bg-red-700 shadow-2xl shadow-red-900/40 text-lg transition-all">Confirmar Envio</Button></div></form></section>
+                    </div>
+                )}
+
+                {activeTab === 'gradebook' && (
+                    <div className="animate-in fade-in slide-in-from-right-4"><header className="mb-10 flex flex-col md:flex-row justify-between items-center gap-6"><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Classe</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Lançamento de notas e avaliações</p></div><div className="flex flex-wrap gap-4"><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-6 py-3 text-white font-black text-[10px] uppercase tracking-widest outline-none focus:border-red-600 appearance-none min-w-[150px]" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}><option value="">Turma</option>{myClasses.map(c => <option key={c} value={c}>{c}</option>)}</select><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-6 py-3 text-white font-black text-[10px] uppercase tracking-widest outline-none focus:border-red-600 appearance-none min-w-[150px]" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)}><option value="">Disciplina</option>{subjects.map(s => <option key={s} value={s}>{s}</option>)}</select><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-6 py-3 text-white font-black text-[10px] uppercase tracking-widest outline-none focus:border-red-600 appearance-none min-w-[150px]" value={selectedBimester} onChange={e => setSelectedBimester(e.target.value)}><option>1º BIMESTRE</option><option>2º BIMESTRE</option><option>3º BIMESTRE</option><option>4º BIMESTRE</option></select></div></header>
+                        {selectedClass && selectedSubject ? (
+                            <div className="space-y-10"><div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-4 mb-4"><Calculator className="text-red-600" size={28} /><h3 className="text-2xl font-black text-white uppercase tracking-tight">Composição da AV1</h3></div><p className="text-xs font-black text-gray-500 uppercase tracking-[0.2em] mb-8">Soma Atual: <span className={Math.abs(totalAV1Max - 10) < 0.1 ? 'text-green-500' : 'text-red-500'}>{totalAV1Max.toFixed(1)}</span> / 10.0<span className="ml-4 opacity-50">({(gradebookData?.av1Config || []).length} de 7 atividades)</span></p>{(!gradebookData?.av1Config || gradebookData.av1Config.length === 0) ? <p className="text-gray-700 italic text-sm font-medium mt-10">Nenhuma atividade configurada para AV1.</p> : <div className="flex flex-wrap gap-4">{gradebookData.av1Config.map(av => <div key={av.id} className="bg-black/40 border border-white/5 p-4 rounded-2xl relative group min-w-[200px]"><button onClick={async () => { if(confirm("Remover atividade?")) { const updated = gradebookData.av1Config.filter(a => a.id !== av.id); await saveGradebook({ ...gradebookData, av1Config: updated }); } }} className="absolute top-2 right-2 text-red-900 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button><div className="text-xs font-black text-white uppercase truncate">{av.activityName}</div><div className="flex flex-col gap-1 mt-3 pt-3 border-t border-white/5"><div className="text-[9px] text-gray-500 font-bold uppercase tracking-tight">Aplicação: {av.applicationDate}</div><div className="text-[9px] text-gray-500 font-bold uppercase tracking-tight">Entrega: {av.deliveryDate}</div><div className="bg-red-600/10 px-2 py-1 rounded text-[10px] font-black text-red-400 mt-1 inline-block w-fit">{av.maxScore.toFixed(1)} pts</div></div></div>)}</div>}</div><button disabled={(gradebookData?.av1Config || []).length >= 7} onClick={() => setShowAV1Modal(true)} className="bg-red-600 hover:bg-red-700 disabled:opacity-30 text-white font-black uppercase text-[10px] tracking-[0.2em] px-8 h-14 rounded-2xl transition-all shadow-xl shadow-red-900/40">+ ADD ATIVIDADE</button></div></div><div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl"><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-[#121214] text-gray-500 uppercase text-[9px] font-black tracking-[0.3em] border-b border-white/5"><tr><th className="p-8 sticky left-0 bg-[#121214] z-20">Aluno</th>{gradebookData?.av1Config?.map(av => <th key={av.id} className="p-8 text-center min-w-[120px]"><span className="block text-red-500">{av.activityName.split(' ')[0]}</span><span className="text-[8px] opacity-40">Max {av.maxScore}</span></th>)}<th className="p-8 text-center bg-red-950/10">Total AV1</th><th className="p-8 text-center text-blue-400">AV2 (Simulado)</th><th className="p-8 text-center text-purple-400">AV3 (Prova)</th><th className="p-8 text-center text-green-500">Média Final</th></tr></thead><tbody className="divide-y divide-white/5">
+                                                {students.filter(s => s.className === selectedClass).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(student => {
+                                                    const grades = (gradebookData?.grades?.[student.id] || { av1: {} }) as { av1: Record<string, number>, av2?: number, av3?: number };
+                                                    const av1Sum = Object.values(grades.av1 || {}).reduce((a: number, b: number) => a + b, 0);
+                                                    const av2 = grades.av2 || 0;
+                                                    const av3 = grades.av3 || 0;
+                                                    const final = ((av1Sum + av2 + av3) / 3).toFixed(1);
+                                                    return (<tr key={student.id} className="hover:bg-white/[0.02] transition-colors"><td className="p-8 sticky left-0 bg-[#18181b] z-10 border-r border-white/5"><span className="font-black text-white text-xs uppercase tracking-tight">{student.name}</span></td>{gradebookData?.av1Config?.map(av => <td key={av.id} className="p-6 text-center"><input type="number" step="0.1" max={av.maxScore} className="w-16 bg-[#121214] border-2 border-white/5 rounded-xl p-3 text-center text-white font-black outline-none focus:border-red-600 transition-all" value={grades.av1[av.id] ?? ''} onChange={e => handleGradeUpdate(student.id, av.id, Number(e.target.value), true)} /></td>)}<td className="p-8 text-center bg-red-950/5"><span className="text-red-500 font-black text-lg">{av1Sum.toFixed(1)}</span></td><td className="p-8 text-center"><span className="text-blue-400 font-black text-lg">{av2 > 0 ? av2.toFixed(1) : '-'}</span><p className="text-[8px] text-gray-700 font-bold mt-1">ADM</p></td><td className="p-8 text-center"><div className="flex flex-col items-center gap-1"><input type="number" step="0.1" max="10" className="w-20 bg-[#121214] border-2 border-white/5 rounded-xl p-3 text-center text-purple-400 font-black outline-none focus:border-purple-600 transition-all" value={grades.av3 ?? ''} placeholder="-" onChange={e => handleGradeUpdate(student.id, 'av3', Number(e.target.value))} /><p className="text-[8px] text-gray-700 font-bold">ADM</p></div></td><td className="p-8 text-center"><span className={`text-2xl font-black ${Number(final) >= 6 ? 'text-green-500' : 'text-red-500'}`}>{final === '0.0' ? '0' : final}</span></td></tr>);
+                                                })}
+                                            </tbody></table></div></div></div>
+                        ) : <div className="py-40 text-center opacity-30 text-gray-600 font-black uppercase tracking-[0.4em]">Selecione Turma e Disciplina para gerenciar o Diário</div>}
+                    </div>
+                )}
+            </main>
+
+            {/* OCCURRENCE FORM MODAL */}
+            {showOccModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">{isEditingOcc ? <Edit3 size={24} className="text-yellow-500" /> : <PlusCircle size={24} className="text-red-600" />}{isEditingOcc ? 'Editar Registro' : 'Novo Registro'}</h3><button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><form onSubmit={handleSaveOccurrence} className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occSelectedClass} onChange={(e) => setOccSelectedClass(e.target.value)} disabled={isEditingOcc}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Aluno</label><select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.studentId} onChange={(e) => setOccForm({...occForm, studentId: e.target.value})} disabled={isEditingOcc}><option value="">-- Selecione --</option>{students.filter(s => s.className === occSelectedClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Categoria</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.category} onChange={(e) => setOccForm({...occForm, category: e.target.value as any})}><option value="indisciplina">Indisciplina</option><option value="atraso">Atraso</option><option value="desempenho">Resumo</option><option value="uniforme">Uniforme</option><option value="elogio">Elogio</option><option value="outros">Outros</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data</label><input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={occForm.date} onChange={(e) => setOccForm({...occForm, date: e.target.value})} /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Descrição Detalhada</label><textarea required className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[150px]" placeholder="Descreva o ocorrido com o máximo de detalhes..." value={occForm.description} onChange={(e) => setOccForm({...occForm, description: e.target.value})} /></div><div className="flex gap-4 pt-4"><Button type="button" variant="outline" onClick={() => setShowOccModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest">Cancelar</Button><Button type="submit" isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">{isEditingOcc ? 'Salvar Alterações' : 'Registrar Ocorrência'}</Button></div></form></div></div>
+            )}
+
+            {/* PEI FORM MODAL */}
+            {showPeiForm && currentPeiStudent && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95 flex flex-col"><div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6"><div><h3 className="text-3xl font-black text-white uppercase tracking-tight">Novo Plano PEI</h3><p className="text-sm text-gray-500 font-bold">{String(currentPeiStudent.name || '')}</p></div><button onClick={() => setShowPeiForm(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><div className="flex-1 overflow-y-auto space-y-10 pr-2 custom-scrollbar"><div className="grid grid-cols-2 gap-8"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Período</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600" value={peiData.period} onChange={e => setPeiData({...peiData, period: e.target.value})}><option>1º BIMESTRE</option><option>2º BIMESTRE</option><option>3º BIMESTRE</option><option>4º BIMESTRE</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Disciplina</label><div className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-gray-400 font-black uppercase text-xs tracking-widest">{user?.subject || 'Geral'}</div></div></div><div className="space-y-8"><div className="space-y-2"><label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Competências Essenciais</label><textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[120px]" value={peiData.essentialCompetencies} onChange={e => setPeiData({...peiData, essentialCompetencies: e.target.value})} placeholder="Descreva as competências a serem desenvolvidas..." /></div><div className="space-y-2"><label className="text-[10px] font-black text-emerald-500 uppercase tracking-widest ml-2">Conteúdos Selecionados</label><textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white font-medium text-sm outline-none focus:border-emerald-600 min-h-[120px]" value={peiData.selectedContents} onChange={e => setPeiData({...peiData, selectedContents: e.target.value})} placeholder="Liste os conteúdos prioritários..." /></div><div className="space-y-2"><label className="text-[10px] font-black text-amber-500 uppercase tracking-widest ml-2">Recursos Didáticos</label><textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white font-medium text-sm outline-none focus:border-amber-600 min-h-[120px]" value={peiData.didacticResources} onChange={e => setPeiData({...peiData, didacticResources: e.target.value})} placeholder="Recursos e adaptações necessárias..." /></div><div className="space-y-2"><label className="text-[10px] font-black text-blue-500 uppercase tracking-widest ml-2">Avaliação</label><textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white font-medium text-sm outline-none focus:border-blue-600 min-h-[120px]" value={peiData.evaluation} onChange={e => setPeiData({...peiData, evaluation: e.target.value})} placeholder="Critérios e formas de avaliação adaptada..." /></div></div></div><div className="pt-8 border-t border-white/5 flex gap-4 mt-6"><Button variant="outline" onClick={() => setShowPeiForm(false)} className="flex-1 h-16 rounded-2xl font-black uppercase text-xs tracking-widest">Cancelar</Button><Button onClick={handleSavePei} isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">Salvar Planejamento PEI</Button></div></div></div>
+            )}
+
+            {/* AV1 CONFIG MODAL */}
+            {showAV1Modal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] p-10 animate-in zoom-in-95 shadow-2xl"><h3 className="text-2xl font-black text-white uppercase tracking-tight mb-8 flex items-center gap-3"><Plus size={24} className="text-red-600"/> CONFIGURAR COLUNA AV1</h3><div className="space-y-6"><div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-2 block">Nome da Atividade</label><input className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600" placeholder="Ex: SEMINÁRIO DE HISTÓRIA" value={newAV1.activityName} onChange={e => setNewAV1({...newAV1, activityName: e.target.value.toUpperCase()})}/></div><div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-2 block">Data de Aplicação</label><div className="relative"><CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={16}/><input className="w-full bg-black/40 border border-white/10 rounded-xl p-4 pl-12 text-white font-bold outline-none focus:border-red-600 text-xs" placeholder="01/03" value={newAV1.applicationDate} onChange={e => setNewAV1({...newAV1, applicationDate: e.target.value})}/></div></div><div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-2 block">Data de Entrega</label><div className="relative"><CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={16}/><input className="w-full bg-black/40 border border-white/10 rounded-xl p-4 pl-12 text-white font-bold outline-none focus:border-red-600 text-xs" placeholder="15/03" value={newAV1.deliveryDate} onChange={e => setNewAV1({...newAV1, deliveryDate: e.target.value})}/></div></div></div><div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-2 block">Peso / Pontuação</label><input type="number" step="0.1" className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-black outline-none focus:border-red-600 text-center" value={newAV1.maxScore} onChange={e => setNewAV1({...newAV1, maxScore: Number(e.target.value)})}/></div><div className="bg-red-600/5 p-5 rounded-2xl border border-red-600/20 text-[10px] font-medium text-gray-400"><span className="font-black text-red-500 uppercase block mb-1">Informação:</span>A soma total das colunas de AV1 deve ser exatamente 10.0 al final do bimestre.</div><div className="flex gap-4 pt-4"><Button variant="outline" onClick={() => setShowAV1Modal(false)} className="flex-1 rounded-xl h-14 font-black uppercase text-[10px] tracking-widest">Cancelar</Button><Button onClick={handleAddAV1} className="flex-1 bg-red-600 rounded-xl h-14 font-black uppercase text-[10px] tracking-widest">Adicionar Coluna</Button></div></div></div></div>
             )}
         </div>
-
-        {/* --- MODAIS --- */}
-
-        {showOccurrenceModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95">
-                    <h3 className="text-2xl font-black text-white uppercase tracking-tight mb-8">Nova Ocorrência</h3>
-                    <div className="space-y-6">
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Turma</label>
-                            <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occurrenceClass} onChange={e => setOccurrenceClass(e.target.value)}>
-                                <option value="">Selecione...</option>
-                                {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Aluno</label>
-                            <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occurrenceForm.studentId} onChange={e => setOccurrenceForm({...occurrenceForm, studentId: e.target.value})} disabled={!occurrenceClass}>
-                                <option value="">Selecione...</option>
-                                {students.filter(s => s.className === occurrenceClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Descrição</label>
-                            <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-red-600 min-h-[100px]" value={occurrenceForm.description} onChange={e => setOccurrenceForm({...occurrenceForm, description: e.target.value})} />
-                        </div>
-                        <div className="flex gap-4 pt-4">
-                            <Button variant="outline" onClick={() => setShowOccurrenceModal(false)} className="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Cancelar</Button>
-                            <Button onClick={handleSaveOccurrence} className="flex-1 h-14 bg-red-600 rounded-2xl font-black uppercase text-[10px]">Salvar</Button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {showPeiModal && editingPei && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl max-h-[90vh] rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95 flex flex-col">
-                    <div className="flex justify-between items-center mb-8 shrink-0"><div><h3 className="text-2xl font-black text-white uppercase tracking-tight">Documento PEI</h3><p className="text-sm text-gray-500 font-bold uppercase tracking-widest">{editingPei.studentName}</p></div><button onClick={() => setShowPeiModal(false)} className="text-gray-500 hover:text-white"><X size={32}/></button></div>
-                    <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2">
-                        <div className="grid grid-cols-2 gap-6"><div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Disciplina</label><input className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-blue-600" value={editingPei.subject} onChange={e => setEditingPei({...editingPei, subject: e.target.value})} /></div><div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Período</label><select className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-blue-600 appearance-none" value={editingPei.period} onChange={e => setEditingPei({...editingPei, period: e.target.value})}><option>1º Bimestre</option><option>2º Bimestre</option><option>3º Bimestre</option><option>4º Bimestre</option></select></div></div>
-                        <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Competências Essenciais</label><textarea rows={4} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={editingPei.essentialCompetencies} onChange={e => setEditingPei({...editingPei, essentialCompetencies: e.target.value})} placeholder="O que é essencial que o aluno aprenda neste período?" /></div>
-                        <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Conteúdos Selecionados</label><textarea rows={4} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={editingPei.selectedContents} onChange={e => setEditingPei({...editingPei, selectedContents: e.target.value})} placeholder="Quais conteúdos serão trabalhados?" /></div>
-                        <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Recursos Didáticos</label><textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={editingPei.didacticResources} onChange={e => setEditingPei({...editingPei, didacticResources: e.target.value})} placeholder="Materiais adaptados, jogos, tecnologia..." /></div>
-                        <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest">Avaliação</label><textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={editingPei.evaluation} onChange={e => setEditingPei({...editingPei, evaluation: e.target.value})} placeholder="Como será avaliado o progresso?" /></div>
-                    </div>
-                    <div className="pt-6 mt-4 border-t border-white/5 shrink-0"><Button onClick={handleSavePEI} isLoading={isSaving} className="w-full h-16 bg-blue-600 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-900/20">Salvar Planejamento PEI</Button></div>
-                </div>
-            </div>
-        )}
-
-        {showPlanModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                <div className={`bg-[#18181b] border border-white/10 w-full rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95 flex flex-col max-h-[95vh] ${newPlan.type !== 'daily' ? 'max-w-6xl' : 'max-w-2xl'}`}>
-                    <div className="flex justify-between items-center mb-8 shrink-0">
-                        <div className="flex items-center gap-4">
-                            <div className={`p-3 rounded-xl ${newPlan.type === 'bimester' ? 'bg-blue-600/10 text-blue-500' : newPlan.type === 'inova' ? 'bg-purple-600/10 text-purple-500' : 'bg-red-600/10 text-red-500'}`}>
-                                {newPlan.type === 'bimester' ? <BookMarked size={24}/> : newPlan.type === 'inova' ? <Sparkles size={24}/> : <Clock size={24}/>}
-                            </div>
-                            <div>
-                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Novo Planejamento</h3>
-                                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">{newPlan.type === 'bimester' ? 'Modelo Institucional Oficial' : newPlan.type === 'inova' ? 'Instrumental 2026 - Inova AI' : 'Registro de Aula'}</p>
-                            </div>
-                        </div>
-                        <button onClick={() => setShowPlanModal(false)} className="text-gray-500 hover:text-white"><X size={32}/></button>
-                    </div>
-                    <div className="space-y-8 overflow-y-auto flex-1 custom-scrollbar pr-4 pb-10">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Tipo</label>
-                                <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={newPlan.type} onChange={e => setNewPlan({...newPlan, type: e.target.value})}>
-                                    <option value="daily">Diário</option>
-                                    <option value="bimester">Bimestral (Oficial)</option>
-                                    <option value="inova">Inova AI (Instrumental)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Turma</label>
-                                <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={newPlan.className} onChange={e => setNewPlan({...newPlan, className: e.target.value})}>
-                                    <option value="">Selecionar...</option>
-                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </div>
-                            {newPlan.type === 'daily' && (
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Assunto / Tema</label>
-                                    <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={newPlan.topic} onChange={e => setNewPlan({...newPlan, topic: e.target.value})} placeholder="Tema da aula..." />
-                                </div>
-                            )}
-                            {newPlan.type === 'bimester' && (
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Bimestre</label>
-                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-blue-600 appearance-none" value={newPlan.bimester} onChange={e => setNewPlan({...newPlan, bimester: e.target.value})}>
-                                        <option value="1º BIMESTRE">1º BIMESTRE</option>
-                                        <option value="2º BIMESTRE">2º BIMESTRE</option>
-                                        <option value="3º BIMESTRE">3º BIMESTRE</option>
-                                        <option value="4º BIMESTRE">4º BIMESTRE</option>
-                                    </select>
-                                </div>
-                            )}
-                            {newPlan.type === 'inova' && (
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Tema do Subprojeto</label>
-                                    <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-purple-600" value={newPlan.inovaTheme} onChange={e => setNewPlan({...newPlan, inovaTheme: e.target.value})} placeholder="Tema principal..." />
-                                </div>
-                            )}
-                        </div>
-                        {newPlan.type === 'bimester' && (
-                            <div className="space-y-8 animate-in slide-in-from-bottom-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Componente Curricular</label><input className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-blue-600" value={newPlan.topic} onChange={e => setNewPlan({...newPlan, topic: e.target.value})} placeholder="Ex: Matemática" /></div>
-                                    <div className="md:col-span-2"><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Breve Justificativa</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.justification} onChange={e => setNewPlan({...newPlan, justification: e.target.value})} placeholder="Descrição da importância dos conceitos..." /></div>
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Conteúdos</label><textarea rows={4} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.contents} onChange={e => setNewPlan({...newPlan, contents: e.target.value})} placeholder="Descrição dos conteúdos..." /></div>
-                                    <div className="space-y-4">
-                                        <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Habilidades Cognitivas</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.cognitiveSkills} onChange={e => setNewPlan({...newPlan, cognitiveSkills: e.target.value})} /></div>
-                                        <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Habilidades Socioemocionais</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.socioEmotionalSkills} onChange={e => setNewPlan({...newPlan, socioEmotionalSkills: e.target.value})} /></div>
-                                    </div>
-                                    <div className="md:col-span-2"><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Situações Didáticas</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.didacticSituations} onChange={e => setNewPlan({...newPlan, didacticSituations: e.target.value})} placeholder="Estratégias para assegurar a aprendizagem..." /></div>
-                                </div>
-                                <div className="bg-white/5 p-8 rounded-3xl border border-white/5 space-y-6">
-                                    <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest flex items-center gap-2"><Layers size={14}/> Grid de Atividades</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        {['Prévias', 'Autodidáticas', 'Didático-Cooperativas', 'Complementares'].map((label, i) => {
-                                            const key = i === 0 ? 'activitiesPrevious' : i === 1 ? 'activitiesAutodidactic' : i === 2 ? 'activitiesCooperative' : 'activitiesComplementary';
-                                            return (<div key={key}><label className="block text-[9px] font-black text-gray-500 uppercase mb-2 tracking-widest">{label}</label><textarea rows={6} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[11px] text-white outline-none focus:border-blue-600" value={newPlan[key as keyof LessonPlan] as string} onChange={e => setNewPlan({...newPlan, [key]: e.target.value})} /></div>);
-                                        })}
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Práticas Educativas</label><textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.educationalPractices} onChange={e => setNewPlan({...newPlan, educationalPractices: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Espaços Educativos</label><textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.educationalSpaces} onChange={e => setNewPlan({...newPlan, educationalSpaces: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Recursos Didáticos</label><textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.didacticResources} onChange={e => setNewPlan({...newPlan, didacticResources: e.target.value})} /></div>
-                                    <div className="md:col-span-2"><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Estratégias de Avaliação</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.evaluationStrategies} onChange={e => setNewPlan({...newPlan, evaluationStrategies: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Fontes de Referência</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-blue-600" value={newPlan.referenceSources} onChange={e => setNewPlan({...newPlan, referenceSources: e.target.value})} /></div>
-                                </div>
-                            </div>
-                        )}
-                        {newPlan.type === 'inova' && (
-                            <div className="space-y-8 animate-in slide-in-from-bottom-4">
-                                <div className="p-6 rounded-3xl bg-red-900/10 border border-red-500/20"><label className="block text-[10px] font-black text-red-500 uppercase mb-2 tracking-widest">2. Questão Norteadora</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-lg font-bold outline-none focus:border-red-600" value={newPlan.guidingQuestion} onChange={e => setNewPlan({...newPlan, guidingQuestion: e.target.value})} placeholder="Que problema real vamos investigar e melhorar?" /></div>
-                                <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">3. Objetivo do Subprojeto</label><textarea rows={2} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-purple-600" value={newPlan.subprojectGoal} onChange={e => setNewPlan({...newPlan, subprojectGoal: e.target.value})} placeholder="Ao final, os alunos serão capazes de...?" /></div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">4. Resultados Esperados</h4>
-                                        <div className="space-y-3">{['Consciência ambiental/consumo responsável', 'Criatividade e autoria (criar algo)', 'Colaboração e protagonismo', 'Comunicação (apresentar/explicar)', 'Investigação (observação/pesquisa/dados)', 'Uso responsável de tecnologia/IA'].map(opt => (<InovaCheckbox key={opt} label={opt} checked={newPlan.expectedResults?.includes(opt) || false} onChange={(checked) => { const current = newPlan.expectedResults || []; setNewPlan({...newPlan, expectedResults: checked ? [...current, opt] : current.filter(x => x !== opt)}); }} />))}</div>
-                                    </div>
-                                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">5. Produto Final</h4>
-                                        <div className="grid grid-cols-2 gap-2 mb-4">{['Painel/Cartaz', 'Maquete Digital/Protótipo', 'Experimento', 'Podcast/Vídeo', 'Campanha/Intervenção', 'Seminário'].map(opt => (<label key={opt} className="flex items-center gap-2 cursor-pointer"><input type="radio" name="finalProduct" className="accent-purple-600" checked={newPlan.finalProductType === opt} onChange={() => setNewPlan({...newPlan, finalProductType: opt})} /><span className="text-[9px] font-bold text-gray-400 uppercase">{opt}</span></label>))}</div>
-                                        <label className="block text-[9px] font-black text-gray-500 uppercase mb-1">Descrição</label><textarea rows={3} className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs outline-none focus:border-purple-600" value={newPlan.finalProductDescription} onChange={e => setNewPlan({...newPlan, finalProductDescription: e.target.value})} />
-                                    </div>
-                                </div>
-                                <div className="bg-purple-900/10 border border-purple-500/30 p-8 rounded-[2rem] relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-4 opacity-10"><Bot size={100} className="text-purple-500"/></div>
-                                    <h4 className="text-sm font-black text-purple-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Sparkles size={16}/> 9. Uso de IA (Obrigatório)</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div><label className="block text-[10px] font-black text-purple-300 uppercase mb-2 tracking-widest">Ferramenta(s)</label><input className="w-full bg-black/40 border border-purple-500/20 rounded-xl p-4 text-white font-bold outline-none focus:border-purple-500" value={newPlan.aiTools} onChange={e => setNewPlan({...newPlan, aiTools: e.target.value})} placeholder="ChatGPT, Gemini..." /></div>
-                                        <div><label className="block text-[10px] font-black text-purple-300 uppercase mb-2 tracking-widest">Cuidado Adotado</label><input className="w-full bg-black/40 border border-purple-500/20 rounded-xl p-4 text-white text-sm outline-none focus:border-purple-500" value={newPlan.aiCare} onChange={e => setNewPlan({...newPlan, aiCare: e.target.value})} /></div>
-                                        <div className="md:col-span-2">
-                                            <label className="block text-[10px] font-black text-purple-300 uppercase mb-2 tracking-widest">Para quê?</label>
-                                            <div className="flex flex-wrap gap-3">{['Ideias', 'Roteiro', 'Texto', 'Imagem', 'Vídeo', 'Dados/Gráficos'].map(p => (<label key={p} className={`px-4 py-2 rounded-lg border text-[10px] font-black uppercase cursor-pointer transition-all ${newPlan.aiPurpose?.includes(p) ? 'bg-purple-600 border-purple-500 text-white' : 'bg-black/20 border-purple-500/20 text-purple-300'}`}><input type="checkbox" className="hidden" checked={newPlan.aiPurpose?.includes(p) || false} onChange={e => { const current = newPlan.aiPurpose || []; setNewPlan({...newPlan, aiPurpose: e.target.checked ? [...current, p] : current.filter(x => x !== p)}); }} />{p}</label>))}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">7. Cronograma Mínimo</label><textarea rows={6} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-xs font-mono outline-none focus:border-purple-600" value={newPlan.schedule} onChange={e => setNewPlan({...newPlan, schedule: e.target.value})} /></div>
-                                    <div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">8. Recursos Necessários</label><textarea rows={6} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm outline-none focus:border-purple-600" value={newPlan.resourcesNeeded} onChange={e => setNewPlan({...newPlan, resourcesNeeded: e.target.value})} /></div>
-                                </div>
-                            </div>
-                        )}
-                        {newPlan.type === 'daily' && (
-                            <div className="space-y-6"><div><label className="block text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest ml-1">Conteúdo e Metodologia</label><textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium outline-none focus:border-red-600 min-h-[300px] text-sm leading-relaxed" value={newPlan.content} onChange={e => setNewPlan({...newPlan, content: e.target.value})} placeholder="Descreva os objetivos e etapas da aula..." /></div></div>
-                        )}
-                    </div>
-                    <div className="pt-8 border-t border-white/5 mt-auto flex justify-end">
-                        <Button onClick={handleSavePlan} isLoading={isSaving} className={`w-full md:w-auto px-12 h-16 rounded-2xl font-black uppercase tracking-widest shadow-xl ${newPlan.type === 'bimester' ? 'bg-blue-600 shadow-blue-900/40' : newPlan.type === 'inova' ? 'bg-purple-600 shadow-purple-900/40' : 'bg-red-600 shadow-red-900/40'}`}><Save size={18} className="mr-3"/> Salvar Planejamento</Button>
-                    </div>
-                </div>
-            </div>
-        )}
-    </div>
-  );
+    );
 };

@@ -13,8 +13,9 @@ import { HRDashboard } from './pages/HRDashboard';
 import { LibraryDashboard } from './pages/LibraryDashboard';
 import { AEEDashboard } from './pages/AEEDashboard';
 import { InfantilDashboard } from './pages/InfantilDashboard';
+import { StudentPortal } from './pages/StudentPortal';
 import { UserRole } from './types';
-import { LogOut, LayoutGrid, Heart, BookOpen, Baby, GraduationCap, Printer, Users } from 'lucide-react';
+import { LogOut, LayoutGrid, Heart, BookOpen, Baby, GraduationCap, Printer, Users, School } from 'lucide-react';
 
 const AppContent = () => {
     const { user, isAuthenticated, logout, loading } = useAuth();
@@ -45,6 +46,7 @@ const AppContent = () => {
     // Terminais específicos
     if (user?.role === UserRole.ATTENDANCE_TERMINAL) return <AttendanceTerminal />;
     if (user?.role === UserRole.STAFF_TERMINAL) return <StaffAttendanceTerminal />;
+    if (user?.role === UserRole.STUDENT) return <StudentPortal />;
 
     const activeRole = sessionRole || user?.role;
 
@@ -92,6 +94,12 @@ const AppContent = () => {
                                 <span className="font-black uppercase text-xs text-white tracking-widest">Infantil</span>
                             </button>
                         )}
+                        {user.roles.includes(UserRole.STUDENT) && (
+                            <button onClick={() => setSessionRole(UserRole.STUDENT)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-blue-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
+                                <School size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
+                                <span className="font-black uppercase text-xs text-white tracking-widest">Portal do Aluno</span>
+                            </button>
+                        )}
                     </div>
                     <button onClick={logout} className="mt-16 text-gray-500 hover:text-white font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 mx-auto">
                         <LogOut size={16}/> Encerrar Sessão
@@ -100,6 +108,8 @@ const AppContent = () => {
             </div>
         );
     }
+
+    if (activeRole === UserRole.STUDENT) return <StudentPortal />;
 
     return (
         <div className="min-h-screen">

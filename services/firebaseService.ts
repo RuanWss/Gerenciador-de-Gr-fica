@@ -145,6 +145,70 @@ export const updateSystemUserProfile = async (email: string, data: any) => {
     }
 };
 
+// --- STUDENT CREDENTIALS ---
+
+const generateRandomCode = (length: number): string => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, O, 1, 0 to avoid confusion
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+};
+
+export const generateStudentCredentials = async (studentId: string): Promise<Student> => {
+    const studentRef = doc(db, STUDENTS_COLLECTION, studentId);
+    const studentSnap = await getDoc(studentRef);
+    
+    if (!studentSnap.exists()) throw new Error("Aluno não encontrado");
+    
+    const studentData = studentSnap.data() as Student;
+    
+    // Generate Random Login (6 chars) and Password (6 chars)
+    const accessLogin = generateRandomCode(6);
+    const accessPassword = generateRandomCode(6);
+    
+    // 1. Create Auth User in Secondary App
+    const secondaryApp = initializeApp(firebaseConfig, "SecondaryStudentAuth");
+    const secondaryAuth = getAuth(secondaryApp);
+    
+    const fakeEmail = `${accessLogin}@aluno.cemal`;
+    
+    try {
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, fakeEmail, accessPassword);
+        
+        // 2. Create User Profile in Firestore
+        const user: User = {
+            id: userCredential.user.uid,
+            name: studentData.name,
+            email: fakeEmail,
+            role: UserRole.STUDENT,
+            roles: [UserRole.STUDENT],
+            studentData: {
+                classId: studentData.classId || '',
+                className: studentData.className
+            }
+        };
+        
+        await setDoc(doc(db, USERS_COLLECTION, user.id), user);
+        
+        // 3. Update Student Record
+        await updateDoc(studentRef, {
+            accessLogin,
+            accessPassword,
+            hasAccess: true
+        });
+        
+        await signOut(secondaryAuth);
+        
+        return { ...studentData, accessLogin, accessPassword, hasAccess: true };
+        
+    } catch (e: any) {
+        console.error("Error creating student auth", e);
+        throw e;
+    }
+};
+
 // --- SYSTEM CONFIG ---
 
 export const listenToSystemConfig = (callback: (config: SystemConfig) => void, onError?: (error: any) => void) => {
@@ -329,18 +393,30 @@ export const listenToAttendanceLogs = (date: string, callback: (logs: Attendance
 // --- ATTENDANCE (STAFF) ---
 
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<string> => {
-    const recentLimit = Date.now() - (2 * 60 * 1000); // 2 minutes
-    const q = query(
+    const today = new Date().toISOString().split('T')[0];
+    const qLast = query(
         collection(db, STAFF_LOGS_COLLECTION),
         where("staffId", "==", log.staffId),
-        where("timestamp", ">", recentLimit)
+        where("dateString", "==", today),
+        orderBy("timestamp", "desc"),
+        limit(1)
     );
-    const snapshot = await getDocs(q);
-    if (!snapshot.empty) return 'too_soon';
+    
+    const snapshotLast = await getDocs(qLast);
+    let type: 'entry' | 'exit' = 'entry';
+    
+    if (!snapshotLast.empty) {
+        const lastDoc = snapshotLast.docs[0].data() as StaffAttendanceLog;
+        // Anti-jitter: 2 minutes
+        if (Date.now() - lastDoc.timestamp < 2 * 60 * 1000) return 'too_soon';
+        
+        // Alternar automaticamente entre entrada e saída
+        type = lastDoc.type === 'entry' ? 'exit' : 'entry';
+    }
 
     const docRef = doc(collection(db, STAFF_LOGS_COLLECTION));
-    await setDoc(docRef, { ...log, id: docRef.id });
-    return 'success';
+    await setDoc(docRef, { ...log, id: docRef.id, type });
+    return `success_${type}`;
 };
 
 export const listenToStaffLogs = (date: string, callback: (logs: StaffAttendanceLog[]) => void, onError?: (error: any) => void) => {
@@ -386,7 +462,7 @@ export const listenToOccurrences = (callback: (occurrences: StudentOccurrence[])
 };
 
 export const saveOccurrence = async (occurrence: StudentOccurrence) => {
-    const docRef = doc(collection(db, OCCURRENCES_COLLECTION));
+    const docRef = occurrence.id ? doc(db, OCCURRENCES_COLLECTION, occurrence.id) : doc(collection(db, OCCURRENCES_COLLECTION));
     await setDoc(docRef, { ...occurrence, id: docRef.id });
 };
 
@@ -615,6 +691,16 @@ export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void, o
     }, (error) => {
         if (onError) onError(error);
         else console.error("Error listening to library loans:", error);
+    });
+};
+
+export const listenToStudentLoans = (studentId: string, callback: (loans: LibraryLoan[]) => void, onError?: (error: any) => void) => {
+    const q = query(collection(db, LIBRARY_LOANS_COLLECTION), where("studentId", "==", studentId));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
+    }, (error) => {
+        if (onError) onError(error);
+        else console.error("Error listening to student loans:", error);
     });
 };
 

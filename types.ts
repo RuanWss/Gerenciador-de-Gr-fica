@@ -8,7 +8,8 @@ export enum UserRole {
   CLASSROOM = 'CLASSROOM',
   LIBRARY = 'LIBRARY',
   AEE = 'AEE',
-  KINDERGARTEN = 'KINDERGARTEN'
+  KINDERGARTEN = 'KINDERGARTEN',
+  STUDENT = 'STUDENT'
 }
 
 export interface User {
@@ -22,6 +23,10 @@ export interface User {
   classes?: string[];
   phone?: string;
   educationLevels?: string[];
+  studentData?: {
+    classId: string;
+    className: string;
+  };
 }
 
 export enum ExamStatus {
@@ -83,6 +88,9 @@ export interface Student {
   coordinationOpinion?: string;
   skills?: string;
   weaknesses?: string;
+  accessLogin?: string;
+  accessPassword?: string;
+  hasAccess?: boolean;
 }
 
 export interface StudentOccurrence {
@@ -153,16 +161,15 @@ export interface LessonPlan {
   createdAt: number;
   topic?: string;
   content?: string;
-  type?: string;
-  
-  // --- CAMPOS BIMESTRAIS (Conforme Imagem) ---
+  type?: 'diario' | 'bimestral' | 'inova';
   bimester?: string;
+  date?: string;
+  // Bimestral fields (based on Image)
   justification?: string;
   contents?: string;
   cognitiveSkills?: string;
   socioEmotionalSkills?: string;
   didacticSituations?: string;
-  // Grid de Atividades
   activitiesPrevious?: string;
   activitiesAutodidactic?: string;
   activitiesCooperative?: string;
@@ -172,15 +179,14 @@ export interface LessonPlan {
   didacticResources?: string;
   evaluationStrategies?: string;
   referenceSources?: string;
-
-  // --- CAMPOS PROJETO INOVA AI (Conforme PDF) ---
+  // Inova fields (based on PDF)
   inovaTheme?: string;
-  guidingQuestion?: string; // Questão Norteadora
-  subprojectGoal?: string; // Objetivo
-  expectedResults?: string[]; // Resultados Esperados (Checklist)
-  finalProductType?: string; // Produto Final (Select/Radio)
-  finalProductDescription?: string; // Descrição do produto
-  projectSteps?: { // Checklist de Execução
+  guidingQuestion?: string;
+  subprojectGoal?: string;
+  expectedResults?: string[];
+  finalProductType?: string;
+  finalProductDescription?: string;
+  projectSteps?: {
     sensitize: boolean;
     investigate: boolean;
     create: boolean;
@@ -188,13 +194,12 @@ export interface LessonPlan {
     present: boolean;
     register: boolean;
   };
-  schedule?: string; // Cronograma (pode ser texto livre ou estruturado)
+  schedule?: string;
   resourcesNeeded?: string;
-  // Uso de IA
-  aiTools?: string; // Ferramentas (ChatGPT, Gemini...)
-  aiPurpose?: string[]; // Ideias, Roteiro, Texto...
-  aiCare?: string; // Cuidado adotado
-  evidence?: string; // Evidências de execução
+  aiTools?: string;
+  aiPurpose?: string[];
+  aiCare?: string;
+  evidence?: string[];
 }
 
 export type LessonPlanType = string;
@@ -278,6 +283,7 @@ export interface StaffAttendanceLog {
   staffPhotoUrl: string;
   timestamp: number;
   dateString: string;
+  type?: 'entry' | 'exit';
 }
 
 export interface SchoolClass {
@@ -344,9 +350,9 @@ export interface AEEAppointment {
 
 export interface AV1Activity {
   id: string;
-  name: string;
-  date: string;
-  deliveryDate?: string;
+  activityName: string; // Nome da Atividade
+  applicationDate: string; // Data de Aplicação
+  deliveryDate: string; // Data de Entrega
   maxScore: number;
 }
 
@@ -356,11 +362,10 @@ export interface GradebookEntry {
   subject: string;
   bimester: string;
   av1Config: AV1Activity[];
-  // Map: studentId -> scores
   grades: Record<string, {
-    av1: Record<string, number>; // activityId -> score
-    av2?: number; // Simulado (0-10)
-    av3?: number; // Prova (0-10)
+    av1: Record<string, number>; 
+    av2?: number; 
+    av3?: number; 
   }>;
   updatedAt: number;
 }
