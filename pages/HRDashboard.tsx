@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     saveStaffMember, 
     updateStaffMember, 
@@ -6,12 +6,6 @@ import {
     uploadStaffPhoto, 
     listenToStaffMembers, 
     listenToStaffLogs,
-    createSystemUserAuth,
-    updateSystemUserRoles,
-    updateSystemUserProfile,
-    getDailySchoolLog,
-    getMonthlySchoolLogs,
-    getMonthlyStaffLogs,
     listenToStudents,
     generateStudentCredentials,
     saveStudent,
@@ -28,34 +22,29 @@ import {
     XCircle, 
     Clock, 
     Calendar, 
-    FileSpreadsheet, 
     Briefcase, 
     Loader2, 
     Save, 
     X, 
     Plus,
+    // FIX: Added missing PlusCircle import
+    PlusCircle,
     AlertTriangle,
     UserCheck,
-    ClipboardList,
-    Lock,
-    UserX,
-    Star,
     Repeat,
     ArrowRight,
-    Download,
-    BookOpen,
     Layers,
-    PlusCircle,
     ShieldCheck,
     Key,
     UserPlus,
     LogIn,
-    LogOut,
-    GraduationCap,
     UserPlus2,
-    Check
+    Check,
+    BookOpen,
+    Filter,
+    CalendarDays
 } from 'lucide-react';
-import { EFAF_SUBJECTS, EM_SUBJECTS, EFAI_CLASSES, INFANTIL_CLASSES, CLASSES } from '../constants';
+import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES } from '../constants';
 
 export const HRDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'staff' | 'attendance' | 'substitutions' | 'subjects' | 'students'>('staff');
@@ -68,7 +57,6 @@ export const HRDashboard: React.FC = () => {
     const [formData, setFormData] = useState<Partial<StaffMember>>({
         name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [], classes: []
     });
-    const [createLogin, setCreateLogin] = useState(false);
     const [photoFile, setPhotoFile] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
@@ -77,13 +65,16 @@ export const HRDashboard: React.FC = () => {
         const saved = localStorage.getItem('hr_custom_subjects');
         return saved ? JSON.parse(saved) : [];
     });
+    const [newSubjectName, setNewSubjectName] = useState('');
 
-    // Attendance/Substitutions State
-    const [logs, setLogs] = useState<StaffAttendanceLog[]>([]);
+    // Substitutions State
     const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
-    const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7));
+    const [substitutions, setSubstitutions] = useState<Record<string, { present: boolean, substitute?: string }>>({});
+    const [extraClasses, setExtraClasses] = useState<Array<{professor: string, subject: string, className: string}>>([]);
+
+    // Attendance/Logs State
+    const [logs, setLogs] = useState<StaffAttendanceLog[]>([]);
     const [search, setSearch] = useState('');
-    const [monthlyLogs, setMonthlyLogs] = useState<DailySchoolLog[]>([]);
 
     // Student Access State
     const [students, setStudents] = useState<Student[]>([]);
@@ -113,17 +104,16 @@ export const HRDashboard: React.FC = () => {
             const unsub = listenToStudents(setStudents);
             return () => unsub();
         }
-    }, [activeTab, dateFilter, monthFilter]);
+    }, [activeTab, dateFilter]);
 
     const handleEdit = (staff: StaffMember) => {
         setEditingId(staff.id);
         setFormData({ ...staff, educationLevels: staff.educationLevels || [], classes: staff.classes || [] });
-        setCreateLogin(!!staff.email);
         setPhotoPreview(staff.photoUrl || null);
         setShowForm(true);
     };
 
-    const handleSave = async (e: React.FormEvent) => {
+    const handleSaveStaff = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         try {
@@ -133,7 +123,7 @@ export const HRDashboard: React.FC = () => {
             const dataToSave = {
                 ...formData,
                 id: editingId || '',
-                photoUrl,
+                photoUrl: photoUrl || '',
                 createdAt: formData.createdAt || Date.now(),
             };
 
@@ -156,19 +146,15 @@ export const HRDashboard: React.FC = () => {
         setPhotoPreview(null);
     };
 
-    // FIX: Implemented handleDelete to allow staff deletion
-    const handleDelete = async (id: string) => {
+    const handleDeleteStaff = async (id: string) => {
         if (!confirm("Deseja realmente excluir este colaborador?")) return;
         try {
             await deleteStaffMember(id);
-            alert("Colaborador excluído com sucesso.");
         } catch (error) {
-            console.error("Error deleting staff member:", error);
-            alert("Erro ao excluir colaborador.");
+            alert("Erro ao excluir.");
         }
     };
 
-    // FIX: Implemented handlePhotoChange to handle image selection and preview
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
@@ -177,6 +163,43 @@ export const HRDashboard: React.FC = () => {
         }
     };
 
+    // --- LOGS E SUBSTITUIÇÕES ---
+    const teachers = useMemo(() => staffList.filter(s => s.isTeacher && s.active), [staffList]);
+
+    const toggleTeacherPresence = (teacherId: string) => {
+        setSubstitutions(prev => {
+            const current = prev[teacherId] || { present: true };
+            return { ...prev, [teacherId]: { ...current, present: !current.present, substitute: !current.present ? undefined : current.substitute } };
+        });
+    };
+
+    const setTeacherSubstitute = (teacherId: string, subName: string) => {
+        setSubstitutions(prev => ({
+            ...prev,
+            [teacherId]: { ...prev[teacherId], substitute: subName }
+        }));
+    };
+
+    const handleAddExtraClass = () => {
+        setExtraClasses([...extraClasses, { professor: '', subject: '', className: '' }]);
+    };
+
+    // --- DISCIPLINAS ---
+    const handleAddSubject = () => {
+        if (!newSubjectName.trim()) return;
+        const updated = [...customSubjects, newSubjectName.toUpperCase().trim()];
+        setCustomSubjects(updated);
+        localStorage.setItem('hr_custom_subjects', JSON.stringify(updated));
+        setNewSubjectName('');
+    };
+
+    const handleRemoveSubject = (idx: number) => {
+        const updated = customSubjects.filter((_, i) => i !== idx);
+        setCustomSubjects(updated);
+        localStorage.setItem('hr_custom_subjects', JSON.stringify(updated));
+    };
+
+    // --- ALUNOS ---
     const handleEnroll = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -210,11 +233,7 @@ export const HRDashboard: React.FC = () => {
             setShowEnrollmentModal(false);
             setEnrollFormData({ id: '', name: '', className: '', isAEE: false });
             setBulkList('');
-        } catch (err) {
-            alert("Erro ao matricular.");
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (err) { alert("Erro ao matricular."); } finally { setIsLoading(false); }
     };
 
     const handleGenerateAccess = async (studentId: string) => {
@@ -222,11 +241,7 @@ export const HRDashboard: React.FC = () => {
         try {
             await generateStudentCredentials(studentId);
             alert("Acesso gerado com sucesso!");
-        } catch (e: any) {
-            alert("Erro ao gerar acesso: " + e.message);
-        } finally {
-            setIsGeneratingAccess(false);
-        }
+        } catch (e: any) { alert("Erro ao gerar acesso: " + e.message); } finally { setIsGeneratingAccess(false); }
     };
 
     const filteredStudents = students.filter(s => {
@@ -245,30 +260,30 @@ export const HRDashboard: React.FC = () => {
     );
 
     return (
-        <div className="flex flex-col md:flex-row h-[calc(100vh-80px)] overflow-hidden -m-8 bg-transparent">
+        <div className="flex flex-col md:flex-row h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
             {/* SIDEBAR */}
-            <div className="w-full md:w-64 bg-black/20 backdrop-blur-xl border-b md:border-b-0 md:border-r border-white/10 p-6 flex flex-col md:h-full z-20 shadow-2xl text-white">
-                <div className="mb-6">
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-6 ml-2 opacity-50">RH Estratégico</p>
+            <aside className="w-full md:w-64 bg-[#121214] border-r border-white/5 p-6 flex flex-col h-full z-20 shadow-2xl">
+                <div className="mb-8">
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-6 ml-2">Menu RH</p>
                     <SidebarItem id="staff" label="Equipe" icon={Users} />
                     <SidebarItem id="attendance" label="Ponto Facial" icon={Clock} />
-                    <SidebarItem id="substitutions" label="Substituições/Extras" icon={Repeat} />
+                    <SidebarItem id="substitutions" label="Substituições" icon={Repeat} />
                     <SidebarItem id="subjects" label="Disciplinas" icon={Layers} />
                     <SidebarItem id="students" label="Acessos Alunos" icon={ShieldCheck} />
                 </div>
-            </div>
+            </aside>
 
             {/* MAIN CONTENT */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+            <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                 
                 {activeTab === 'staff' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                        <header className="flex justify-between items-center mb-8">
                             <div>
                                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Colaboradores</h1>
-                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Painel de cadastro institucional</p>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Cadastro institucional</p>
                             </div>
-                            <Button onClick={() => { resetForm(); setShowForm(true); }} className="bg-red-600 px-8 rounded-2xl h-14 font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
+                            <Button onClick={() => { resetForm(); setShowForm(true); }} className="bg-red-600 px-8 rounded-2xl h-14 font-black uppercase text-xs shadow-xl shadow-red-900/40">
                                 <Plus size={18} className="mr-2"/> Novo Registro
                             </Button>
                         </header>
@@ -278,7 +293,7 @@ export const HRDashboard: React.FC = () => {
                                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
                                     <input className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
                                 </div>
-                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full">{staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).length} Cadastros</span>
+                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full">{staffList.length} Cadastros</span>
                             </div>
                             <table className="w-full text-left">
                                 <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
@@ -302,8 +317,8 @@ export const HRDashboard: React.FC = () => {
                                                 </span>
                                             </td>
                                             <td className="p-8 text-right">
-                                                <button onClick={() => handleEdit(s)} className="p-2 text-gray-500 hover:text-white transition-colors"><Edit3 size={18}/></button>
-                                                <button onClick={() => handleDelete(s.id)} className="p-2 text-gray-500 hover:text-red-500 transition-colors ml-2"><Trash2 size={18}/></button>
+                                                <button onClick={() => handleEdit(s)} className="p-2 text-gray-500 hover:text-white"><Edit3 size={18}/></button>
+                                                <button onClick={() => handleDeleteStaff(s.id)} className="p-2 text-gray-500 hover:text-red-500 ml-2"><Trash2 size={18}/></button>
                                             </td>
                                         </tr>
                                     ))}
@@ -313,12 +328,180 @@ export const HRDashboard: React.FC = () => {
                     </div>
                 )}
 
+                {activeTab === 'substitutions' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto pb-40">
+                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Substituições e Extras</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Log diário de faltas e aulas extraordinárias</p>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
+                                <CalendarDays className="text-red-600" size={18} />
+                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
+                            </div>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* FALTAS / SUBSTITUIÇÕES */}
+                            <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-8 flex items-center gap-3">
+                                    <AlertTriangle className="text-yellow-500" size={24}/> Faltas do Dia
+                                </h3>
+                                <div className="space-y-4">
+                                    {teachers.map(teacher => (
+                                        <div key={teacher.id} className="bg-black/20 p-5 rounded-2xl border border-white/5 flex flex-col gap-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <button onClick={() => toggleTeacherPresence(teacher.id)} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${substitutions[teacher.id]?.present === false ? 'bg-red-600 text-white shadow-lg' : 'bg-green-600/10 text-green-500'}`}>
+                                                        {substitutions[teacher.id]?.present === false ? <XCircle size={20}/> : <UserCheck size={20}/>}
+                                                    </button>
+                                                    <span className="font-black text-white uppercase text-xs">{teacher.name}</span>
+                                                </div>
+                                                {substitutions[teacher.id]?.present === false && (
+                                                    <div className="flex-1 ml-6 relative">
+                                                        <select 
+                                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-bold appearance-none outline-none focus:border-red-600"
+                                                            onChange={(e) => setTeacherSubstitute(teacher.id, e.target.value)}
+                                                            value={substitutions[teacher.id]?.substitute || ''}
+                                                        >
+                                                            <option value="">Sem substituto</option>
+                                                            {staffList.filter(s => s.id !== teacher.id && s.active).map(s => (
+                                                                <option key={s.id} value={s.name}>{s.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            {/* AULAS EXTRAS */}
+                            <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl flex flex-col">
+                                <div className="flex justify-between items-center mb-8">
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                        <PlusCircle className="text-blue-500" size={24}/> Aulas Extras
+                                    </h3>
+                                    <button onClick={handleAddExtraClass} className="p-3 bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white rounded-xl transition-all border border-blue-600/20"><Plus size={18}/></button>
+                                </div>
+                                <div className="space-y-4 flex-1">
+                                    {extraClasses.map((ex, idx) => (
+                                        <div key={idx} className="grid grid-cols-3 gap-3 p-4 bg-black/20 rounded-2xl border border-white/5">
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black" value={ex.professor} onChange={e => { const list = [...extraClasses]; list[idx].professor = e.target.value; setExtraClasses(list); }}>
+                                                <option>Professor</option>
+                                                {staffList.filter(s => s.isTeacher).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                            </select>
+                                            <input className="bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black uppercase" placeholder="Turma" value={ex.className} onChange={e => { const list = [...extraClasses]; list[idx].className = e.target.value.toUpperCase(); setExtraClasses(list); }} />
+                                            <div className="relative">
+                                                <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black uppercase" placeholder="Matéria" value={ex.subject} onChange={e => { const list = [...extraClasses]; list[idx].subject = e.target.value.toUpperCase(); setExtraClasses(list); }} />
+                                                <button onClick={() => setExtraClasses(extraClasses.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow-lg"><X size={10}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {extraClasses.length === 0 && <div className="h-full flex flex-col items-center justify-center text-gray-700 opacity-30"><BookOpen size={48} className="mb-4"/><p className="text-[10px] font-black uppercase tracking-widest">Sem registros de aulas extras</p></div>}
+                                </div>
+                                <Button className="w-full h-16 bg-blue-600 rounded-2xl font-black uppercase text-xs mt-8 shadow-xl shadow-blue-900/40"><Save size={18} className="mr-3"/> Salvar Log do Dia</Button>
+                            </section>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'subjects' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-4xl mx-auto">
+                        <header className="mb-12">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Gestão de Disciplinas</h1>
+                            <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Gerencie as matérias disponíveis no sistema</p>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <section className="lg:col-span-1 bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl h-fit">
+                                <h3 className="text-lg font-black text-white uppercase tracking-tight mb-6">Adicionar Matéria</h3>
+                                <div className="space-y-4">
+                                    <input 
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-black uppercase text-xs focus:border-red-600 outline-none transition-all"
+                                        placeholder="EX: ROBÓTICA"
+                                        value={newSubjectName}
+                                        onChange={e => setNewSubjectName(e.target.value)}
+                                    />
+                                    <Button onClick={handleAddSubject} className="w-full h-14 bg-red-600 rounded-xl font-black uppercase text-xs shadow-lg"><Plus size={18} className="mr-2"/> Adicionar</Button>
+                                </div>
+                            </section>
+
+                            <section className="lg:col-span-2 bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
+                                <div className="mb-8 flex justify-between items-center">
+                                    <h3 className="text-lg font-black text-white uppercase tracking-tight">Disciplinas Cadastradas</h3>
+                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest bg-white/5 px-3 py-1 rounded-lg">Customizadas: {customSubjects.length}</span>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                    {customSubjects.map((sub, idx) => (
+                                        <div key={idx} className="bg-black/20 border border-white/5 p-4 rounded-xl flex items-center justify-between group hover:border-red-600/30 transition-all">
+                                            <span className="text-[10px] font-black text-white uppercase tracking-tight">{sub}</span>
+                                            <button onClick={() => handleRemoveSubject(idx)} className="text-gray-700 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
+                                        </div>
+                                    ))}
+                                    {customSubjects.length === 0 && (
+                                        <div className="col-span-full py-20 text-center text-gray-700 opacity-20 border-2 border-dashed border-white/5 rounded-3xl">
+                                            <Layers size={40} className="mx-auto mb-4"/>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.3em]">Nenhuma disciplina customizada</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-12 pt-8 border-t border-white/5">
+                                    <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-widest mb-6">Disciplinas Base do Sistema (Fixas)</h4>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        {[...new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS])].slice(0, 12).map((sub, i) => (
+                                            <div key={i} className="bg-white/5 px-4 py-2 rounded-lg text-[9px] font-bold text-gray-500 uppercase tracking-tight border border-white/5 line-clamp-1">{sub}</div>
+                                        ))}
+                                        <div className="bg-white/5 px-4 py-2 rounded-lg text-[9px] font-bold text-gray-600 uppercase tracking-tight italic border border-white/5">E outras...</div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'attendance' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Histórico de Ponto</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Relatório unificado de entradas e saídas</p>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
+                                <Calendar className="text-red-600" size={18} />
+                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
+                            </div>
+                        </header>
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                             <table className="w-full text-left">
+                                <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
+                                    <tr><th className="p-8">Colaborador</th><th className="p-8">Horário</th><th className="p-8">Status</th></tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {logs.map(log => (
+                                        <tr key={log.id} className="hover:bg-white/[0.02]">
+                                            <td className="p-8 font-black text-white text-sm">{log.staffName}</td>
+                                            <td className="p-8 text-red-500 font-black">{new Date(log.timestamp).toLocaleTimeString()}</td>
+                                            <td className="p-8">
+                                                <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-3 py-1 rounded-full text-[9px] font-black">{log.type === 'entry' ? 'ENTRADA' : 'SAÍDA'}</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                             </table>
+                             {logs.length === 0 && <div className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-20">Sem registros para esta data</div>}
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
                             <div>
                                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Acessos Alunos</h1>
-                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Gestão de credenciais e matrículas do portal</p>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Gestão de credenciais do portal</p>
                             </div>
                             <div className="flex gap-3 w-full md:w-auto">
                                 <Button onClick={() => { setEnrollmentType('individual'); setShowEnrollmentModal(true); }} className="flex-1 md:flex-none bg-orange-600 hover:bg-orange-700 text-white font-black uppercase text-[10px] tracking-widest h-14 px-8 rounded-2xl shadow-xl shadow-orange-900/40">
@@ -355,7 +538,6 @@ export const HRDashboard: React.FC = () => {
                                         <tr>
                                             <th className="p-8">Aluno / Turma</th>
                                             <th className="p-8">Login (Código)</th>
-                                            <th className="p-8">Senha Provisória</th>
                                             <th className="p-8">Acesso</th>
                                             <th className="p-8 text-right">Ações</th>
                                         </tr>
@@ -368,7 +550,6 @@ export const HRDashboard: React.FC = () => {
                                                     <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">{student.className}</p>
                                                 </td>
                                                 <td className="p-8 font-mono text-blue-400 font-black text-lg tracking-widest">{student.accessLogin || '---'}</td>
-                                                <td className="p-8 font-mono text-gray-500 font-black text-sm tracking-widest">{student.accessPassword || '---'}</td>
                                                 <td className="p-8">
                                                     {student.hasAccess ? (
                                                         <span className="flex items-center gap-2 text-green-500 text-[10px] font-black uppercase tracking-widest">
@@ -385,13 +566,13 @@ export const HRDashboard: React.FC = () => {
                                                         <button 
                                                             onClick={() => handleGenerateAccess(student.id)}
                                                             disabled={isGeneratingAccess}
-                                                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black uppercase text-[9px] tracking-widest rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                                                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-black uppercase text-[9px] tracking-widest rounded-xl transition-all shadow-lg"
                                                         >
                                                             {isGeneratingAccess ? <Loader2 size={12} className="animate-spin"/> : <Key size={12}/>}
-                                                            {student.hasAccess ? 'Resetar PIN' : 'Ativar Acesso'}
+                                                            {student.hasAccess ? 'Reset PIN' : 'Ativar'}
                                                         </button>
                                                         <button 
-                                                            onClick={async () => { if(confirm(`Excluir matrícula de ${student.name}?`)) await deleteStudent(student.id); }}
+                                                            onClick={async () => { if(confirm(`Excluir ${student.name}?`)) await deleteStudent(student.id); }}
                                                             className="p-3 bg-white/5 hover:bg-red-600/10 text-gray-600 hover:text-red-500 rounded-xl transition-all border border-white/5"
                                                         >
                                                             <Trash2 size={14}/>
@@ -402,52 +583,13 @@ export const HRDashboard: React.FC = () => {
                                         ))}
                                     </tbody>
                                 </table>
-                                {filteredStudents.length === 0 && (
-                                    <div className="p-20 text-center text-gray-700 font-black uppercase tracking-[0.4em] opacity-30">
-                                        Nenhum aluno encontrado na turma/filtro selecionado.
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
                 )}
+            </main>
 
-                {/* ABA DE DISCIPLINAS E PONTO MANTIDAS (TRUNCADAS PARA ECONOMIA) */}
-                {activeTab === 'attendance' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
-                            <div>
-                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Histórico de Ponto</h1>
-                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Relatório unificado de entradas e saídas</p>
-                            </div>
-                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
-                                <Calendar className="text-red-600" size={18} />
-                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
-                            </div>
-                        </header>
-                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-                             <table className="w-full text-left">
-                                <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
-                                    <tr><th className="p-8">Colaborador</th><th className="p-8">Horário</th><th className="p-8">Status</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {logs.map(log => (
-                                        <tr key={log.id} className="hover:bg-white/[0.02]">
-                                            <td className="p-8 font-black text-white text-sm">{log.staffName}</td>
-                                            <td className="p-8 text-red-500 font-black">{new Date(log.timestamp).toLocaleTimeString()}</td>
-                                            <td className="p-8">
-                                                <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-3 py-1 rounded-full text-[9px] font-black">{log.type === 'entry' ? 'ENTRADA' : 'SAÍDA'}</span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                             </table>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* MODAL MATRÍCULA (NOVO) */}
+            {/* MODAL MATRÍCULA */}
             {showEnrollmentModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
                     <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
@@ -455,7 +597,7 @@ export const HRDashboard: React.FC = () => {
                             <div>
                                 <h3 className="text-2xl font-black text-white uppercase tracking-tight">Nova Matrícula Portal</h3>
                                 <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest mt-1">
-                                    {enrollmentType === 'individual' ? 'Registro Individual de Aluno' : 'Importação de Alunos em Lote'}
+                                    {enrollmentType === 'individual' ? 'Registro Único' : 'Importação em Lote'}
                                 </p>
                             </div>
                             <button onClick={() => setShowEnrollmentModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
@@ -474,7 +616,7 @@ export const HRDashboard: React.FC = () => {
                                             <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all uppercase" value={enrollFormData.id} onChange={e => setEnrollFormData({...enrollFormData, id: e.target.value})} placeholder="EX: 2024001" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma</label>
                                             <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
                                                 <option value="">Selecione...</option>
                                                 {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -482,14 +624,14 @@ export const HRDashboard: React.FC = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome Completo do Aluno</label>
-                                        <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all uppercase" value={enrollFormData.name} onChange={e => setEnrollFormData({...enrollFormData, name: e.target.value})} placeholder="DIGITE O NOME COMPLETO" />
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome Completo</label>
+                                        <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all uppercase" value={enrollFormData.name} onChange={e => setEnrollFormData({...enrollFormData, name: e.target.value})} placeholder="NOME DO ALUNO" />
                                     </div>
                                 </div>
                             ) : (
                                 <div className="space-y-6">
                                     <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino (Todos da Lista)</label>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
                                         <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
                                             <option value="">Selecione...</option>
                                             {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -513,12 +655,12 @@ export const HRDashboard: React.FC = () => {
             {/* STAFF FORM MODAL */}
             {showForm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
-                    <div className="bg-[#18181b] border border-white/10 w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
                         <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
                             <h3 className="text-2xl font-black text-white uppercase tracking-tight">{editingId ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
                             <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-white"><X size={32}/></button>
                         </div>
-                        <form onSubmit={handleSave} className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
+                        <form onSubmit={handleSaveStaff} className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Completo</label>
@@ -539,17 +681,28 @@ export const HRDashboard: React.FC = () => {
                                     </select>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Foto Facial (Biometria)</label>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Biometria Facial</label>
                                     <input type="file" className="w-full text-xs text-gray-500" onChange={handlePhotoChange} accept="image/*" />
+                                    {photoPreview && <img src={photoPreview} className="mt-2 w-20 h-20 rounded-xl object-cover border-2 border-white/5"/>}
                                 </div>
-                                <div className="flex items-center gap-4 pt-6">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" checked={formData.isTeacher} onChange={e => setFormData({...formData, isTeacher: e.target.checked})} className="w-5 h-5 rounded border-white/10 bg-black/40 text-red-600" />
-                                        <span className="text-[10px] font-black uppercase text-gray-400">É Professor</span>
+                                <div className="flex flex-col gap-4 pt-4">
+                                    <label className="flex items-center gap-3 cursor-pointer group">
+                                        <div className={`w-6 h-6 rounded border-2 transition-all flex items-center justify-center ${formData.isTeacher ? 'bg-red-600 border-red-600 shadow-lg shadow-red-900/40' : 'border-white/10 bg-black/40 group-hover:border-red-600'}`}>
+                                            {formData.isTeacher && <Check size={14} className="text-white"/>}
+                                            <input type="checkbox" className="hidden" checked={formData.isTeacher} onChange={e => setFormData({...formData, isTeacher: e.target.checked})} />
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase text-gray-400 group-hover:text-white transition-colors">Docente</span>
+                                    </label>
+                                    <label className="flex items-center gap-3 cursor-pointer group">
+                                        <div className={`w-6 h-6 rounded border-2 transition-all flex items-center justify-center ${formData.isAdmin ? 'bg-blue-600 border-blue-600 shadow-lg shadow-blue-900/40' : 'border-white/10 bg-black/40 group-hover:border-blue-600'}`}>
+                                            {formData.isAdmin && <Check size={14} className="text-white"/>}
+                                            <input type="checkbox" className="hidden" checked={formData.isAdmin} onChange={e => setFormData({...formData, isAdmin: e.target.checked})} />
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase text-gray-400 group-hover:text-white transition-colors">Administrativo</span>
                                     </label>
                                 </div>
                              </div>
-                             <Button type="submit" isLoading={isLoading} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">Salvar Cadastro</Button>
+                             <Button type="submit" isLoading={isLoading} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">Salvar Registro</Button>
                         </form>
                     </div>
                 </div>

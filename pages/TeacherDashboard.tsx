@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -489,6 +488,23 @@ export const TeacherDashboard: React.FC = () => {
                                         date: new Date().toISOString().split('T')[0],
                                         topic: '',
                                         content: '',
+                                        justification: '',
+                                        contents: '',
+                                        cognitiveSkills: '',
+                                        socioEmotionalSkills: '',
+                                        didacticSituations: '',
+                                        evaluationStrategies: '',
+                                        didacticResources: '',
+                                        referenceSources: '',
+                                        inovaTheme: '',
+                                        guidingQuestion: '',
+                                        subprojectGoal: '',
+                                        finalProductType: 'Geral',
+                                        finalProductDescription: '',
+                                        schedule: '',
+                                        resourcesNeeded: '',
+                                        aiTools: '',
+                                        aiCare: '',
                                         expectedResults: [],
                                         aiPurpose: [],
                                         evidence: [],
@@ -594,7 +610,7 @@ export const TeacherDashboard: React.FC = () => {
                                             {myClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                     </div>
-                                    {planningTab === 'diario' && (
+                                    {(planningTab === 'diario') && (
                                         <>
                                             <div className="space-y-2 animate-in fade-in">
                                                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data da Aula</label>
@@ -919,7 +935,7 @@ export const TeacherDashboard: React.FC = () => {
                                                     const av2 = grades.av2 || 0;
                                                     const av3 = grades.av3 || 0;
                                                     const final = ((av1Sum + av2 + av3) / 3).toFixed(1);
-                                                    return (<tr key={student.id} className="hover:bg-white/[0.02] transition-colors"><td className="p-8 sticky left-0 bg-[#18181b] z-10 border-r border-white/5"><span className="font-black text-white text-xs uppercase tracking-tight">{student.name}</span></td>{gradebookData?.av1Config?.map(av => <td key={av.id} className="p-6 text-center"><input type="number" step="0.1" max={av.maxScore} className="w-16 bg-[#121214] border-2 border-white/5 rounded-xl p-3 text-center text-white font-black outline-none focus:border-red-600 transition-all" value={grades.av1[av.id] ?? ''} onChange={e => handleGradeUpdate(student.id, av.id, Number(e.target.value), true)} /></td>)}<td className="p-8 text-center bg-red-950/5"><span className="text-red-500 font-black text-lg">{av1Sum.toFixed(1)}</span></td><td className="p-8 text-center"><span className="text-blue-400 font-black text-lg">{av2 > 0 ? av2.toFixed(1) : '-'}</span><p className="text-[8px] text-gray-700 font-bold mt-1">ADM</p></td><td className="p-8 text-center"><div className="flex flex-col items-center gap-1"><input type="number" step="0.1" max="10" className="w-20 bg-[#121214] border-2 border-white/5 rounded-xl p-3 text-center text-purple-400 font-black outline-none focus:border-purple-600 transition-all" value={grades.av3 ?? ''} placeholder="-" onChange={e => handleGradeUpdate(student.id, 'av3', Number(e.target.value))} /><p className="text-[8px] text-gray-700 font-bold">ADM</p></div></td><td className="p-8 text-center"><span className={`text-2xl font-black ${Number(final) >= 6 ? 'text-green-500' : 'text-red-500'}`}>{final === '0.0' ? '0' : final}</span></td></tr>);
+                                                    return (<tr key={student.id} className="hover:bg-white/[0.02] transition-colors"><td className="p-8 sticky left-0 bg-[#18181b] z-10 border-r border-white/5"><span className="font-black text-white text-xs uppercase tracking-tight">{student.name}</span></td>{gradebookData?.av1Config?.map(av => <td key={av.id} className="p-6 text-center"><input type="number" step="0.1" max={av.maxScore} className="w-16 bg-[#121214] border-2 border-white/5 rounded-xl p-3 text-center text-white font-black outline-none focus:border-red-600 transition-all" value={grades.av1[av.id] ?? ''} onChange={e => handleGradeUpdate(student.id, av.id, Number(e.target.value), true)} /></td>)}<td className="p-8 text-center bg-red-950/5"><span className="text-red-500 font-black text-lg">{av1Sum.toFixed(1)}</span></td><td className="p-8 text-center"><span className="text-blue-400 font-black text-lg">{av2 > 0 ? av2.toFixed(1) : '-'}</span><p className="text-[8px] text-gray-700 font-bold mt-1">ADM</p></td><td className="p-8 text-center"><div className="flex flex-col items-center gap-1"><input type="number" step="0.1" max="10" className="w-20 bg-[#121214] border-2 border-white/5 rounded-xl p-3 text-center text-purple-400 font-black outline-none focus:border-purple-600 transition-all" value={grades.av3 ?? ''} placeholder="-" onChange={e => handleGradeUpdate(student.id, 'av3', Number(e.target.value))} /><p className="text-[8px] text-gray-700 font-bold">ADM</p></div></td><td className="p-8 text-center"><span className={`text-2xl font-black ${Number(final) >= 7 ? 'text-green-500' : 'text-brand-500'}`}>{final === '0.0' ? '0' : final}</span></td></tr>);
                                                 })}
                                             </tbody></table></div></div></div>
                         ) : <div className="py-40 text-center opacity-30 text-gray-600 font-black uppercase tracking-[0.4em]">Selecione Turma e Disciplina para gerenciar o Diário</div>}
