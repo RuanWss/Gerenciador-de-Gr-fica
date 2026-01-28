@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     getExams, 
@@ -50,7 +49,8 @@ import {
     ClipboardCheck, Save, X, Loader2, Megaphone, ToggleLeft, ToggleRight, Download,
     FileCheck, Calculator, Calendar, BookOpen, BookMarked, CalendarClock, Database,
     Heart, ChevronLeft, ChevronRight, Plus, Trash2, ListOrdered, BrainCircuit, UploadCloud,
-    FileBarChart, Edit, Radio, Camera, User, AlertTriangle, Repeat, Layout, Info, UserCircle
+    FileBarChart, Edit, Radio, Camera, User, AlertTriangle, Repeat, Layout, Info, UserCircle,
+    Sparkles, Filter, FilterX
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -104,6 +104,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
     const [aeeAppointments, setAeeAppointments] = useState<AEEAppointment[]>([]);
     const [todayAttendance, setTodayAttendance] = useState<AttendanceLog[]>([]);
+
+    // Lesson Plan Filter State
+    const [planFilterClass, setPlanFilterClass] = useState('');
+    const [planFilterType, setPlanFilterType] = useState<string>('todos');
 
     // Agenda Admin State
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -266,6 +270,25 @@ export const PrintShopDashboard: React.FC = () => {
 
     const dayAppointments = aeeAppointments.filter(a => a.date === selectedDate).sort((a,b) => a.time.localeCompare(b.time));
 
+    // Planejamentos Filtrados
+    const filteredLessonPlans = useMemo(() => {
+        return lessonPlans.filter(p => {
+            const matchClass = !planFilterClass || p.className === planFilterClass;
+            const matchType = planFilterType === 'todos' || p.type === planFilterType;
+            return matchClass && matchType;
+        });
+    }, [lessonPlans, planFilterClass, planFilterType]);
+
+    // Grupos de Turmas para Grade Horária TV
+    const groupedClasses = useMemo(() => {
+        return [
+            { level: 'Educação Infantil', classes: ["JARDIM I", "JARDIM II"] },
+            { level: 'Ensino Fundamental I (EFAI)', classes: ["1º ANO EFAI", "2º ANO EFAI", "3º ANO EFAI", "4º ANO EFAI", "5º ANO EFAI"] },
+            { level: 'Ensino Fundamental II (EFAF)', classes: ["6º ANO EFAF", "7º ANO EFAF", "8º ANO EFAF", "9º ANO EFAF"] },
+            { level: 'Ensino Médio (EM)', classes: ["1ª SÉRIE EM", "2ª SÉRIE EM", "3ª SÉRIE EM"] }
+        ];
+    }, []);
+
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
             {/* SIDEBAR ADMINISTRATIVA */}
@@ -409,7 +432,7 @@ export const PrintShopDashboard: React.FC = () => {
                                                 {hasApps && (
                                                     <div className="mt-2 flex gap-1">
                                                         {dayApps.slice(0, 3).map((_, i) => (
-                                                            <div key={i} className={`h-1 w-1 rounded-full ${isSelected ? 'bg-white' : 'bg-red-600'}`}></div>
+                                                            <div key={i} className={`h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-red-600'}`}></div>
                                                         ))}
                                                     </div>
                                                 )}
@@ -647,23 +670,42 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'schedule' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
+                    <div className="animate-in fade-in slide-in-from-right-4 space-y-12">
                         <header className="mb-12">
                             <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Grade Horária TV</h1>
                             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Edição do monitor público de horários</p>
                         </header>
-                        <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
-                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {CLASSES.map(cls => (
-                                    <div key={cls} className="bg-black/40 border border-white/5 p-6 rounded-[2rem] hover:border-red-600/30 transition-all group">
-                                        <div className="flex justify-between items-center mb-6">
-                                            <h3 className="font-black text-white uppercase tracking-widest text-xs">{cls}</h3>
-                                            <Layout size={18} className="text-gray-800 group-hover:text-red-600 transition-colors"/>
+                        
+                        <div className="space-y-12 pb-20">
+                            {groupedClasses.map((group) => (
+                                <section key={group.level} className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-2xl relative overflow-hidden">
+                                    <div className="flex items-center gap-4 mb-10 border-b border-white/5 pb-8">
+                                        <div className="h-10 w-1.5 bg-red-600 rounded-full shadow-[0_0_15px_rgba(220,38,38,0.5)]" />
+                                        <div>
+                                            <h2 className="text-2xl font-black text-white uppercase tracking-[0.05em]">{group.level}</h2>
+                                            <p className="text-gray-500 text-[9px] font-black uppercase tracking-[0.3em] mt-1">Configuração de Horários por Segmento</p>
                                         </div>
-                                        <button onClick={() => alert("Interface de edição de grade em desenvolvimento")} className="w-full py-3 bg-white/5 hover:bg-red-600 text-gray-500 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Configurar Grade</button>
                                     </div>
-                                ))}
-                             </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                        {group.classes.map(cls => (
+                                            <div key={cls} className="bg-black/40 border border-white/5 p-8 rounded-[2.5rem] hover:border-red-600/30 transition-all group/card shadow-xl flex flex-col justify-between h-48">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h3 className="font-black text-white uppercase tracking-widest text-[13px] leading-tight mb-2">{cls}</h3>
+                                                        <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">Ativo no Monitor</span>
+                                                    </div>
+                                                    <div className="p-3 bg-white/5 rounded-2xl text-gray-700 group-hover/card:text-red-500 group-hover/card:bg-red-600/10 transition-all duration-500">
+                                                        <Layout size={20}/>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => alert(`Configurando grade para: ${cls}`)} className="w-full py-4 bg-white/5 hover:bg-red-600 text-gray-500 hover:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-inner border border-white/5">
+                                                    Configurar Grade
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                            ))}
                         </div>
                     </div>
                 )}
@@ -698,22 +740,76 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'lesson_plans' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12">
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos Recebidos</h1>
-                            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Monitoramento pedagógico</p>
+                        <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos Recebidos</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Monitoramento pedagógico centralizado</p>
+                            </div>
+                            
+                            {/* Filtros */}
+                            <div className="flex flex-wrap items-center gap-4 bg-[#18181b] border border-white/5 p-4 rounded-3xl shadow-xl">
+                                <div className="relative group">
+                                    <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16}/>
+                                    <select 
+                                        className="bg-black/40 border border-white/10 rounded-xl px-10 py-3 text-white font-black text-[10px] uppercase tracking-widest outline-none focus:border-red-600 appearance-none min-w-[200px] cursor-pointer"
+                                        value={planFilterClass}
+                                        onChange={e => setPlanFilterClass(e.target.value)}
+                                    >
+                                        <option value="">Todas as Turmas</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                
+                                <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
+                                    {['todos', 'diario', 'bimestral', 'inova'].map(type => (
+                                        <button 
+                                            key={type}
+                                            onClick={() => setPlanFilterType(type)}
+                                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${planFilterType === type ? 'bg-red-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}
+                                        >
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {(planFilterClass || planFilterType !== 'todos') && (
+                                    <button 
+                                        onClick={() => { setPlanFilterClass(''); setPlanFilterType('todos'); }}
+                                        className="p-3 bg-red-600/10 text-red-500 hover:bg-red-600 hover:text-white rounded-xl transition-all"
+                                        title="Limpar Filtros"
+                                    >
+                                        <FilterX size={18}/>
+                                    </button>
+                                )}
+                            </div>
                         </header>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {lessonPlans.map(plan => (
-                                <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-red-600/30 transition-all flex flex-col">
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {filteredLessonPlans.map(plan => (
+                                <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-red-600/30 transition-all flex flex-col relative overflow-hidden">
                                     <div className="flex justify-between items-start mb-6">
-                                        <div className="p-4 bg-red-600/10 text-red-500 rounded-2xl"><BookOpen size={24}/></div>
-                                        <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                        <div className={`p-4 rounded-2xl ${plan.type === 'inova' ? 'bg-[#9D44FF]/10 text-[#9D44FF]' : 'bg-red-600/10 text-red-500'}`}>
+                                            {plan.type === 'inova' ? <Sparkles size={24}/> : <BookOpen size={24}/>}
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest block">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                            <span className={`text-[8px] font-black uppercase tracking-[0.2em] mt-1 inline-block ${plan.type === 'inova' ? 'text-purple-400' : 'text-red-400'}`}>
+                                                {plan.type || 'geral'}
+                                            </span>
+                                        </div>
                                     </div>
                                     <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{plan.className}</h3>
                                     <p className="text-red-500 font-black uppercase text-[10px] tracking-widest mb-6">{plan.subject} • {plan.teacherName}</p>
-                                    <button className="mt-auto w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all">Visualizar Completo</button>
+                                    <button className="mt-auto w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5">Visualizar Completo</button>
                                 </div>
                             ))}
+                            
+                            {filteredLessonPlans.length === 0 && (
+                                <div className="col-span-full py-40 text-center bg-white/[0.02] border-2 border-dashed border-white/5 rounded-[3rem] opacity-20">
+                                    <BookMarked size={64} className="mx-auto mb-6" />
+                                    <p className="text-xl font-black uppercase tracking-[0.4em]">Nenhum planejamento encontrado para este filtro</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
