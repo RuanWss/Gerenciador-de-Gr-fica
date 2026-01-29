@@ -43,7 +43,7 @@ import {
     Heart, ChevronLeft, ChevronRight, Plus, Trash2,
     FileBarChart, Edit, Camera, AlertTriangle, Repeat, Layout, Info, UserCircle,
     Sparkles, Filter, FilterX, Check, History,
-    CheckSquare, Rocket, Lightbulb, Target, Box, Layers, Cpu, ExternalLink, PrinterCheck
+    CheckSquare, Rocket, Lightbulb, Target, Box, Layers, Cpu, ExternalLink
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -633,7 +633,6 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'schedule' && (
                     <div className="animate-in fade-in slide-in-from-right-4 space-y-12">
-                        {/* ... existing schedule content ... */}
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-8">
                             <div>
                                 <h1 className="text-6xl font-black text-white uppercase tracking-tighter leading-none">Grade Horária</h1>
@@ -977,7 +976,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     onClick={() => handlePrintSlip(selectedExam)}
                                     className="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-gray-200 h-16 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl"
                                 >
-                                    <PrinterCheck size={20}/> Imprimir Ficha de Produção
+                                    <FileCheck size={20}/> Imprimir Ficha de Produção
                                 </button>
                                 <div className="grid grid-cols-2 gap-4">
                                     <a 
