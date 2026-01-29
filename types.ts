@@ -1,4 +1,3 @@
-
 export enum UserRole {
   TEACHER = 'TEACHER',
   PRINTSHOP = 'PRINTSHOP',
@@ -120,6 +119,9 @@ export interface StaffMember {
   weeklyClasses?: number;
   educationLevels?: string[];
   classes?: string[];
+  subject?: string;
+  accessLogin?: string;
+  password?: string;
 }
 
 export interface SystemConfig {

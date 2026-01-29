@@ -43,7 +43,7 @@ import {
     Heart, ChevronLeft, ChevronRight, Plus, Trash2,
     FileBarChart, Edit, Camera, AlertTriangle, Repeat, Layout, Info, UserCircle,
     Sparkles, Filter, FilterX, Check, History,
-    CheckSquare, Rocket, Lightbulb, Target, Box, Layers, Cpu
+    CheckSquare, Rocket, Lightbulb, Target, Box, Layers, Cpu, ExternalLink, PrinterCheck
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -109,6 +109,10 @@ export const PrintShopDashboard: React.FC = () => {
     const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
     const [aeeAppointments, setAeeAppointments] = useState<AEEAppointment[]>([]);
     const [todayAttendance, setTodayAttendance] = useState<AttendanceLog[]>([]);
+
+    // Detail Modal State
+    const [selectedExam, setSelectedExam] = useState<ExamRequest | null>(null);
+    const [showExamDetail, setShowExamDetail] = useState(false);
 
     // Student Edit State
     const [showStudentModal, setShowStudentModal] = useState(false);
@@ -220,6 +224,9 @@ export const PrintShopDashboard: React.FC = () => {
     const handleUpdateExamStatus = async (id: string, status: ExamStatus) => {
         await updateExamStatus(id, status);
         setExams(prev => prev.map(e => e.id === id ? { ...e, status } : e));
+        if (selectedExam && selectedExam.id === id) {
+            setSelectedExam({ ...selectedExam, status });
+        }
     };
 
     const handleSaveConfig = async () => {
@@ -298,6 +305,88 @@ export const PrintShopDashboard: React.FC = () => {
                 </table>
                 <script>window.onload = () => { window.print(); window.close(); }</script>
             </body></html>
+        `);
+        printWindow.document.close();
+    };
+
+    const handlePrintSlip = (exam: ExamRequest) => {
+        const printWindow = window.open('', '_blank', 'width=800,height=900');
+        if (!printWindow) return;
+        
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Ficha de Produção - ${exam.title}</title>
+                <style>
+                    body { font-family: 'Poppins', sans-serif; padding: 40px; color: #1a1a1a; line-height: 1.6; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
+                    .logo { height: 60px; }
+                    .badge { background: #000; color: #fff; padding: 5px 15px; border-radius: 5px; font-weight: bold; text-transform: uppercase; font-size: 14px; }
+                    .title { font-size: 28px; font-weight: 900; text-transform: uppercase; margin-bottom: 10px; }
+                    .grid { display: grid; grid-cols: 2; gap: 20px; margin-bottom: 30px; }
+                    .field { border-bottom: 1px solid #eee; padding: 10px 0; }
+                    .label { font-size: 10px; font-weight: bold; text-transform: uppercase; color: #666; display: block; margin-bottom: 4px; }
+                    .value { font-size: 18px; font-weight: bold; }
+                    .instructions { background: #f9f9f9; border: 1px solid #ddd; padding: 20px; border-radius: 10px; margin-top: 30px; }
+                    .quantity-box { border: 4px solid #000; padding: 30px; text-align: center; border-radius: 20px; margin: 40px 0; }
+                    .quantity-box .num { font-size: 80px; font-weight: 900; }
+                    .footer { margin-top: 100px; display: flex; justify-content: space-between; font-size: 12px; }
+                    .sig { border-top: 1px solid #000; padding-top: 5px; width: 250px; text-align: center; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" class="logo" style="filter: brightness(0)">
+                    <div class="badge">Ordem de Produção</div>
+                </div>
+                
+                <h1 class="title">${exam.title}</h1>
+                
+                <div style="display: flex; gap: 40px; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px;">
+                    <div style="flex: 1">
+                        <span class="label">Professor solicitante</span>
+                        <div class="value">${exam.teacherName}</div>
+                    </div>
+                    <div style="width: 150px">
+                        <span class="label">Data Solicitação</span>
+                        <div class="value">${new Date(exam.createdAt).toLocaleDateString()}</div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                    <div class="field">
+                        <span class="label">Turma / Nível</span>
+                        <div class="value">${exam.gradeLevel}</div>
+                    </div>
+                    <div class="field">
+                        <span class="label">Disciplina</span>
+                        <div class="value">${exam.subject}</div>
+                    </div>
+                </div>
+
+                <div class="quantity-box">
+                    <span class="label">Total de Cópias Necessárias</span>
+                    <div class="num">${exam.quantity}</div>
+                </div>
+
+                <div class="instructions">
+                    <span class="label">Observações da Impressão</span>
+                    <div style="font-size: 16px; white-space: pre-wrap;">${exam.instructions || 'Nenhuma instrução específica fornecida.'}</div>
+                </div>
+
+                <div class="footer">
+                    <div>
+                        <span class="label">ID Sistema</span>
+                        <div>${exam.id}</div>
+                    </div>
+                    <div class="sig">
+                        Assinatura Responsável Gráfica
+                    </div>
+                </div>
+
+                <script>window.onload = () => { window.print(); window.close(); }</script>
+            </body>
+            </html>
         `);
         printWindow.document.close();
     };
@@ -427,6 +516,11 @@ export const PrintShopDashboard: React.FC = () => {
         }
     };
 
+    const handleOpenExamDetail = (exam: ExamRequest) => {
+        setSelectedExam(exam);
+        setShowExamDetail(true);
+    };
+
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
             <div className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col h-full z-20 shadow-2xl">
@@ -487,38 +581,22 @@ export const PrintShopDashboard: React.FC = () => {
                                                 <td className="p-8">
                                                     <p className="font-black text-white uppercase tracking-tight text-sm mb-1">{exam.title}</p>
                                                     <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-4">Prof. {exam.teacherName}</p>
-                                                    <div className="space-y-4">
-                                                        {exam.instructions && (
-                                                            <div className="p-4 bg-black/40 rounded-2xl border border-white/5 max-w-lg shadow-inner">
-                                                                <p className="text-[9px] font-black text-brand-500 uppercase tracking-widest mb-1 flex items-center gap-2">
-                                                                    <Info size={12}/> Observações:
-                                                                </p>
-                                                                <p className="text-xs text-gray-400 font-medium leading-relaxed italic">
-                                                                    "{exam.instructions}"
-                                                                </p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {exam.fileUrls?.map((url, idx) => (
+                                                            <div key={idx} className="flex items-center gap-1">
+                                                                <a 
+                                                                    href={url} 
+                                                                    target="_blank" 
+                                                                    className="flex items-center gap-2 bg-white/5 hover:bg-brand-600/10 px-3 py-1.5 rounded-lg text-gray-400 hover:text-brand-500 transition-all border border-white/5 group/file text-[10px] font-bold"
+                                                                    title={exam.fileNames?.[idx] || 'Ver Arquivo'}
+                                                                >
+                                                                    <FileText size={14}/>
+                                                                    <span className="truncate max-w-[100px] uppercase">
+                                                                        {exam.fileNames?.[idx] || `F${idx + 1}`}
+                                                                    </span>
+                                                                </a>
                                                             </div>
-                                                        )}
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {exam.fileUrls?.map((url, idx) => (
-                                                                <div key={idx} className="flex items-center gap-1">
-                                                                    <a 
-                                                                        href={url} 
-                                                                        target="_blank" 
-                                                                        className="flex items-center gap-3 bg-white/5 hover:bg-brand-600/10 px-4 py-2.5 rounded-xl text-gray-400 hover:text-brand-500 transition-all border border-white/5 group/file shadow-lg"
-                                                                        title={exam.fileNames?.[idx] || 'Ver Arquivo'}
-                                                                    >
-                                                                        <FileText size={16} className="group-hover/file:scale-110 transition-transform"/>
-                                                                        <div className="flex flex-col">
-                                                                            <span className="text-[9px] font-black uppercase truncate max-w-[120px]">
-                                                                                {exam.fileNames?.[idx] || `Arquivo ${idx + 1}`}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="h-6 w-px bg-white/5 mx-1" />
-                                                                        <Download size={14} className="opacity-40 group-hover/file:opacity-100 transition-opacity" />
-                                                                    </a>
-                                                                </div>
-                                                            ))}
-                                                        </div>
+                                                        ))}
                                                     </div>
                                                 </td>
                                                 <td className="p-8">
@@ -530,14 +608,17 @@ export const PrintShopDashboard: React.FC = () => {
                                                 <td className="p-8"><StatusBadge status={exam.status} /></td>
                                                 <td className="p-8 text-right">
                                                     <div className="flex justify-end gap-2">
+                                                        <button onClick={() => handleOpenExamDetail(exam)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-all" title="Ver Detalhes">
+                                                            <ExternalLink size={18}/>
+                                                        </button>
                                                         {exam.status === ExamStatus.PENDING && (
                                                             <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.IN_PROGRESS)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg">Iniciar</button>
                                                         )}
                                                         {exam.status === ExamStatus.IN_PROGRESS && (
-                                                            <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.READY)} className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg">Pronto</button>
+                                                            <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.READY)} className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg">Finalizar</button>
                                                         )}
                                                         {exam.status === ExamStatus.READY && (
-                                                            <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.COMPLETED)} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg">Entregue</button>
+                                                            <button onClick={() => handleUpdateExamStatus(exam.id, ExamStatus.COMPLETED)} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg">Retirado</button>
                                                         )}
                                                     </div>
                                                 </td>
@@ -552,6 +633,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'schedule' && (
                     <div className="animate-in fade-in slide-in-from-right-4 space-y-12">
+                        {/* ... existing schedule content ... */}
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-8">
                             <div>
                                 <h1 className="text-6xl font-black text-white uppercase tracking-tighter leading-none">Grade Horária</h1>
@@ -633,7 +715,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'aee_agenda' && (
                     <div className="animate-in fade-in slide-in-from-right-4 space-y-12">
-                        <header>
+                         <header>
                             <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Agenda AEE Global</h1>
                             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Monitoramento centralizado de atendimentos especializados</p>
                         </header>
@@ -708,7 +790,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'students' && (
                     <div className="animate-in fade-in slide-in-from-right-4 space-y-12">
-                        <header className="flex justify-between items-start">
+                         <header className="flex justify-between items-start">
                             <div>
                                 <h1 className="text-5xl font-black text-white uppercase tracking-tighter">Base de Alunos</h1>
                                 <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Gestão de matrículas e enturmação</p>
@@ -804,7 +886,7 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'occurrences' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                        <header className="mb-12">
+                         <header className="mb-12">
                             <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Ocorrências Global</h1>
                             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Visualização de todos os registros da escola</p>
                         </header>
@@ -852,6 +934,81 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'sync' && <GenneraSyncPanel />}
             </div>
+
+            {/* Modal for Exam Detail & Slips */}
+            {showExamDetail && selectedExam && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                    <div className="bg-[#121214] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-10 border-b border-white/5 bg-black/20 flex justify-between items-center">
+                            <div className="flex items-center gap-4">
+                                <div className="h-12 w-12 rounded-2xl bg-brand-600/10 flex items-center justify-center text-brand-500">
+                                    <FileText size={24}/>
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Detalhes da Produção</h3>
+                                    <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest">{selectedExam.title}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowExamDetail(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <div className="p-10 space-y-10">
+                            <div className="grid grid-cols-2 gap-8">
+                                <div className="bg-black/40 p-6 rounded-3xl border border-white/5">
+                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Professor(a)</span>
+                                    <p className="text-white font-bold text-lg">{selectedExam.teacherName}</p>
+                                </div>
+                                <div className="bg-black/40 p-6 rounded-3xl border border-white/5">
+                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2 block">Volume Necessário</span>
+                                    <p className="text-brand-500 font-black text-3xl">{selectedExam.quantity} <span className="text-xs text-gray-600 uppercase tracking-widest ml-1">unid.</span></p>
+                                </div>
+                            </div>
+
+                            <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5">
+                                <span className="text-[9px] font-black text-brand-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <Info size={14}/> Instruções de Execução
+                                </span>
+                                <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap font-medium">
+                                    {selectedExam.instructions || 'Nenhuma instrução específica fornecida pelo professor.'}
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col gap-4">
+                                <button 
+                                    onClick={() => handlePrintSlip(selectedExam)}
+                                    className="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-gray-200 h-16 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl"
+                                >
+                                    <PrinterCheck size={20}/> Imprimir Ficha de Produção
+                                </button>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <a 
+                                        href={selectedExam.fileUrls?.[0]} 
+                                        target="_blank"
+                                        className="flex items-center justify-center gap-3 bg-white/5 hover:bg-white/10 text-white h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/10"
+                                    >
+                                        <Download size={18}/> Baixar Arquivos
+                                    </a>
+                                    {selectedExam.status === ExamStatus.PENDING && (
+                                        <button 
+                                            onClick={() => handleUpdateExamStatus(selectedExam.id, ExamStatus.IN_PROGRESS)}
+                                            className="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg"
+                                        >
+                                            <Printer size={18}/> Iniciar Produção
+                                        </button>
+                                    )}
+                                    {selectedExam.status === ExamStatus.IN_PROGRESS && (
+                                        <button 
+                                            onClick={() => handleUpdateExamStatus(selectedExam.id, ExamStatus.READY)}
+                                            className="flex items-center justify-center gap-3 bg-purple-600 hover:bg-purple-700 text-white h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg"
+                                        >
+                                            <CheckCircle size={18}/> Marcar como Pronto
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal for Student Edit */}
             {showStudentModal && editingStudent && (

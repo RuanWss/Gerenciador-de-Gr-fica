@@ -9,7 +9,8 @@ import {
     listenToGradebook, saveGradebook,
     getAllPEIs,
     logAttendance,
-    savePEIDocument
+    savePEIDocument,
+    updateExamStatus
 } from '../services/firebaseService';
 import { 
     ExamRequest, ExamStatus, ClassMaterial, LessonPlan, 
@@ -23,7 +24,7 @@ import {
     List, PlusCircle, Folder, BookOpen, Calculator, Heart, AlertCircle, CalendarClock,
     Trash2, Save, Search, UserCheck, UserX, Download, BrainCircuit, Layout, Sparkles, ChevronRight,
     Edit3, Info, FolderPlus, Smile, AlertTriangle, Calendar as CalendarIcon, FileDown, FileUp, Upload, MousePointerClick, Users, ShieldAlert, FileCheck,
-    BookMarked, History, Target, Cpu, CheckSquare, Layers, Rocket, Lightbulb, Box, Check, Briefcase, Camera
+    BookMarked, History, Target, Cpu, CheckSquare, Layers, Rocket, Lightbulb, Box, Check, Briefcase, Camera, PackageCheck
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -251,6 +252,19 @@ export const TeacherDashboard: React.FC = () => {
             setActiveTab('exams');
             setExams(await getExams(user!.id));
         } catch (e) { alert("Erro ao enviar."); } finally { setIsLoading(false); }
+    };
+
+    const handleConfirmReceipt = async (examId: string) => {
+        if (!confirm("Confirmar que você já retirou as provas físicas na central?")) return;
+        setIsLoading(true);
+        try {
+            await updateExamStatus(examId, ExamStatus.COMPLETED);
+            setExams(await getExams(user!.id));
+        } catch (e) {
+            alert("Erro ao confirmar recebimento.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleMaterialSubmit = async (e: React.FormEvent) => {
@@ -894,9 +908,9 @@ export const TeacherDashboard: React.FC = () => {
                 {activeTab === 'exams' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-12 flex justify-between items-center"><div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Fila de Impressões</h1><p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Acompanhamento da gráfica</p></div><Button onClick={() => setActiveTab('send_to_print')} className="bg-red-600 h-14 px-8 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40"><Plus size={18} className="mr-2"/> Nova</Button></header>
-                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl"><table className="w-full text-left"><thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]"><tr><th className="p-8">Data</th><th className="p-8">Atividade</th><th className="p-8">Turma</th><th className="p-8">Status</th><th className="p-8 text-right">Arquivo</th></tr></thead><tbody className="divide-y divide-white/5">
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl"><table className="w-full text-left"><thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]"><tr><th className="p-8">Data</th><th className="p-8">Atividade</th><th className="p-8">Turma</th><th className="p-8">Status</th><th className="p-8 text-right">Ações</th></tr></thead><tbody className="divide-y divide-white/5">
                                     {exams.map(e => (
-                                        <tr key={e.id} className="hover:bg-white/[0.02]"><td className="p-8 text-xs font-bold text-gray-500">{new Date(e.createdAt).toLocaleDateString()}</td><td className="p-8"><p className="font-black text-white uppercase text-sm">{String(e.title || '')}</p></td><td className="p-8"><span className="bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-full text-[10px] font-black text-red-400 uppercase">{String(e.gradeLevel || '')}</span></td><td className="p-8"><StatusBadge status={e.status}/></td><td className="p-8 text-right"><div className="flex flex-col gap-2 items-end">{e.fileUrls?.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg text-gray-400 hover:text-white transition-all border border-white/5 group"><span className="text-[10px] font-bold uppercase truncate max-w-[150px]">{e.fileNames?.[i] || 'Ver'}</span><Eye size={12} className="group-hover:text-red-500"/></a>)}</div></td></tr>
+                                        <tr key={e.id} className="hover:bg-white/[0.02]"><td className="p-8 text-xs font-bold text-gray-500">{new Date(e.createdAt).toLocaleDateString()}</td><td className="p-8"><p className="font-black text-white uppercase text-sm">{String(e.title || '')}</p></td><td className="p-8"><span className="bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-full text-[10px] font-black text-red-400 uppercase">{String(e.gradeLevel || '')}</span></td><td className="p-8"><StatusBadge status={e.status}/></td><td className="p-8 text-right"><div className="flex items-center justify-end gap-3">{e.status === ExamStatus.READY && (<button onClick={() => handleConfirmReceipt(e.id)} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded-xl text-white font-black uppercase text-[10px] tracking-widest transition-all shadow-lg shadow-green-900/40 animate-pulse"><PackageCheck size={16}/> Retirado</button>)}<div className="flex flex-col gap-2 items-end">{e.fileUrls?.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-white/5 px-3 py-2 rounded-lg text-gray-400 hover:text-white transition-all border border-white/5 group"><span className="text-[10px] font-bold uppercase truncate max-w-[150px]">{e.fileNames?.[i] || 'Ver'}</span><Eye size={12} className="group-hover:text-red-500"/></a>)}</div></div></td></tr>
                                     ))}
                                 </tbody></table></div>
                     </div>
@@ -907,15 +921,15 @@ export const TeacherDashboard: React.FC = () => {
                         <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
                             <div className="flex justify-between items-center mb-8"><div><h2 className="text-2xl font-black text-white uppercase tracking-tight">Modelos Padronizados</h2><p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest">Faça o download dos cabeçalhos oficiais antes de imprimir</p></div><Layout className="text-gray-800" size={48} /></div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/P7S4V9F9/image.png', 'Cabeçalho_de_Atividades.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
+                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/2Y0zfZ0W/3.png', 'Cabeçalho_de_Atividades.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
                                     <div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all"><Download size={20} /></div>
                                     <span className="text-[10px] font-black text-white uppercase tracking-widest text-left leading-tight">Cabeçalho de Atividades</span>
                                 </button>
-                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/9R2CqM5q/image.png', 'Cabeçalho_Kronos.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
+                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/zTGFssJs/4.png', 'Cabeçalho_Kronos.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
                                     <div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all"><Download size={20} /></div>
                                     <span className="text-[10px] font-black text-white uppercase tracking-widest text-left leading-tight">Cabeçalho Kronos</span>
                                 </button>
-                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/C3fWvFvN/image.png', 'Cabeçalho_de_Avaliação.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
+                                <button onClick={() => handleDownloadHeader('https://i.ibb.co/9kJLPqxs/CABE-ALHO-AVALIA-O.png', 'Cabeçalho_de_Avaliação.png')} className="flex items-center gap-4 bg-black/40 border border-white/5 hover:border-red-600/30 p-5 rounded-3xl transition-all group">
                                     <div className="h-12 w-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-500 group-hover:bg-red-600 group-hover:text-white transition-all"><Download size={20} /></div>
                                     <span className="text-[10px] font-black text-white uppercase tracking-widest text-left leading-tight">Cabeçalho de Avaliação</span>
                                 </button>

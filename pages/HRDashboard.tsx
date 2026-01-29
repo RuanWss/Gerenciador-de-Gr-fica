@@ -27,7 +27,6 @@ import {
     Save, 
     X, 
     Plus,
-    // FIX: Added missing PlusCircle import
     PlusCircle,
     AlertTriangle,
     UserCheck,
@@ -42,9 +41,16 @@ import {
     Check,
     BookOpen,
     Filter,
-    CalendarDays
+    CalendarDays,
+    Camera,
+    Shield,
+    RefreshCw,
+    GraduationCap
 } from 'lucide-react';
-import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES } from '../constants';
+import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES, INFANTIL_CLASSES, EFAI_CLASSES } from '../constants';
+
+const EDUCATION_LEVELS = ["INFANTIL", "EFAI", "EFAF", "MÉDIO"];
+const POLIVALENTE_CLASSES = [...INFANTIL_CLASSES, ...EFAI_CLASSES];
 
 export const HRDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'staff' | 'attendance' | 'substitutions' | 'subjects' | 'students'>('staff');
@@ -55,7 +61,7 @@ export const HRDashboard: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<Partial<StaffMember>>({
-        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [], classes: []
+        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [], classes: [], subject: '', accessLogin: '', password: ''
     });
     const [photoFile, setPhotoFile] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -108,7 +114,14 @@ export const HRDashboard: React.FC = () => {
 
     const handleEdit = (staff: StaffMember) => {
         setEditingId(staff.id);
-        setFormData({ ...staff, educationLevels: staff.educationLevels || [], classes: staff.classes || [] });
+        setFormData({ 
+            ...staff, 
+            educationLevels: staff.educationLevels || [], 
+            classes: staff.classes || [],
+            subject: staff.subject || '',
+            accessLogin: staff.accessLogin || '',
+            password: staff.password || ''
+        });
         setPhotoPreview(staff.photoUrl || null);
         setShowForm(true);
     };
@@ -141,7 +154,11 @@ export const HRDashboard: React.FC = () => {
 
     const resetForm = () => {
         setEditingId(null);
-        setFormData({ name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [], classes: [] });
+        setFormData({ 
+            name: '', role: '', active: true, workPeriod: 'morning', 
+            isTeacher: false, isAdmin: false, email: '', 
+            educationLevels: [], classes: [], subject: '', accessLogin: '', password: ''
+        });
         setPhotoFile(null);
         setPhotoPreview(null);
     };
@@ -160,6 +177,29 @@ export const HRDashboard: React.FC = () => {
             const file = e.target.files[0];
             setPhotoFile(file);
             setPhotoPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const toggleLevel = (level: string) => {
+        const current = formData.educationLevels || [];
+        const updated = current.includes(level) 
+            ? current.filter(l => l !== level) 
+            : [...current, level];
+        setFormData({ ...formData, educationLevels: updated });
+    };
+
+    const toggleClass = (className: string) => {
+        const current = formData.classes || [];
+        const updated = current.includes(className) 
+            ? current.filter(c => c !== className) 
+            : [...current, className];
+        setFormData({ ...formData, classes: updated });
+    };
+
+    const handleResetPassword = () => {
+        if (confirm("Deseja redefinir a senha deste colaborador para a senha padrão 'cemal2016'?")) {
+            setFormData(prev => ({ ...prev, password: 'cemal2016' }));
+            alert("Senha redefinida com sucesso! Salve o registro para confirmar a alteração no banco de dados.");
         }
     };
 
@@ -328,6 +368,40 @@ export const HRDashboard: React.FC = () => {
                     </div>
                 )}
 
+                {activeTab === 'attendance' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Histórico de Ponto</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Relatório unificado de entradas e saídas</p>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
+                                <Calendar className="text-red-600" size={18} />
+                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
+                            </div>
+                        </header>
+                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
+                             <table className="w-full text-left">
+                                <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
+                                    <tr><th className="p-8">Colaborador</th><th className="p-8">Horário</th><th className="p-8">Status</th></tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {logs.map(log => (
+                                        <tr key={log.id} className="hover:bg-white/[0.02]">
+                                            <td className="p-8 font-black text-white text-sm">{log.staffName}</td>
+                                            <td className="p-8 text-red-500 font-black">{new Date(log.timestamp).toLocaleTimeString()}</td>
+                                            <td className="p-8">
+                                                <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-3 py-1 rounded-full text-[9px] font-black">{log.type === 'entry' ? 'ENTRADA' : 'SAÍDA'}</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                             </table>
+                             {logs.length === 0 && <div className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-20">Sem registros para esta data</div>}
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'substitutions' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto pb-40">
                          <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
@@ -399,7 +473,6 @@ export const HRDashboard: React.FC = () => {
                                             </div>
                                         </div>
                                     ))}
-                                    {extraClasses.length === 0 && <div className="h-full flex flex-col items-center justify-center text-gray-700 opacity-30"><BookOpen size={48} className="mb-4"/><p className="text-[10px] font-black uppercase tracking-widest">Sem registros de aulas extras</p></div>}
                                 </div>
                                 <Button className="w-full h-16 bg-blue-600 rounded-2xl font-black uppercase text-xs mt-8 shadow-xl shadow-blue-900/40"><Save size={18} className="mr-3"/> Salvar Log do Dia</Button>
                             </section>
@@ -447,7 +520,6 @@ export const HRDashboard: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
-
                                 <div className="mt-12 pt-8 border-t border-white/5">
                                     <h4 className="text-[10px] font-black text-gray-600 uppercase tracking-widest mb-6">Disciplinas Base do Sistema (Fixas)</h4>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -458,40 +530,6 @@ export const HRDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             </section>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'attendance' && (
-                    <div className="animate-in fade-in slide-in-from-right-4">
-                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
-                            <div>
-                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Histórico de Ponto</h1>
-                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest">Relatório unificado de entradas e saídas</p>
-                            </div>
-                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
-                                <Calendar className="text-red-600" size={18} />
-                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
-                            </div>
-                        </header>
-                        <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-                             <table className="w-full text-left">
-                                <thead className="bg-black/30 text-gray-600 uppercase text-[9px] font-black tracking-[0.2em]">
-                                    <tr><th className="p-8">Colaborador</th><th className="p-8">Horário</th><th className="p-8">Status</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {logs.map(log => (
-                                        <tr key={log.id} className="hover:bg-white/[0.02]">
-                                            <td className="p-8 font-black text-white text-sm">{log.staffName}</td>
-                                            <td className="p-8 text-red-500 font-black">{new Date(log.timestamp).toLocaleTimeString()}</td>
-                                            <td className="p-8">
-                                                <span className="bg-green-600/10 text-green-500 border border-green-600/20 px-3 py-1 rounded-full text-[9px] font-black">{log.type === 'entry' ? 'ENTRADA' : 'SAÍDA'}</span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                             </table>
-                             {logs.length === 0 && <div className="p-20 text-center text-gray-700 font-black uppercase tracking-widest opacity-20">Sem registros para esta data</div>}
                         </div>
                     </div>
                 )}
@@ -654,55 +692,191 @@ export const HRDashboard: React.FC = () => {
 
             {/* STAFF FORM MODAL */}
             {showForm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
-                    <div className="bg-[#18181b] border border-white/10 w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-5xl max-h-[95vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
                         <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
-                            <h3 className="text-2xl font-black text-white uppercase tracking-tight">{editingId ? 'Editar Colaborador' : 'Novo Colaborador'}</h3>
-                            <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-white"><X size={32}/></button>
+                            <div>
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tight leading-none mb-1">
+                                    {editingId ? 'EDITAR REGISTRO' : 'NOVO COLABORADOR'}
+                                </h2>
+                                <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest">
+                                    GESTÃO INSTITUCIONAL DE RH
+                                </p>
+                            </div>
+                            <button onClick={() => setShowForm(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
                         </div>
-                        <form onSubmit={handleSaveStaff} className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Completo</label>
-                                    <input required className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                        
+                        <form onSubmit={handleSaveStaff} className="p-10 space-y-10 overflow-y-auto custom-scrollbar">
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                {/* Coluna 1: Informações Básicas e Acesso */}
+                                <div className="space-y-8">
+                                    <div className="bg-black/20 p-8 rounded-[2rem] border border-white/5 space-y-6">
+                                        <div className="flex items-center gap-3 mb-4 text-red-500">
+                                            <Users size={20}/>
+                                            <h4 className="text-xs font-black uppercase tracking-widest">Dados Pessoais</h4>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Completo</label>
+                                            <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} placeholder="Alan Cristian Santos Alves" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Cargo / Função</label>
+                                            <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value.toUpperCase()})} placeholder="Professor de Arte" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Período de Trabalho</label>
+                                            <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-red-600" value={formData.workPeriod} onChange={e => setFormData({...formData, workPeriod: e.target.value as any})}>
+                                                <option value="morning">Matutino</option>
+                                                <option value="afternoon">Vespertino</option>
+                                                <option value="full">Integral / Full</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-black/20 p-8 rounded-[2rem] border border-white/5 space-y-6">
+                                        <div className="flex items-center gap-3 mb-4 text-blue-500">
+                                            <Shield size={20}/>
+                                            <h4 className="text-xs font-black uppercase tracking-widest">Acesso ao Sistema</h4>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Login (PIN/Código)</label>
+                                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-blue-600 transition-all text-center tracking-[0.2em]" value={formData.accessLogin} onChange={e => setFormData({...formData, accessLogin: e.target.value.toUpperCase()})} placeholder="ABC123" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">E-mail Corporativo</label>
+                                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium outline-none focus:border-blue-600 transition-all text-xs" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value.toLowerCase()})} placeholder="alan.cristian@cemal.com" />
+                                            </div>
+                                        </div>
+                                        {editingId && (
+                                            <div className="pt-2">
+                                                <button 
+                                                    type="button"
+                                                    onClick={handleResetPassword}
+                                                    className="w-full flex items-center justify-center gap-3 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-600/20 py-4 rounded-xl text-blue-400 font-black uppercase text-[10px] tracking-widest transition-all"
+                                                >
+                                                    <RefreshCw size={14}/> Redefinir Senha (Padrão: cemal2016)
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Cargo / Função</label>
-                                    <input required className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none focus:border-red-600" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} />
+
+                                {/* Coluna 2: Foto e Perfil Acadêmico */}
+                                <div className="space-y-8">
+                                    <div className="bg-black/20 p-8 rounded-[2rem] border border-white/5 flex flex-col items-center">
+                                        <div className="flex items-center gap-3 self-start mb-6 text-yellow-500">
+                                            <Camera size={20}/>
+                                            <h4 className="text-xs font-black uppercase tracking-widest">Biometria Facial (Ponto)</h4>
+                                        </div>
+                                        <div className="relative group">
+                                            <div className="h-48 w-48 rounded-[2.5rem] bg-black/60 border-4 border-white/5 flex items-center justify-center overflow-hidden shadow-2xl">
+                                                {photoPreview ? (
+                                                    <img src={photoPreview} className="h-full w-full object-cover animate-in fade-in" alt="Preview"/>
+                                                ) : (
+                                                    <Users size={64} className="text-gray-800"/>
+                                                )}
+                                                <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer backdrop-blur-sm">
+                                                    <Camera size={32} className="text-white mb-2"/>
+                                                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Alterar Foto</span>
+                                                    <input type="file" className="hidden" onChange={handlePhotoChange} accept="image/*" />
+                                                </label>
+                                            </div>
+                                            {photoPreview && (
+                                                <button onClick={(e) => { e.preventDefault(); setPhotoFile(null); setPhotoPreview(null); }} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-2 shadow-lg hover:scale-110 transition-transform">
+                                                    <X size={14}/>
+                                                </button>
+                                            )}
+                                        </div>
+                                        <p className="text-[9px] text-gray-600 font-bold uppercase tracking-[0.2em] mt-6 text-center leading-relaxed">
+                                            A foto será utilizada para o reconhecimento facial<br/>no terminal de ponto da equipe.
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-black/20 p-8 rounded-[2rem] border border-white/5 space-y-8">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3 text-red-500">
+                                                <BookOpen size={20}/>
+                                                <h4 className="text-xs font-black uppercase tracking-widest">Perfil Acadêmico</h4>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <label className="flex items-center gap-3 cursor-pointer group">
+                                                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${formData.isTeacher ? 'bg-red-600 border-red-600 shadow-lg' : 'border-white/10 bg-black/40 group-hover:border-red-600'}`}>
+                                                        {formData.isTeacher && <Check size={14} className="text-white"/>}
+                                                        <input type="checkbox" className="hidden" checked={formData.isTeacher} onChange={e => setFormData({...formData, isTeacher: e.target.checked})} />
+                                                    </div>
+                                                    <span className="text-[10px] font-black uppercase text-gray-500 group-hover:text-white transition-colors">Docente</span>
+                                                </label>
+                                                <label className="flex items-center gap-3 cursor-pointer group">
+                                                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${formData.isAdmin ? 'bg-blue-600 border-blue-600 shadow-lg' : 'border-white/10 bg-black/40 group-hover:border-blue-600'}`}>
+                                                        {formData.isAdmin && <Check size={14} className="text-white"/>}
+                                                        <input type="checkbox" className="hidden" checked={formData.isAdmin} onChange={e => setFormData({...formData, isAdmin: e.target.checked})} />
+                                                    </div>
+                                                    <span className="text-[10px] font-black uppercase text-gray-500 group-hover:text-white transition-colors">ADM</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        {formData.isTeacher && (
+                                            <div className="space-y-6 animate-in slide-in-from-top-4 duration-300">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Disciplina Principal</label>
+                                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-red-600" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})}>
+                                                        <option value="">Selecione...</option>
+                                                        {[...new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS, ...customSubjects])].sort().map(s => (
+                                                            <option key={s} value={s}>{s}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                {/* NOVA LÓGICA: SELEÇÃO DE TURMAS ESPECÍFICAS PARA POLIVALENTE */}
+                                                {formData.subject === "POLIVALENTE (INFANTIL/EFAI)" && (
+                                                    <div className="space-y-3 animate-in zoom-in-95 duration-200">
+                                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                                            <GraduationCap size={14} className="text-blue-500"/> Seleção de Turmas (Jardim ao 5º Ano)
+                                                        </label>
+                                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                            {POLIVALENTE_CLASSES.map(cls => (
+                                                                <button 
+                                                                    key={cls}
+                                                                    type="button"
+                                                                    onClick={() => toggleClass(cls)}
+                                                                    className={`px-3 py-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all ${formData.classes?.includes(cls) ? 'bg-blue-600/10 border-blue-600 text-blue-500 shadow-md' : 'bg-black/40 border-white/5 text-gray-700 hover:border-white/20'}`}
+                                                                >
+                                                                    {cls}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="space-y-3">
+                                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nível de Ensino</label>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        {EDUCATION_LEVELS.map(level => (
+                                                            <button 
+                                                                key={level}
+                                                                type="button"
+                                                                onClick={() => toggleLevel(level)}
+                                                                className={`px-4 py-3 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${formData.educationLevels?.includes(level) ? 'bg-red-600 border-red-600 text-white shadow-lg' : 'bg-black/40 border-white/5 text-gray-700 hover:border-white/20'}`}
+                                                            >
+                                                                {level}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                              </div>
-                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Período</label>
-                                    <select className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-bold outline-none appearance-none" value={formData.workPeriod} onChange={e => setFormData({...formData, workPeriod: e.target.value as any})}>
-                                        <option value="morning">Matutino</option>
-                                        <option value="afternoon">Vespertino</option>
-                                        <option value="full">Integral</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Biometria Facial</label>
-                                    <input type="file" className="w-full text-xs text-gray-500" onChange={handlePhotoChange} accept="image/*" />
-                                    {photoPreview && <img src={photoPreview} className="mt-2 w-20 h-20 rounded-xl object-cover border-2 border-white/5"/>}
-                                </div>
-                                <div className="flex flex-col gap-4 pt-4">
-                                    <label className="flex items-center gap-3 cursor-pointer group">
-                                        <div className={`w-6 h-6 rounded border-2 transition-all flex items-center justify-center ${formData.isTeacher ? 'bg-red-600 border-red-600 shadow-lg shadow-red-900/40' : 'border-white/10 bg-black/40 group-hover:border-red-600'}`}>
-                                            {formData.isTeacher && <Check size={14} className="text-white"/>}
-                                            <input type="checkbox" className="hidden" checked={formData.isTeacher} onChange={e => setFormData({...formData, isTeacher: e.target.checked})} />
-                                        </div>
-                                        <span className="text-[10px] font-black uppercase text-gray-400 group-hover:text-white transition-colors">Docente</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 cursor-pointer group">
-                                        <div className={`w-6 h-6 rounded border-2 transition-all flex items-center justify-center ${formData.isAdmin ? 'bg-blue-600 border-blue-600 shadow-lg shadow-blue-900/40' : 'border-white/10 bg-black/40 group-hover:border-blue-600'}`}>
-                                            {formData.isAdmin && <Check size={14} className="text-white"/>}
-                                            <input type="checkbox" className="hidden" checked={formData.isAdmin} onChange={e => setFormData({...formData, isAdmin: e.target.checked})} />
-                                        </div>
-                                        <span className="text-[10px] font-black uppercase text-gray-400 group-hover:text-white transition-colors">Administrativo</span>
-                                    </label>
-                                </div>
+
+                             <div className="pt-8 border-t border-white/5 flex gap-4">
+                                <Button type="button" variant="outline" onClick={() => setShowForm(false)} className="flex-1 h-20 rounded-[2rem] font-black uppercase tracking-widest text-sm border-2">Cancelar</Button>
+                                <Button type="submit" isLoading={isLoading} className="flex-1 h-20 bg-red-600 hover:bg-red-700 rounded-[2rem] font-black uppercase tracking-[0.2em] shadow-2xl shadow-red-900/40 text-sm">
+                                    <Save size={24} className="mr-3"/> Salvar Registro
+                                </Button>
                              </div>
-                             <Button type="submit" isLoading={isLoading} className="w-full h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">Salvar Registro</Button>
                         </form>
                     </div>
                 </div>
