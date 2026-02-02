@@ -624,6 +624,25 @@ export const TeacherDashboard: React.FC = () => {
                                             {myClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                     </div>
+                                    {(planningTab === 'diario' || planningTab === 'bimestral') && (
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Disciplina</label>
+                                            <div className="relative group">
+                                                <select 
+                                                    required
+                                                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs transition-all cursor-pointer shadow-inner"
+                                                    value={planForm.subject}
+                                                    onChange={e => setPlanForm({...planForm, subject: e.target.value})}
+                                                >
+                                                    <option value="">Selecionar...</option>
+                                                    {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                                                </select>
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                                                    <ChevronRight size={14} className="rotate-90" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                     {planningTab === 'bimestral' && (
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Bimestre</label>
@@ -645,18 +664,18 @@ export const TeacherDashboard: React.FC = () => {
                                         </div>
                                     )}
                                     {(planningTab === 'diario') && (
-                                        <>
-                                            <div className="space-y-2 animate-in fade-in">
-                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data da Aula</label>
-                                                <input type="date" required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" value={planForm.date} onChange={e => setPlanForm({...planForm, date: e.target.value})} />
-                                            </div>
-                                            <div className="space-y-2 animate-in fade-in">
-                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Assunto / Tema</label>
-                                                <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" placeholder="Tema da aula..." value={planForm.topic} onChange={e => setPlanForm({...planForm, topic: e.target.value})} />
-                                            </div>
-                                        </>
+                                        <div className="space-y-2 animate-in fade-in">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data da Aula</label>
+                                            <input type="date" required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" value={planForm.date} onChange={e => setPlanForm({...planForm, date: e.target.value})} />
+                                        </div>
                                     )}
                                 </div>
+                                {(planningTab === 'diario') && (
+                                    <div className="space-y-2 animate-in fade-in">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Assunto / Tema</label>
+                                        <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" placeholder="Tema da aula..." value={planForm.topic} onChange={e => setPlanForm({...planForm, topic: e.target.value})} />
+                                    </div>
+                                )}
                                 {planningTab === 'diario' && (
                                     <div className="space-y-2 animate-in fade-in duration-500">
                                         <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Conteúdo e Metodologia</label>

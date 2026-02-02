@@ -45,7 +45,8 @@ import {
     Camera,
     Shield,
     RefreshCw,
-    GraduationCap
+    GraduationCap,
+    Lock
 } from 'lucide-react';
 import { EFAF_SUBJECTS, EM_SUBJECTS, CLASSES, INFANTIL_CLASSES, EFAI_CLASSES } from '../constants';
 
@@ -61,7 +62,7 @@ export const HRDashboard: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<Partial<StaffMember>>({
-        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [], classes: [], subject: '', accessLogin: '', password: ''
+        name: '', role: '', active: true, workPeriod: 'morning', isTeacher: false, isAdmin: false, email: '', educationLevels: [], classes: [], subject: '', accessLogin: '', password: 'cemal2016'
     });
     const [photoFile, setPhotoFile] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -120,7 +121,8 @@ export const HRDashboard: React.FC = () => {
             classes: staff.classes || [],
             subject: staff.subject || '',
             accessLogin: staff.accessLogin || '',
-            password: staff.password || ''
+            password: staff.password || 'cemal2016',
+            email: staff.email || ''
         });
         setPhotoPreview(staff.photoUrl || null);
         setShowForm(true);
@@ -137,6 +139,9 @@ export const HRDashboard: React.FC = () => {
                 ...formData,
                 id: editingId || '',
                 photoUrl: photoUrl || '',
+                email: formData.email?.toLowerCase().trim() || '',
+                accessLogin: formData.accessLogin?.toUpperCase().trim() || '',
+                password: formData.password || 'cemal2016',
                 createdAt: formData.createdAt || Date.now(),
             };
 
@@ -145,8 +150,10 @@ export const HRDashboard: React.FC = () => {
 
             setShowForm(false);
             resetForm();
+            alert("Colaborador salvo e acesso gerado/atualizado!");
         } catch (error) {
-            alert("Erro ao salvar.");
+            console.error(error);
+            alert("Erro ao salvar cadastro de equipe.");
         } finally {
             setIsLoading(false);
         }
@@ -157,7 +164,7 @@ export const HRDashboard: React.FC = () => {
         setFormData({ 
             name: '', role: '', active: true, workPeriod: 'morning', 
             isTeacher: false, isAdmin: false, email: '', 
-            educationLevels: [], classes: [], subject: '', accessLogin: '', password: ''
+            educationLevels: [], classes: [], subject: '', accessLogin: '', password: 'cemal2016'
         });
         setPhotoFile(null);
         setPhotoPreview(null);
@@ -199,7 +206,7 @@ export const HRDashboard: React.FC = () => {
     const handleResetPassword = () => {
         if (confirm("Deseja redefinir a senha deste colaborador para a senha padrão 'cemal2016'?")) {
             setFormData(prev => ({ ...prev, password: 'cemal2016' }));
-            alert("Senha redefinida com sucesso! Salve o registro para confirmar a alteração no banco de dados.");
+            alert("Senha alterada localmente. Clique em 'SALVAR REGISTRO' para confirmar no banco de dados.");
         }
     };
 
@@ -627,69 +634,6 @@ export const HRDashboard: React.FC = () => {
                 )}
             </main>
 
-            {/* MODAL MATRÍCULA */}
-            {showEnrollmentModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
-                    <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
-                        <div className="p-10 border-b border-white/5 flex justify-between items-center bg-black/20">
-                            <div>
-                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Nova Matrícula Portal</h3>
-                                <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest mt-1">
-                                    {enrollmentType === 'individual' ? 'Registro Único' : 'Importação em Lote'}
-                                </p>
-                            </div>
-                            <button onClick={() => setShowEnrollmentModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
-                        </div>
-                        <form onSubmit={handleEnroll} className="p-10 space-y-8">
-                            <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5 mb-4">
-                                <button type="button" onClick={() => setEnrollmentType('individual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'individual' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Individual</button>
-                                <button type="button" onClick={() => setEnrollmentType('bulk')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'bulk' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Em Lote</button>
-                            </div>
-
-                            {enrollmentType === 'individual' ? (
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">ID / Matrícula</label>
-                                            <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all uppercase" value={enrollFormData.id} onChange={e => setEnrollFormData({...enrollFormData, id: e.target.value})} placeholder="EX: 2024001" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma</label>
-                                            <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
-                                                <option value="">Selecione...</option>
-                                                {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome Completo</label>
-                                        <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all uppercase" value={enrollFormData.name} onChange={e => setEnrollFormData({...enrollFormData, name: e.target.value})} placeholder="NOME DO ALUNO" />
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
-                                        <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
-                                            <option value="">Selecione...</option>
-                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Lista de Nomes (Um por linha)</label>
-                                        <textarea required className="w-full bg-black/60 border border-white/10 rounded-2xl p-6 text-white font-bold outline-none focus:border-orange-500 transition-all h-48 uppercase" value={bulkList} onChange={e => setBulkList(e.target.value)} placeholder="JOÃO SILVA&#10;MARIA OLIVEIRA..." />
-                                    </div>
-                                </div>
-                            )}
-
-                            <Button type="submit" isLoading={isLoading} className="w-full h-20 bg-orange-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-orange-900/40 text-sm">
-                                <Check size={24} className="mr-3"/> Confirmar Matrícula
-                            </Button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
             {/* STAFF FORM MODAL */}
             {showForm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
@@ -717,11 +661,11 @@ export const HRDashboard: React.FC = () => {
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Nome Completo</label>
-                                            <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} placeholder="Alan Cristian Santos Alves" />
+                                            <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} placeholder="Nome do Colaborador" />
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Cargo / Função</label>
-                                            <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value.toUpperCase()})} placeholder="Professor de Arte" />
+                                            <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 transition-all" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value.toUpperCase()})} placeholder="EX: PROFESSOR DE ARTE" />
                                         </div>
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Período de Trabalho</label>
@@ -733,32 +677,25 @@ export const HRDashboard: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <div className="bg-black/20 p-8 rounded-[2rem] border border-white/5 space-y-6">
+                                    <div className="bg-black/20 p-8 rounded-[2rem] border-2 border-blue-600/30 shadow-[0_0_20px_rgba(37,99,235,0.1)] space-y-6">
                                         <div className="flex items-center gap-3 mb-4 text-blue-500">
                                             <Shield size={20}/>
                                             <h4 className="text-xs font-black uppercase tracking-widest">Acesso ao Sistema</h4>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Login (PIN/Código)</label>
-                                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-blue-600 transition-all text-center tracking-[0.2em]" value={formData.accessLogin} onChange={e => setFormData({...formData, accessLogin: e.target.value.toUpperCase()})} placeholder="ABC123" />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">E-mail Corporativo</label>
-                                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium outline-none focus:border-blue-600 transition-all text-xs" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value.toLowerCase()})} placeholder="alan.cristian@cemal.com" />
-                                            </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">E-mail Corporativo</label>
+                                            <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium outline-none focus:border-blue-600 transition-all text-xs" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value.toLowerCase().trim()})} placeholder="nome@cemal.com" />
                                         </div>
-                                        {editingId && (
-                                            <div className="pt-2">
-                                                <button 
-                                                    type="button"
-                                                    onClick={handleResetPassword}
-                                                    className="w-full flex items-center justify-center gap-3 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-600/20 py-4 rounded-xl text-blue-400 font-black uppercase text-[10px] tracking-widest transition-all"
-                                                >
-                                                    <RefreshCw size={14}/> Redefinir Senha (Padrão: cemal2016)
-                                                </button>
-                                            </div>
-                                        )}
+                                        <div className="pt-4">
+                                            <button 
+                                                type="button"
+                                                onClick={handleResetPassword}
+                                                className="w-full flex items-center justify-center gap-3 bg-blue-600/10 hover:bg-blue-600 hover:text-white border border-blue-600/20 py-5 rounded-2xl text-blue-400 font-black uppercase text-[10px] tracking-widest transition-all shadow-lg"
+                                            >
+                                                <RefreshCw size={14} className={isLoading ? "animate-spin" : ""}/> 
+                                                Redefinir Senha (PADRÃO: CEMAL2016)
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -829,7 +766,6 @@ export const HRDashboard: React.FC = () => {
                                                     </select>
                                                 </div>
 
-                                                {/* NOVA LÓGICA: SELEÇÃO DE TURMAS ESPECÍFICAS PARA POLIVALENTE */}
                                                 {formData.subject === "POLIVALENTE (INFANTIL/EFAI)" && (
                                                     <div className="space-y-3 animate-in zoom-in-95 duration-200">
                                                         <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1 flex items-center gap-2">
@@ -877,6 +813,69 @@ export const HRDashboard: React.FC = () => {
                                     <Save size={24} className="mr-3"/> Salvar Registro
                                 </Button>
                              </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+            
+            {/* MODAL MATRÍCULA ALUNOS - MANTIDO DO CÓDIGO ORIGINAL */}
+            {showEnrollmentModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-10 border-b border-white/5 flex justify-between items-center bg-black/20">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Nova Matrícula Portal</h3>
+                                <p className="text-gray-500 font-bold uppercase text-[9px] tracking-widest mt-1">
+                                    {enrollmentType === 'individual' ? 'Registro Único' : 'Importação em Lote'}
+                                </p>
+                            </div>
+                            <button onClick={() => setShowEnrollmentModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <form onSubmit={handleEnroll} className="p-10 space-y-8">
+                            <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5 mb-4">
+                                <button type="button" onClick={() => setEnrollmentType('individual')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'individual' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Individual</button>
+                                <button type="button" onClick={() => setEnrollmentType('bulk')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${enrollmentType === 'bulk' ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>Em Lote</button>
+                            </div>
+
+                            {enrollmentType === 'individual' ? (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">ID / Matrícula</label>
+                                            <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all uppercase" value={enrollFormData.id} onChange={e => setEnrollFormData({...enrollFormData, id: e.target.value})} placeholder="EX: 2024001" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma</label>
+                                            <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
+                                                <option value="">Selecione...</option>
+                                                {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Nome Completo</label>
+                                        <input required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-orange-500 transition-all uppercase" value={enrollFormData.name} onChange={e => setEnrollFormData({...enrollFormData, name: e.target.value})} placeholder="NOME DO ALUNO" />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Turma Destino</label>
+                                        <select required className="w-full bg-black/60 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none appearance-none focus:border-orange-500" value={enrollFormData.className} onChange={e => setEnrollFormData({...enrollFormData, className: e.target.value})}>
+                                            <option value="">Selecione...</option>
+                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 ml-1">Lista de Nomes (Um por linha)</label>
+                                        <textarea required className="w-full bg-black/60 border border-white/10 rounded-2xl p-6 text-white font-bold outline-none focus:border-orange-500 transition-all h-48 uppercase" value={bulkList} onChange={e => setBulkList(e.target.value)} placeholder="JOÃO SILVA&#10;MARIA OLIVEIRA..." />
+                                    </div>
+                                </div>
+                            )}
+
+                            <Button type="submit" isLoading={isLoading} className="w-full h-20 bg-orange-600 rounded-[2rem] font-black uppercase tracking-widest shadow-2xl shadow-orange-900/40 text-sm">
+                                <Check size={24} className="mr-3"/> Confirmar Matrícula
+                            </Button>
                         </form>
                     </div>
                 </div>

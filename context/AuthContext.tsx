@@ -1,7 +1,6 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 // Use modular SDK v9 imports from firebase/auth
 import { 
   signInWithEmailAndPassword, 
@@ -10,6 +9,7 @@ import {
   onAuthStateChanged, 
   updatePassword 
 } from 'firebase/auth';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { getUserProfile } from '../services/firebaseService';
 
 interface AuthContextType {
@@ -151,7 +151,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
           }
         } else {
-          setUser(null);
+          // Mantém o estado se houver sessão manual via Staff
+          const manualSession = localStorage.getItem('manual_staff_session');
+          if (manualSession) {
+            setUser(JSON.parse(manualSession));
+          } else {
+            setUser(null);
+          }
         }
       } catch (error) {
         console.error("Authentication error:", error);
@@ -167,12 +173,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password?: string): Promise<boolean> => {
     try {
       if (!password) return false;
-      const cleanEmail = email.trim();
+      const cleanEmail = email.toLowerCase().trim();
       const cleanPassword = password.trim();
       
-      await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
-      return true;
-    } catch (error: any) {
+      // 1. Tenta login oficial via Firebase Auth
+      try {
+        await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        return true;
+      } catch (authError) {
+        // Se falhar o Auth, prossegue para o check manual no banco
+      }
+
+      // 2. Lógica Manual para Staff e Alunos (Cadastrados pelo RH/ADM em Firestore)
+      // Buscamos na coleção 'staff'
+      const qStaff = query(collection(db, 'staff'), where("email", "==", cleanEmail), where("password", "==", cleanPassword));
+      const staffSnap = await getDocs(qStaff);
+      
+      if (!staffSnap.empty) {
+          const staff = staffSnap.docs[0].data();
+          const manualUser: User = {
+              id: staff.id,
+              name: staff.name,
+              email: staff.email || '',
+              role: (staff.isTeacher ? UserRole.TEACHER : staff.isAdmin ? UserRole.HR : UserRole.TEACHER) as UserRole,
+              subject: staff.subject,
+              classes: staff.classes
+          };
+          setUser(manualUser);
+          localStorage.setItem('manual_staff_session', JSON.stringify(manualUser));
+          return true;
+      }
+
+      // 3. Fallback para Alunos (PIN de Acesso)
+      if (cleanEmail.endsWith('@aluno.cemal')) {
+          const loginCode = cleanEmail.split('@')[0].toUpperCase();
+          const qStudent = query(collection(db, 'students'), where("accessLogin", "==", loginCode), where("accessPassword", "==", cleanPassword));
+          const studentSnap = await getDocs(qStudent);
+          
+          if (!studentSnap.empty) {
+              const student = studentSnap.docs[0].data();
+              const studentUser: User = {
+                  id: student.id,
+                  name: student.name,
+                  email: cleanEmail,
+                  role: UserRole.STUDENT,
+                  studentData: {
+                      classId: student.classId,
+                      className: student.className
+                  }
+              };
+              setUser(studentUser);
+              localStorage.setItem('manual_staff_session', JSON.stringify(studentUser));
+              return true;
+          }
+      }
+
+      // 4. Fallback de contas de sistema (hardcoded para emergência/setup inicial)
       const systemPasswords: Record<string, string> = {
           'ruan.wss@gmail.com': 'cemal#2016',
           'pontoequipecemal@ceprofmal.com': 'cemal#2016',
@@ -183,39 +239,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'graficacemal@gmail.com': 'cemal#2016'
       };
 
-      const emailInput = email.trim();
-      
-      // Fallback for system accounts initialization
-      if (systemPasswords[emailInput] === password?.trim()) {
+      if (systemPasswords[cleanEmail] === cleanPassword) {
           try {
-              // Try to create the user if they don't exist yet (first run)
-              await createUserWithEmailAndPassword(auth, emailInput, password.trim());
+              // Cria no Auth se não existir
+              await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
               return true;
-          } catch (createError: any) {
-              // If creation fails (e.g., user exists but password in DB is different),
-              // we can't force login. Just allow it to return false below.
-              // We suppress logging here to avoid confusion unless debugging.
-          }
+          } catch (e) {}
       }
 
-      // Suppress expected auth errors from console
-      const errorCode = error.code;
-      if (
-          errorCode === 'auth/invalid-credential' || 
-          errorCode === 'auth/user-not-found' || 
-          errorCode === 'auth/wrong-password' ||
-          errorCode === 'auth/invalid-email'
-      ) {
-          return false;
-      }
-
-      // Log only unexpected errors
+      return false;
+    } catch (error: any) {
       console.error("Login error:", error);
       return false;
     }
   };
 
   const logout = () => {
+    localStorage.removeItem('manual_staff_session');
     signOut(auth);
   };
 

@@ -77,16 +77,34 @@ const GRADEBOOK_COLLECTION = 'gradebooks';
 
 export const getUserProfile = async (uid: string, email?: string): Promise<User | null> => {
   try {
+    // 1. Tenta buscar na coleção padrão de usuários
     const docRef = doc(db, USERS_COLLECTION, uid);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() } as User;
     }
+
+    // 2. Se não achou por UID, tenta por e-mail na coleção de usuários
     if (email) {
-       const q = query(collection(db, USERS_COLLECTION), where("email", "==", email));
+       const q = query(collection(db, USERS_COLLECTION), where("email", "==", email.toLowerCase().trim()));
        const querySnapshot = await getDocs(q);
        if (!querySnapshot.empty) {
          return { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as User;
+       }
+
+       // 3. FALLBACK: Busca na coleção de STAFF (onde o RH cadastra os professores)
+       const qStaff = query(collection(db, STAFF_COLLECTION), where("email", "==", email.toLowerCase().trim()));
+       const staffSnapshot = await getDocs(qStaff);
+       if (!staffSnapshot.empty) {
+         const staffData = staffSnapshot.docs[0].data() as StaffMember;
+         return {
+           id: staffData.id,
+           name: staffData.name,
+           email: staffData.email || '',
+           role: (staffData.isTeacher ? UserRole.TEACHER : staffData.isAdmin ? UserRole.HR : UserRole.TEACHER) as UserRole,
+           subject: staffData.subject,
+           classes: staffData.classes
+         } as User;
        }
     }
     return null;
@@ -202,7 +220,7 @@ export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void, o
 };
 
 export const saveStaffMember = async (staff: StaffMember) => {
-    const docRef = doc(collection(db, STAFF_COLLECTION));
+    const docRef = staff.id ? doc(db, STAFF_COLLECTION, staff.id) : doc(collection(db, STAFF_COLLECTION));
     await setDoc(docRef, { ...staff, id: docRef.id });
 };
 
@@ -468,7 +486,7 @@ export const listenToInfantilReports = (teacherId: string, callback: (reports: I
     if (teacherId) {
         q = query(collection(db, INFANTIL_REPORTS_COLLECTION), where("teacherId", "==", teacherId));
     } else {
-        q = query(collection(db, INFANTIL_REPORTS_COLLECTION));
+        q = query(collection(collection(db, INFANTIL_REPORTS_COLLECTION)));
     }
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InfantilReport)));
