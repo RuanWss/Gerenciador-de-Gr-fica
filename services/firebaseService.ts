@@ -183,13 +183,13 @@ export const listenToStudents = (callback: (students: Student[]) => void, onErro
 
 export const saveStudent = async (student: Student) => {
     const docRef = student.id ? doc(db, STUDENTS_COLLECTION, student.id) : doc(collection(db, STUDENTS_COLLECTION));
-    await setDoc(docRef, { ...student, id: docRef.id });
+    await setDoc(docRef, { ...student, id: docRef.id }, { merge: true });
 };
 
 export const updateStudent = async (student: Student) => {
     if (!student.id) return;
     const docRef = doc(db, STUDENTS_COLLECTION, student.id);
-    await updateDoc(docRef, { ...student });
+    await setDoc(docRef, { ...student }, { merge: true });
 };
 
 export const deleteStudent = async (id: string) => {
@@ -221,12 +221,13 @@ export const listenToStaffMembers = (callback: (staff: StaffMember[]) => void, o
 
 export const saveStaffMember = async (staff: StaffMember) => {
     const docRef = staff.id ? doc(db, STAFF_COLLECTION, staff.id) : doc(collection(db, STAFF_COLLECTION));
-    await setDoc(docRef, { ...staff, id: docRef.id });
+    await setDoc(docRef, { ...staff, id: docRef.id }, { merge: true });
 };
 
 export const updateStaffMember = async (staff: StaffMember) => {
+    if (!staff.id) return;
     const docRef = doc(db, STAFF_COLLECTION, staff.id);
-    await updateDoc(docRef, { ...staff });
+    await setDoc(docRef, { ...staff }, { merge: true });
 };
 
 export const deleteStaffMember = async (id: string) => {

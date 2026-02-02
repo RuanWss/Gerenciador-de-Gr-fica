@@ -9,7 +9,7 @@ import {
   onAuthStateChanged, 
   updatePassword 
 } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { getUserProfile } from '../services/firebaseService';
 
 interface AuthContextType {
@@ -179,52 +179,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 1. Tenta login oficial via Firebase Auth
       try {
         await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        localStorage.removeItem('manual_staff_session'); // Limpa sessões manuais antigas se o Auth oficial funcionar
         return true;
       } catch (authError) {
         // Se falhar o Auth, prossegue para o check manual no banco
       }
 
       // 2. Lógica Manual para Staff e Alunos (Cadastrados pelo RH/ADM em Firestore)
-      // Buscamos na coleção 'staff'
-      const qStaff = query(collection(db, 'staff'), where("email", "==", cleanEmail), where("password", "==", cleanPassword));
+      // Buscamos na coleção 'staff' apenas por email para evitar erros de índice composto
+      const qStaff = query(collection(db, 'staff'), where("email", "==", cleanEmail), limit(1));
       const staffSnap = await getDocs(qStaff);
       
       if (!staffSnap.empty) {
           const staff = staffSnap.docs[0].data();
-          const manualUser: User = {
-              id: staff.id,
-              name: staff.name,
-              email: staff.email || '',
-              role: (staff.isTeacher ? UserRole.TEACHER : staff.isAdmin ? UserRole.HR : UserRole.TEACHER) as UserRole,
-              subject: staff.subject,
-              classes: staff.classes
-          };
-          setUser(manualUser);
-          localStorage.setItem('manual_staff_session', JSON.stringify(manualUser));
-          return true;
+          // Validação manual da senha
+          if (staff.password === cleanPassword) {
+              const manualUser: User = {
+                  id: staff.id,
+                  name: staff.name,
+                  email: staff.email || '',
+                  role: (staff.isAdmin ? UserRole.HR : (staff.isTeacher ? UserRole.TEACHER : UserRole.TEACHER)) as UserRole,
+                  subject: staff.subject,
+                  classes: staff.classes || []
+              };
+              setUser(manualUser);
+              localStorage.setItem('manual_staff_session', JSON.stringify(manualUser));
+              return true;
+          }
       }
 
       // 3. Fallback para Alunos (PIN de Acesso)
       if (cleanEmail.endsWith('@aluno.cemal')) {
           const loginCode = cleanEmail.split('@')[0].toUpperCase();
-          const qStudent = query(collection(db, 'students'), where("accessLogin", "==", loginCode), where("accessPassword", "==", cleanPassword));
+          const qStudent = query(collection(db, 'students'), where("accessLogin", "==", loginCode), limit(1));
           const studentSnap = await getDocs(qStudent);
           
           if (!studentSnap.empty) {
               const student = studentSnap.docs[0].data();
-              const studentUser: User = {
-                  id: student.id,
-                  name: student.name,
-                  email: cleanEmail,
-                  role: UserRole.STUDENT,
-                  studentData: {
-                      classId: student.classId,
-                      className: student.className
-                  }
-              };
-              setUser(studentUser);
-              localStorage.setItem('manual_staff_session', JSON.stringify(studentUser));
-              return true;
+              if (student.accessPassword === cleanPassword) {
+                  const studentUser: User = {
+                      id: student.id,
+                      name: student.name,
+                      email: cleanEmail,
+                      role: UserRole.STUDENT,
+                      studentData: {
+                          classId: student.classId || student.className,
+                          className: student.className
+                      }
+                  };
+                  setUser(studentUser);
+                  localStorage.setItem('manual_staff_session', JSON.stringify(studentUser));
+                  return true;
+              }
           }
       }
 
@@ -241,8 +247,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (systemPasswords[cleanEmail] === cleanPassword) {
           try {
-              // Cria no Auth se não existir
-              await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+              // Tenta logar de novo caso o Auth tenha sido criado recentemente
+              await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
               return true;
           } catch (e) {}
       }
