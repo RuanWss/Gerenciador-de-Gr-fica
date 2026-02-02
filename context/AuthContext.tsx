@@ -187,50 +187,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 2. Lógica Manual para Staff e Alunos (Cadastrados pelo RH/ADM em Firestore)
       // Buscamos na coleção 'staff' apenas por email para evitar erros de índice composto
-      const qStaff = query(collection(db, 'staff'), where("email", "==", cleanEmail), limit(1));
-      const staffSnap = await getDocs(qStaff);
-      
-      if (!staffSnap.empty) {
-          const staff = staffSnap.docs[0].data();
-          // Validação manual da senha
-          if (staff.password === cleanPassword) {
-              const manualUser: User = {
-                  id: staff.id,
-                  name: staff.name,
-                  email: staff.email || '',
-                  role: (staff.isAdmin ? UserRole.HR : (staff.isTeacher ? UserRole.TEACHER : UserRole.TEACHER)) as UserRole,
-                  subject: staff.subject,
-                  classes: staff.classes || []
-              };
-              setUser(manualUser);
-              localStorage.setItem('manual_staff_session', JSON.stringify(manualUser));
-              return true;
+      try {
+          const qStaff = query(collection(db, 'staff'), where("email", "==", cleanEmail), limit(1));
+          const staffSnap = await getDocs(qStaff);
+          
+          if (!staffSnap.empty) {
+              const staff = staffSnap.docs[0].data();
+              // Validação manual da senha
+              if (staff.password === cleanPassword) {
+                  const manualUser: User = {
+                      id: staff.id,
+                      name: staff.name,
+                      email: staff.email || '',
+                      role: (staff.isAdmin ? UserRole.HR : (staff.isTeacher ? UserRole.TEACHER : UserRole.TEACHER)) as UserRole,
+                      subject: staff.subject,
+                      classes: staff.classes || []
+                  };
+                  setUser(manualUser);
+                  localStorage.setItem('manual_staff_session', JSON.stringify(manualUser));
+                  return true;
+              }
           }
+      } catch (e) {
+          console.warn("Manual staff login failed (Permissions):", e);
       }
 
       // 3. Fallback para Alunos (PIN de Acesso)
       if (cleanEmail.endsWith('@aluno.cemal')) {
-          const loginCode = cleanEmail.split('@')[0].toUpperCase();
-          const qStudent = query(collection(db, 'students'), where("accessLogin", "==", loginCode), limit(1));
-          const studentSnap = await getDocs(qStudent);
-          
-          if (!studentSnap.empty) {
-              const student = studentSnap.docs[0].data();
-              if (student.accessPassword === cleanPassword) {
-                  const studentUser: User = {
-                      id: student.id,
-                      name: student.name,
-                      email: cleanEmail,
-                      role: UserRole.STUDENT,
-                      studentData: {
-                          classId: student.classId || student.className,
-                          className: student.className
-                      }
-                  };
-                  setUser(studentUser);
-                  localStorage.setItem('manual_staff_session', JSON.stringify(studentUser));
-                  return true;
+          try {
+              const loginCode = cleanEmail.split('@')[0].toUpperCase();
+              const qStudent = query(collection(db, 'students'), where("accessLogin", "==", loginCode), limit(1));
+              const studentSnap = await getDocs(qStudent);
+              
+              if (!studentSnap.empty) {
+                  const student = studentSnap.docs[0].data();
+                  if (student.accessPassword === cleanPassword) {
+                      const studentUser: User = {
+                          id: student.id,
+                          name: student.name,
+                          email: cleanEmail,
+                          role: UserRole.STUDENT,
+                          studentData: {
+                              classId: student.classId || student.className,
+                              className: student.className
+                          }
+                      };
+                      setUser(studentUser);
+                      localStorage.setItem('manual_staff_session', JSON.stringify(studentUser));
+                      return true;
+                  }
               }
+          } catch (e) {
+              console.warn("Student portal login failed (Permissions):", e);
           }
       }
 

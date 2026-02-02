@@ -293,20 +293,48 @@ export const TeacherDashboard: React.FC = () => {
     };
 
     const handleGradeUpdate = async (studentId: string, activityId: string, val: number, isAV1 = false) => {
-        if (!gradebookData) return;
-        const updatedGrades = { ...gradebookData.grades };
+        let currentData = gradebookData;
+        
+        if (!currentData) {
+            currentData = {
+                id: '',
+                className: selectedClass,
+                subject: selectedSubject,
+                bimester: selectedBimester,
+                av1Config: [],
+                grades: {},
+                updatedAt: Date.now()
+            };
+        }
+
+        // FEATURE: Restrição de nota máxima (Clamping)
+        let finalValue = val;
+        if (isAV1) {
+            const config = currentData.av1Config.find(a => a.id === activityId);
+            if (config && val > config.maxScore) {
+                finalValue = config.maxScore;
+            }
+        } else if (activityId === 'av2' || activityId === 'av3') {
+            if (val > 10) finalValue = 10;
+        }
+
+        if (finalValue < 0) finalValue = 0;
+
+        const updatedGrades = { ...currentData.grades };
         if (!updatedGrades[studentId]) updatedGrades[studentId] = { av1: {} };
         
-        if (isAV1) updatedGrades[studentId].av1[activityId] = val;
-        else (updatedGrades[studentId] as any)[activityId] = val;
+        if (isAV1) updatedGrades[studentId].av1[activityId] = finalValue;
+        else (updatedGrades[studentId] as any)[activityId] = finalValue;
 
-        await saveGradebook({ ...gradebookData, grades: updatedGrades });
+        await saveGradebook({ ...currentData, grades: updatedGrades });
     };
 
     const handleAddAV1 = async () => {
-        if (!gradebookData || !newAV1.activityName) return;
+        if (!newAV1.activityName) return;
         
-        if ((gradebookData.av1Config || []).length >= 7) {
+        const currentAv1Config = gradebookData?.av1Config || [];
+
+        if (currentAv1Config.length >= 7) {
             return alert("Limite de 7 colunas para AV1 atingido.");
         }
 
@@ -323,8 +351,21 @@ export const TeacherDashboard: React.FC = () => {
             maxScore: score
         };
         
-        const updatedConfig = [...(gradebookData.av1Config || []), activity];
-        await saveGradebook({ ...gradebookData, av1Config: updatedConfig });
+        const updatedConfig = [...currentAv1Config, activity];
+        
+        const gradebookToSave: GradebookEntry = gradebookData 
+            ? { ...gradebookData, av1Config: updatedConfig }
+            : {
+                id: '',
+                className: selectedClass,
+                subject: selectedSubject,
+                bimester: selectedBimester,
+                av1Config: updatedConfig,
+                grades: {},
+                updatedAt: Date.now()
+            };
+
+        await saveGradebook(gradebookToSave);
         setShowAV1Modal(false);
         setNewAV1({ activityName: '', maxScore: 2, applicationDate: '', deliveryDate: '' });
     };
@@ -900,7 +941,7 @@ export const TeacherDashboard: React.FC = () => {
 
                 {activeTab === 'attendance' && (
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto space-y-12">
-                        <header><h1 className="text-6xl font-black text-white uppercase tracking-tighter">Frequência</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Chamada diária simplificada</p></header>
+                        <header className="mb-12"><h1 className="text-6xl font-black text-white uppercase tracking-tighter">Frequência</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Chamada diária simplificada</p></header>
                         <section className="bg-[#18181b] border border-white/5 rounded-[3rem] p-12 shadow-2xl">
                             <div className="mb-10"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 block mb-4">Selecione a Turma</label><select className="w-full bg-black/40 border border-red-600/30 rounded-2xl p-6 text-white font-black uppercase tracking-widest outline-none focus:border-red-600 appearance-none text-xl cursor-pointer shadow-inner" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setAttendanceRecords({}); }}><option value="">-- Turma --</option>{myClasses.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                             {selectedClass ? (
@@ -998,7 +1039,7 @@ export const TeacherDashboard: React.FC = () => {
 
             {/* OCCURRENCE FORM MODAL */}
             {showOccModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">{isEditingOcc ? <Edit3 size={24} className="text-yellow-500" /> : <PlusCircle size={24} className="text-red-600" />}{isEditingOcc ? 'Editar Registro' : 'Novo Registro'}</h3><button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><form onSubmit={handleSaveOccurrence} className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occSelectedClass} onChange={(e) => setOccSelectedClass(e.target.value)} disabled={isEditingOcc}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Aluno</label><select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.studentId} onChange={(e) => setOccForm({...occForm, studentId: e.target.value})} disabled={isEditingOcc}><option value="">-- Selecione --</option>{students.filter(s => s.className === occSelectedClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Categoria</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.category} onChange={(e) => setOccForm({...occForm, category: e.target.value as any})}><option value="indisciplina">Indisciplina</option><option value="atraso">Atraso</option><option value="desempenho">Resumo</option><option value="uniforme">Uniforme</option><option value="elogio">Elogio</option><option value="outros">Outros</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data</label><input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={occForm.date} onChange={(e) => setOccForm({...occForm, date: e.target.value})} /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Descrição Detalhada</label><textarea required className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[150px]" placeholder="Descreva o ocorrido com o máximo de detalhes..." value={occForm.description} onChange={(e) => setOccForm({...occForm, description: e.target.value})} /></div><div className="flex gap-4 pt-4"><Button type="button" variant="outline" onClick={() => setShowOccModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest">Cancelar</Button><Button type="submit" isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">{isEditingOcc ? 'Salvar Alterações' : 'Registrar Ocorrência'}</Button></div></form></div></div>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">{isEditingOcc ? <Edit3 size={24} className="text-yellow-500" /> : <PlusCircle size={24} className="text-red-600" />}{isEditingOcc ? 'Editar Registro' : 'Novo Registro'}</h3><button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><form onSubmit={handleSaveOccurrence} className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occSelectedClass} onChange={(e) => setOccSelectedClass(e.target.value)} disabled={isEditingOcc}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Aluno</label><select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.studentId} onChange={(e) => setOccForm({...occForm, studentId: e.target.value})} disabled={isEditingOcc}><option value="">-- Selecione --</option>{students.filter(s => s.className === occSelectedClass).map(s => <option key={s} value={s.id}>{s.name}</option>)}</select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Categoria</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.category} onChange={(e) => setOccForm({...occForm, category: e.target.value as any})}><option value="indisciplina">Indisciplina</option><option value="atraso">Atraso</option><option value="desempenho">Resumo</option><option value="uniforme">Uniforme</option><option value="elogio">Elogio</option><option value="outros">Outros</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data</label><input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={occForm.date} onChange={(e) => setOccForm({...occForm, date: e.target.value})} /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Descrição Detalhada</label><textarea required className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[150px]" placeholder="Descreva o ocorrido com o máximo de detalhes..." value={occForm.description} onChange={(e) => setOccForm({...occForm, description: e.target.value})} /></div><div className="flex gap-4 pt-4"><Button type="button" variant="outline" onClick={() => setShowOccModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest">Cancelar</Button><Button type="submit" isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">{isEditingOcc ? 'Salvar Alterações' : 'Registrar Ocorrência'}</Button></div></form></div></div>
             )}
 
             {/* PEI FORM MODAL */}

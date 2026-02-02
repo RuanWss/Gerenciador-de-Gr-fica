@@ -204,6 +204,11 @@ export const PrintShopDashboard: React.FC = () => {
     const handleUpdateAdminGrade = async (studentId: string, type: 'av2' | 'av3', value: number) => {
         if (!gradeAdminClass || !gradeAdminSubject) return;
         
+        // FEATURE: Clamping admin grades
+        let clampedValue = value;
+        if (value > 10) clampedValue = 10;
+        if (value < 0) clampedValue = 0;
+
         let currentData = gradebookData || {
             id: '',
             className: gradeAdminClass,
@@ -216,7 +221,7 @@ export const PrintShopDashboard: React.FC = () => {
 
         const updatedGrades = { ...currentData.grades };
         if (!updatedGrades[studentId]) updatedGrades[studentId] = { av1: {} };
-        updatedGrades[studentId][type] = value;
+        updatedGrades[studentId][type] = clampedValue;
         
         await saveGradebook({ ...currentData, grades: updatedGrades });
     };
