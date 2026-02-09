@@ -101,9 +101,16 @@ export const CorrectionDashboard: React.FC = () => {
     const startCamera = async () => {
         setCameraActive(true);
         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } 
+                });
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                }
+            } catch (err) {
+                console.error("Camera error:", err);
+                alert("Erro ao acessar câmera. Verifique permissões.");
             }
         }
     };
@@ -124,12 +131,13 @@ export const CorrectionDashboard: React.FC = () => {
         canvasRef.current.height = videoRef.current.videoHeight;
         context?.drawImage(videoRef.current, 0, 0);
         
+        // Compress to JPEG 0.8 quality to reduce payload size
         canvasRef.current.toBlob(async (blob) => {
             if (blob) {
                 const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
                 await processImage(file);
             }
-        }, 'image/jpeg');
+        }, 'image/jpeg', 0.8);
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,8 +150,9 @@ export const CorrectionDashboard: React.FC = () => {
         setIsLoading(true);
         setCorrectionLog(prev => ["Iniciando análise...", ...prev]);
         try {
-            // Assume standard 10-20 questions for detection context or use max
-            const result = await analyzeAnswerSheetWithQR(file, 20);
+            // Assume max questions from the saved key if possible, but here we don't know the key yet.
+            // Using 50 as a safe upper bound for detection.
+            const result = await analyzeAnswerSheetWithQR(file, 50);
             
             if (result.qrData && result.qrData.e && result.qrData.s) {
                 const examKey = savedKeys.find(k => k.id === result.qrData.e);
@@ -158,7 +167,11 @@ export const CorrectionDashboard: React.FC = () => {
                         const total = examKey.numQuestions;
                         
                         for (let i = 1; i <= total; i++) {
-                            if (result.answers[i] === examKey.correctAnswers[i]) {
+                            // Compare safely handling potential missing keys in result
+                            const studentAns = result.answers[String(i)] || 'X';
+                            const correctAns = examKey.correctAnswers[String(i)];
+                            
+                            if (studentAns === correctAns) {
                                 score++;
                             }
                         }
@@ -177,19 +190,19 @@ export const CorrectionDashboard: React.FC = () => {
                             scannedAt: Date.now()
                         });
 
-                        setCorrectionLog(prev => [`✅ SUCESSO: ${student.name} - Nota: ${finalScore.toFixed(1)}`, ...prev]);
+                        setCorrectionLog(prev => [`✅ SUCESSO: ${student.name} - Nota: ${finalScore.toFixed(1)} (${score}/${total})`, ...prev]);
                     } else {
-                        setCorrectionLog(prev => ["❌ ERRO: Aluno não encontrado na base.", ...prev]);
+                        setCorrectionLog(prev => ["❌ ERRO: Aluno não encontrado na base de dados.", ...prev]);
                     }
                 } else {
-                    setCorrectionLog(prev => ["❌ ERRO: Gabarito da prova não encontrado.", ...prev]);
+                    setCorrectionLog(prev => ["❌ ERRO: Gabarito da prova não encontrado no sistema.", ...prev]);
                 }
             } else {
-                setCorrectionLog(prev => ["⚠️ AVISO: QR Code não identificado. Tente melhorar o foco.", ...prev]);
+                setCorrectionLog(prev => ["⚠️ AVISO: QR Code não identificado. Melhore o foco ou iluminação.", ...prev]);
             }
         } catch (error) {
             console.error(error);
-            setCorrectionLog(prev => ["❌ ERRO CRÍTICO: Falha na análise de imagem.", ...prev]);
+            setCorrectionLog(prev => ["❌ ERRO DE SISTEMA: Tente novamente.", ...prev]);
         } finally {
             setIsLoading(false);
         }
@@ -202,6 +215,16 @@ export const CorrectionDashboard: React.FC = () => {
         setResults(res.sort((a,b) => b.score - a.score));
         setActiveTab('results');
         setIsLoading(false);
+    };
+
+    // Helper to split questions into columns
+    const getQuestionColumns = (total: number) => {
+        const cols = [];
+        const perCol = Math.ceil(total / 4); // Max 4 columns
+        for (let i = 0; i < total; i += perCol) {
+            cols.push({ start: i + 1, end: Math.min(i + perCol, total) });
+        }
+        return cols;
     };
 
     return (
@@ -306,78 +329,121 @@ export const CorrectionDashboard: React.FC = () => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="print:w-full print:h-full print:fixed print:top-0 print:left-0 print:bg-white print:z-50">
+                            <div className="print:w-full print:h-full print:fixed print:top-0 print:left-0 print:bg-white print:z-50 print:overflow-visible">
                                 <div className="print:hidden mb-8 flex justify-between items-center bg-[#18181b] p-6 rounded-3xl border border-white/5">
                                     <button onClick={() => setSelectedKeyForPrint(null)} className="flex items-center gap-2 text-gray-400 hover:text-white font-black uppercase text-xs tracking-widest"><ArrowLeft size={16}/> Voltar</button>
-                                    <h2 className="text-white font-black uppercase tracking-tight">{selectedKeyForPrint.title} - {selectedKeyForPrint.className}</h2>
-                                    <Button onClick={handlePrint} className="bg-cyan-600"><Printer size={18} className="mr-2"/> Imprimir</Button>
+                                    <div>
+                                        <h2 className="text-white font-black uppercase tracking-tight text-center">{selectedKeyForPrint.title} - {selectedKeyForPrint.className}</h2>
+                                        <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest text-center">Modelo de Impressão (A4)</p>
+                                    </div>
+                                    <Button onClick={handlePrint} className="bg-cyan-600"><Printer size={18} className="mr-2"/> Gerar Arquivo de Impressão (PDF)</Button>
                                 </div>
 
-                                {/* LAYOUT DE IMPRESSÃO */}
-                                <div className="grid grid-cols-1 gap-8 print:block">
+                                {/* LAYOUT DE IMPRESSÃO ESTILO ENEM */}
+                                <div className="flex flex-col gap-8 print:block print:gap-0">
                                     {studentsForPrint.map((student, idx) => (
-                                        <div key={student.id} className="bg-white text-black p-8 rounded-xl max-w-3xl mx-auto print:max-w-none print:break-after-page print:h-screen relative border-2 border-black print:border-0">
-                                            {/* HEADER */}
-                                            <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-6">
-                                                <div className="flex items-center gap-4">
-                                                    <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-16 filter invert grayscale contrast-200" />
-                                                    <div>
-                                                        <h1 className="text-2xl font-black uppercase tracking-tight">Cartão Resposta</h1>
-                                                        <p className="text-xs font-bold uppercase tracking-widest text-gray-600">Avaliação Institucional</p>
+                                        <div key={student.id} className="bg-white text-black w-[210mm] min-h-[297mm] mx-auto p-12 relative box-border border border-gray-200 print:border-0 print:break-after-page shadow-xl print:shadow-none mb-8 print:mb-0 font-sans">
+                                            
+                                            {/* Header Principal */}
+                                            <div className="flex justify-between items-start mb-6">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-4 mb-3">
+                                                        <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 filter invert grayscale contrast-200" alt="Logo" />
                                                     </div>
+                                                    <h1 className="text-5xl font-black uppercase tracking-tighter leading-none mb-1 border-b-4 border-black inline-block pb-1">CARTÃO-RESPOSTA</h1>
+                                                    <p className="text-xs font-bold uppercase tracking-widest text-gray-600 mt-1">SIMULADO / AVALIAÇÃO INSTITUCIONAL - CEMAL</p>
                                                 </div>
-                                                <div className="text-right">
+                                                <div className="flex flex-col items-center justify-center border-4 border-black rounded-full w-24 h-24 relative overflow-hidden shrink-0">
+                                                    <span className="text-[9px] font-bold uppercase absolute top-3">TURMA</span>
+                                                    <span className="text-3xl font-black">{selectedKeyForPrint.className.split(' ')[0]}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Dados do Aluno e QR Code */}
+                                            <div className="border-4 border-black mb-3 flex h-32">
+                                                <div className="flex-1 p-4 border-r-4 border-black flex flex-col justify-center">
+                                                    <span className="block text-[10px] font-black uppercase mb-1 tracking-widest">NOME COMPLETO DO PARTICIPANTE:</span>
+                                                    <div className="text-2xl font-black uppercase truncate leading-tight">{student.name}</div>
+                                                </div>
+                                                <div className="w-56 relative bg-gray-50 flex items-center justify-center overflow-hidden">
+                                                    <div className="absolute top-1 left-2 text-[8px] font-black uppercase z-10 text-gray-500">USO EXCLUSIVO SISTEMA</div>
                                                     <img 
-                                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${JSON.stringify({e: selectedKeyForPrint.id, s: student.id})}`} 
-                                                        className="w-24 h-24"
-                                                        alt="QR Code"
+                                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${JSON.stringify({e: selectedKeyForPrint.id, s: student.id})}`} 
+                                                        className="h-24 w-24 object-contain mix-blend-multiply"
+                                                        alt="QR"
                                                     />
+                                                    <div className="absolute bottom-1 right-2 text-[8px] font-mono text-gray-400">{student.id.substring(0,6)}</div>
                                                 </div>
                                             </div>
 
-                                            {/* STUDENT INFO */}
-                                            <div className="grid grid-cols-2 gap-4 mb-8 text-sm font-bold uppercase border-b-2 border-black pb-6">
-                                                <div>
-                                                    <span className="block text-[10px] text-gray-500 tracking-widest mb-1">Aluno</span>
-                                                    <div className="text-lg leading-none">{student.name}</div>
+                                            {/* Assinatura e Info da Prova */}
+                                            <div className="mb-8 flex justify-between items-end">
+                                                <div className="flex-1 mr-8">
+                                                    <div className="border-b-2 border-black h-8 w-full"></div>
+                                                    <span className="text-[10px] font-bold uppercase mt-1 block">ASSINATURA DO PARTICIPANTE:</span>
                                                 </div>
                                                 <div className="text-right">
-                                                    <span className="block text-[10px] text-gray-500 tracking-widest mb-1">Turma</span>
-                                                    <div className="text-lg leading-none">{student.className}</div>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[10px] text-gray-500 tracking-widest mb-1">Prova</span>
-                                                    <div className="text-lg leading-none">{selectedKeyForPrint.title}</div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <span className="block text-[10px] text-gray-500 tracking-widest mb-1">Disciplina</span>
-                                                    <div className="text-lg leading-none">{selectedKeyForPrint.subject}</div>
+                                                    <p className="text-sm font-black uppercase">{selectedKeyForPrint.subject}</p>
+                                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{selectedKeyForPrint.title}</p>
                                                 </div>
                                             </div>
 
-                                            {/* BUBBLE GRID */}
-                                            <div className="grid grid-cols-2 gap-x-12 gap-y-2">
-                                                {Array.from({ length: selectedKeyForPrint.numQuestions }).map((_, i) => {
-                                                    const qNum = i + 1;
-                                                    return (
-                                                        <div key={qNum} className="flex items-center justify-between border-b border-gray-200 py-2">
-                                                            <span className="font-black text-lg w-8">{qNum < 10 ? `0${qNum}` : qNum}</span>
-                                                            <div className="flex gap-4">
-                                                                {['A', 'B', 'C', 'D', 'E'].map(opt => (
-                                                                    <div key={opt} className="flex flex-col items-center">
-                                                                        <div className="w-8 h-8 rounded-full border-2 border-black flex items-center justify-center font-bold text-xs mb-1">
-                                                                            {opt}
+                                            {/* Instruções e Exemplo */}
+                                            <div className="flex gap-8 mb-8">
+                                                <div className="flex-1">
+                                                    <h3 className="text-sm font-black uppercase text-blue-800 mb-2">INSTRUÇÕES</h3>
+                                                    <ol className="text-[10px] font-bold space-y-1 list-decimal list-inside text-gray-800">
+                                                        <li>Verifique se seu nome e turma estão corretos no cabeçalho.</li>
+                                                        <li>Utilize <strong>caneta esferográfica de tinta preta ou azul</strong>.</li>
+                                                        <li>Preencha completamente a bolha correspondente à sua resposta.</li>
+                                                        <li>Não rasure, não amasse e não dobre este cartão-resposta.</li>
+                                                        <li>Apenas uma resposta por questão é válida.</li>
+                                                    </ol>
+                                                </div>
+                                                <div className="w-64 bg-gray-100 border border-gray-300 p-4 rounded-xl shrink-0">
+                                                    <p className="text-[9px] font-black text-center mb-3 uppercase">EXEMPLO DE PREENCHIMENTO</p>
+                                                    <div className="flex justify-center gap-3 mb-2">
+                                                        <div className="w-8 h-8 rounded-full border border-black flex items-center justify-center text-xs font-bold bg-white">A</div>
+                                                        <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs font-bold">B</div>
+                                                        <div className="w-8 h-8 rounded-full border border-black flex items-center justify-center text-xs font-bold bg-white">C</div>
+                                                    </div>
+                                                    <p className="text-[8px] text-center mt-2 font-medium uppercase">Correto</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Grade de Respostas */}
+                                            <div className="border-t-4 border-black pt-6 flex-1">
+                                                <div className="grid grid-cols-4 gap-6">
+                                                    {getQuestionColumns(selectedKeyForPrint.numQuestions).map((col, colIdx) => (
+                                                        <div key={colIdx} className="flex flex-col">
+                                                            <div className="bg-blue-800 text-white text-[10px] font-black uppercase text-center py-1.5 mb-1">
+                                                                QUESTÃO / RESPOSTA
+                                                            </div>
+                                                            <div className="space-y-0.5">
+                                                                {Array.from({ length: col.end - col.start + 1 }).map((_, i) => {
+                                                                    const qNum = col.start + i;
+                                                                    return (
+                                                                        <div key={qNum} className={`flex items-center justify-between px-2 py-1 ${i % 2 === 0 ? 'bg-gray-100' : 'bg-white'}`}>
+                                                                            <span className="font-black text-sm w-6 text-center">{qNum < 10 ? `0${qNum}` : qNum}</span>
+                                                                            <div className="flex gap-1.5">
+                                                                                {['A', 'B', 'C', 'D', 'E'].map(opt => (
+                                                                                    <div key={opt} className="w-5 h-5 rounded-full border border-black flex items-center justify-center text-[8px] font-bold bg-white">
+                                                                                        {opt}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                ))}
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
-                                                    );
-                                                })}
+                                                    ))}
+                                                </div>
                                             </div>
 
-                                            <div className="mt-12 text-center text-[10px] uppercase font-bold text-gray-400">
-                                                Preencha completamente a bolha referente à resposta correta com caneta azul ou preta.
+                                            {/* Footer */}
+                                            <div className="absolute bottom-4 left-0 w-full text-center">
+                                                <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400">Modelo baseado no CARTÃO-RESPOSTA do Enem • Sistema CEMAL</p>
                                             </div>
                                         </div>
                                     ))}
