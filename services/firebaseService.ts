@@ -43,6 +43,7 @@ import {
   ClassMaterial, 
   AEEAppointment, 
   AnswerKey, 
+  CorrectionResult,
   StudentCorrection, 
   InfantilReport, 
   LibraryBook, 
@@ -66,6 +67,7 @@ const PEI_COLLECTION = 'peiDocuments';
 const CLASS_MATERIALS_COLLECTION = 'classMaterials';
 const AEE_APPOINTMENTS_COLLECTION = 'aeeAppointments';
 const ANSWER_KEYS_COLLECTION = 'answerKeys';
+const CORRECTION_RESULTS_COLLECTION = 'correctionResults';
 const CORRECTIONS_COLLECTION = 'corrections';
 const INFANTIL_REPORTS_COLLECTION = 'infantilReports';
 const LIBRARY_BOOKS_COLLECTION = 'libraryBooks';
@@ -385,8 +387,6 @@ export const listenToAllLessonPlans = (callback: (plans: LessonPlan[]) => void, 
 };
 
 export const listenToTeacherLessonPlans = (teacherId: string, teacherEmail: string, callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
-    // If admin, show everything, otherwise filter by UID
-    // Using a more permissive check to ensure "disappeared" plans return
     let q;
     if (teacherEmail === 'ruan.wss@gmail.com') {
         q = query(collection(db, LESSON_PLANS_COLLECTION));
@@ -460,6 +460,33 @@ export const listenToGradebook = (
             callback(null);
         }
     });
+};
+
+// --- CORRECTION AREA (NEW) ---
+
+export const saveAnswerKey = async (key: AnswerKey) => {
+    const docRef = key.id ? doc(db, ANSWER_KEYS_COLLECTION, key.id) : doc(collection(db, ANSWER_KEYS_COLLECTION));
+    await setDoc(docRef, { ...key, id: docRef.id }, { merge: true });
+};
+
+export const getAnswerKeys = async (): Promise<AnswerKey[]> => {
+    const snapshot = await getDocs(collection(db, ANSWER_KEYS_COLLECTION));
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnswerKey));
+};
+
+export const deleteAnswerKey = async (id: string) => {
+    await deleteDoc(doc(db, ANSWER_KEYS_COLLECTION, id));
+};
+
+export const saveCorrectionResult = async (result: CorrectionResult) => {
+    const docRef = doc(collection(db, CORRECTION_RESULTS_COLLECTION));
+    await setDoc(docRef, { ...result, id: docRef.id });
+};
+
+export const getCorrectionResults = async (examId: string): Promise<CorrectionResult[]> => {
+    const q = query(collection(db, CORRECTION_RESULTS_COLLECTION), where("examId", "==", examId));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CorrectionResult));
 };
 
 // --- SYNC ---

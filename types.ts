@@ -8,7 +8,8 @@ export enum UserRole {
   LIBRARY = 'LIBRARY',
   AEE = 'AEE',
   KINDERGARTEN = 'KINDERGARTEN',
-  STUDENT = 'STUDENT'
+  STUDENT = 'STUDENT',
+  CORRECTION_MANAGER = 'CORRECTION_MANAGER'
 }
 
 export interface User {
@@ -311,9 +312,25 @@ export interface InfantilReport {
 export interface AnswerKey {
   id: string;
   title: string;
-  teacherId: string;
+  className: string;
+  subject: string;
+  teacherId: string; // Created by
+  numQuestions: number;
+  correctAnswers: Record<string, string>; // { "1": "A", "2": "C" }
   createdAt: number;
-  questions: { number: number; correctOption: string; subject?: string }[];
+}
+
+export interface CorrectionResult {
+  id: string;
+  examId: string;
+  studentId: string;
+  studentName: string;
+  className: string;
+  score: number;
+  totalQuestions: number;
+  studentAnswers: Record<string, string>;
+  scannedAt: number;
+  imageUrl?: string;
 }
 
 export interface StudentCorrection {

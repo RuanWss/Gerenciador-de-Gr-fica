@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Initialize the Gemini API client using the required named parameter and process.env.API_KEY directly
@@ -108,7 +107,6 @@ export const analyzeAnswerSheet = async (imageFile: File, numQuestions: number) 
             },
             config: {
                 responseMimeType: "application/json",
-                /* Removed responseSchema because map-like OBJECTs with dynamic keys are not supported and empty OBJECT schemas are invalid. The prompt is sufficient for JSON structure. */
             }
         });
 
@@ -116,5 +114,51 @@ export const analyzeAnswerSheet = async (imageFile: File, numQuestions: number) 
     } catch (error) {
         console.error("Error analyzing answer sheet:", error);
         throw new Error("Falha ao analisar o gabarito.");
+    }
+};
+
+export const analyzeAnswerSheetWithQR = async (imageFile: File, numQuestions: number) => {
+    try {
+        const ai = getAiClient();
+        const base64Image = await fileToBase64(imageFile);
+
+        const prompt = `
+            Você é um corretor automático de provas via OCR.
+            Analise a imagem enviada, que é um Cartão Resposta.
+            
+            TAREFA 1: IDENTIFICAÇÃO (CRÍTICO)
+            - Localize e DECODIFIQUE o QR CODE presente no cabeçalho.
+            - O QR Code contém um JSON (ex: {"e":"examId","s":"studentId"}). Extraia esses dados.
+            - Se não conseguir ler o QR Code, retorne "error": "QR_FAIL".
+
+            TAREFA 2: RESPOSTAS
+            - Identifique as bolhas preenchidas para as questões de 1 a ${numQuestions}.
+            - Retorne um objeto onde a chave é o número da questão (string) e o valor é a letra (A, B, C, D, E).
+            - Se rasurado ou em branco, use "X".
+
+            Formato de Saída (JSON):
+            {
+                "qrData": { "e": "...", "s": "..." } OR null,
+                "answers": { "1": "A", "2": "B", ... }
+            }
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: imageFile.type, data: base64Image } },
+                    { text: prompt }
+                ]
+            },
+            config: {
+                responseMimeType: "application/json",
+            }
+        });
+
+        return JSON.parse(response.text || "{}");
+    } catch (error) {
+        console.error("Error analyzing with QR:", error);
+        throw new Error("Falha na correção automática.");
     }
 };
