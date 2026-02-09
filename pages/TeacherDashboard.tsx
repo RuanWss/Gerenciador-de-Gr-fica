@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
     getExams, saveExam, uploadExamFile,
     getClassMaterials, saveClassMaterial, deleteClassMaterial, uploadClassMaterial,
-    getLessonPlans, saveLessonPlan, deleteLessonPlan,
+    getLessonPlans, saveLessonPlan, deleteLessonPlan, listenToTeacherLessonPlans,
     listenToOccurrences, saveOccurrence, deleteOccurrence,
     listenToStudents,
     listenToGradebook, saveGradebook,
@@ -71,6 +71,7 @@ export const TeacherDashboard: React.FC = () => {
 
     // Attendance State
     const [attendanceRecords, setAttendanceRecords] = useState<Record<string, boolean>>({});
+    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
 
     // Forms State
     const [examForm, setExamForm] = useState({ title: '', quantity: 25, gradeLevel: '', instructions: '' });
@@ -153,7 +154,16 @@ export const TeacherDashboard: React.FC = () => {
         listenToStudents(setStudents);
     }, [user]);
 
-    // Lógica para ajustar a quantidade de cópias de acordo com os alunos matriculados
+    // Listener de planejamentos em tempo real
+    useEffect(() => {
+        if (!user || activeTab !== 'planning') return;
+        const unsubscribe = listenToTeacherLessonPlans(user.id, user.email, (data) => {
+            const sortedData = data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+            setPlans(sortedData);
+        });
+        return () => unsubscribe();
+    }, [user, activeTab]);
+
     useEffect(() => {
         if (examForm.gradeLevel && students.length > 0) {
             const count = students.filter(s => s.className === examForm.gradeLevel).length;
@@ -168,7 +178,6 @@ export const TeacherDashboard: React.FC = () => {
         const loadData = async () => {
             if (activeTab === 'exams') setExams(await getExams(user.id));
             if (activeTab === 'materials') setMaterials(await getClassMaterials(user.id));
-            if (activeTab === 'planning') setPlans(await getLessonPlans(user.id));
             if (activeTab === 'occurrences') {
                 listenToOccurrences((data) => setOccurrences(data.filter(o => o.reportedBy === user.name)));
             }
@@ -178,7 +187,7 @@ export const TeacherDashboard: React.FC = () => {
             }
         };
         loadData();
-    }, [user, activeTab, students]);
+    }, [user, activeTab]);
 
     useEffect(() => {
         if (activeTab === 'gradebook' && selectedClass && selectedSubject) {
@@ -201,6 +210,14 @@ export const TeacherDashboard: React.FC = () => {
         return students.filter(s => s.isAEE && (teacherClasses.has(s.className) || user?.email === 'ruan.wss@gmail.com'));
     }, [students, user]);
 
+    // Fallback for older plans: if type is missing, treat as 'diario'
+    const filteredPlans = useMemo(() => {
+        return plans.filter(p => {
+            const type = p.type || 'diario';
+            return type === planningTab;
+        });
+    }, [plans, planningTab]);
+
     // --- HANDLERS ---
 
     const handleSavePlan = async (e: React.FormEvent) => {
@@ -208,23 +225,42 @@ export const TeacherDashboard: React.FC = () => {
         setIsLoading(true);
         try {
             const planToSave: LessonPlan = {
-                id: '',
+                ...planForm,
+                id: planForm.id || '',
                 teacherId: user!.id,
                 teacherName: user!.name,
-                createdAt: Date.now(),
-                type: planningTab,
+                createdAt: planForm.createdAt || Date.now(),
+                type: planningTab, 
                 className: planForm.className || '',
                 subject: planForm.subject || user!.subject || 'Geral',
-                ...planForm
             } as LessonPlan;
             await saveLessonPlan(planToSave);
             alert("Planejamento salvo com sucesso!");
             setShowPlanningModal(false);
-            setPlans(await getLessonPlans(user!.id));
-        } catch (e) {
+        } catch (err) {
             alert("Erro ao salvar planejamento.");
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleEditPlan = (plan: LessonPlan) => {
+        setPlanForm({ ...plan });
+        if (plan.type) {
+            setPlanningTab(plan.type as any);
+        } else {
+            setPlanningTab('diario'); 
+        }
+        setShowPlanningModal(true);
+    };
+
+    const handleDeletePlan = async (id: string) => {
+        if (!confirm("Deseja realmente excluir este planejamento?")) return;
+        try {
+            await deleteLessonPlan(id);
+            alert("Planejamento excluído!");
+        } catch (err) {
+            alert("Erro ao excluir planejamento.");
         }
     };
 
@@ -307,7 +343,6 @@ export const TeacherDashboard: React.FC = () => {
             };
         }
 
-        // FEATURE: Restrição de nota máxima (Clamping)
         let finalValue = val;
         if (isAV1) {
             const config = currentData.av1Config.find(a => a.id === activityId);
@@ -402,8 +437,10 @@ export const TeacherDashboard: React.FC = () => {
         if (!selectedClass) return alert("Selecione uma turma.");
         setIsLoading(true);
         try {
-            const today = new Date();
-            const dateString = today.toISOString().split('T')[0];
+            const dateString = attendanceDate;
+            const [y, m, d] = dateString.split('-').map(Number);
+            const timestamp = new Date(y, m - 1, d, 12, 0, 0).getTime();
+
             const classStudents = students.filter(s => s.className === selectedClass);
             
             for (const student of classStudents) {
@@ -413,7 +450,7 @@ export const TeacherDashboard: React.FC = () => {
                         studentId: student.id,
                         studentName: student.name,
                         className: student.className,
-                        timestamp: today.getTime(),
+                        timestamp: timestamp,
                         dateString,
                         type: attendanceRecords[student.id] ? 'entry' : 'exit'
                     });
@@ -482,7 +519,6 @@ export const TeacherDashboard: React.FC = () => {
             await saveOccurrence(dataToSave);
             setShowOccModal(false);
             alert(isEditingOcc ? "Ocorrência atualizada!" : "Ocorrência registrada!");
-            listenToOccurrences((data) => setOccurrences(data.filter(o => o.reportedBy === user!.name)));
         } catch (err) {
             alert("Erro ao salvar ocorrência.");
         } finally {
@@ -495,7 +531,6 @@ export const TeacherDashboard: React.FC = () => {
         try {
             await deleteOccurrence(id);
             alert("Ocorrência removida.");
-            listenToOccurrences((data) => setOccurrences(data.filter(o => o.reportedBy === user!.name)));
         } catch (err) {
             alert("Erro ao excluir.");
         }
@@ -536,6 +571,7 @@ export const TeacherDashboard: React.FC = () => {
                             <Button 
                                 onClick={() => {
                                     setPlanForm({ 
+                                        id: '', // Explicitly clear ID for new entry
                                         type: planningTab, 
                                         className: '', 
                                         subject: user?.subject || '', 
@@ -554,16 +590,16 @@ export const TeacherDashboard: React.FC = () => {
                                         inovaTheme: '',
                                         guidingQuestion: '',
                                         subprojectGoal: '',
-                                        finalProductType: 'Geral',
+                                        expectedResults: [],
+                                        finalProductType: '',
                                         finalProductDescription: '',
+                                        projectSteps: { sensitize: false, investigate: false, create: false, test: false, present: false, register: false },
                                         schedule: '',
                                         resourcesNeeded: '',
                                         aiTools: '',
-                                        aiCare: '',
-                                        expectedResults: [],
                                         aiPurpose: [],
-                                        evidence: [],
-                                        projectSteps: { sensitize: false, investigate: false, create: false, test: false, present: false, register: false }
+                                        aiCare: '',
+                                        evidence: []
                                     });
                                     setShowPlanningModal(true);
                                 }} 
@@ -595,23 +631,23 @@ export const TeacherDashboard: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {plans.filter(p => p.type === planningTab).map(plan => (
+                            {filteredPlans.map(plan => (
                                 <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-white/10 transition-all flex flex-col relative overflow-hidden">
                                     <div className="flex justify-between items-start mb-6">
                                         <div className={`p-4 rounded-2xl ${planningTab === 'inova' ? 'bg-[#9D44FF]/10 text-[#9D44FF]' : 'bg-red-600/10 text-red-500'}`}>
                                             {planningTab === 'inova' ? <Sparkles size={24}/> : planningTab === 'bimestral' ? <BookMarked size={24}/> : <BookOpen size={24}/>}
                                         </div>
-                                        <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{new Date(plan.createdAt).toLocaleDateString()}</span>
+                                        <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{plan.createdAt ? new Date(plan.createdAt).toLocaleDateString() : '---'}</span>
                                     </div>
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{plan.className}</h3>
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{plan.className || 'Sem Turma'}</h3>
                                     <p className="text-red-500 font-black uppercase text-[10px] tracking-widest mb-6">{plan.subject} • {plan.teacherName}</p>
                                     <div className="mt-auto flex gap-3">
-                                        <button className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5">Visualizar</button>
-                                        <button onClick={async () => { if(confirm("Excluir?")) { await deleteLessonPlan(plan.id); setPlans(await getLessonPlans(user!.id)); } }} className="p-4 bg-white/5 hover:bg-red-600/10 text-gray-500 hover:text-red-500 rounded-2xl transition-all border border-white/5"><Trash2 size={18}/></button>
+                                        <button onClick={() => handleEditPlan(plan)} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5">Visualizar</button>
+                                        <button onClick={() => handleDeletePlan(plan.id)} className="p-4 bg-white/5 hover:bg-red-600/10 text-gray-500 hover:text-red-500 rounded-2xl transition-all border border-white/5"><Trash2 size={18}/></button>
                                     </div>
                                 </div>
                             ))}
-                            {plans.filter(p => p.type === planningTab).length === 0 && (
+                            {filteredPlans.length === 0 && (
                                 <div className="col-span-full py-40 text-center bg-white/[0.02] border-2 border-dashed border-white/5 rounded-[3rem] opacity-20">
                                     <BookOpen size={64} className="mx-auto mb-6" />
                                     <p className="text-xl font-black uppercase tracking-[0.4em]">Nenhum planejamento encontrado</p>
@@ -631,7 +667,7 @@ export const TeacherDashboard: React.FC = () => {
                                         {planningTab === 'inova' ? <Sparkles className="text-purple-500" size={32} /> : <History className="text-red-600" size={32} />}
                                     </div>
                                     <div>
-                                        <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Novo Planejamento</h3>
+                                        <h3 className="text-3xl font-black text-white uppercase tracking-tighter">{planForm.id ? 'Editar Planejamento' : 'Novo Planejamento'}</h3>
                                         <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">
                                             {planningTab === 'diario' ? 'Registro de Aula' : planningTab === 'bimestral' ? 'Guia de Aprendizagem' : 'Projeto Acadêmico'}
                                         </p>
@@ -711,18 +747,20 @@ export const TeacherDashboard: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
-                                {(planningTab === 'diario') && (
-                                    <div className="space-y-2 animate-in fade-in">
-                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Assunto / Tema</label>
-                                        <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" placeholder="Tema da aula..." value={planForm.topic} onChange={e => setPlanForm({...planForm, topic: e.target.value})} />
-                                    </div>
-                                )}
+
                                 {planningTab === 'diario' && (
-                                    <div className="space-y-2 animate-in fade-in duration-500">
-                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Conteúdo e Metodologia</label>
-                                        <textarea required className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-sm min-h-[300px] focus:border-red-600 outline-none transition-all resize-none shadow-inner" placeholder="Descreva os objetivos e etapas da aula..." value={planForm.content} onChange={e => setPlanForm({...planForm, content: e.target.value})} />
-                                    </div>
+                                    <>
+                                        <div className="space-y-2 animate-in fade-in">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Assunto / Tema</label>
+                                            <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" placeholder="Tema da aula..." value={planForm.topic} onChange={e => setPlanForm({...planForm, topic: e.target.value})} />
+                                        </div>
+                                        <div className="space-y-2 animate-in fade-in duration-500">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Conteúdo e Metodologia</label>
+                                            <textarea required className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-sm min-h-[300px] focus:border-red-600 outline-none transition-all resize-none shadow-inner" placeholder="Descreva os objetivos e etapas da aula..." value={planForm.content} onChange={e => setPlanForm({...planForm, content: e.target.value})} />
+                                        </div>
+                                    </>
                                 )}
+
                                 {planningTab === 'bimestral' && (
                                     <div className="space-y-12 animate-in fade-in duration-500">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -766,18 +804,9 @@ export const TeacherDashboard: React.FC = () => {
                                                 <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.evaluationStrategies} onChange={e => setPlanForm({...planForm, evaluationStrategies: e.target.value})} placeholder="Como o progresso será medido?"/>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Recursos Didáticos</label>
-                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-red-600 outline-none" value={planForm.didacticResources} onChange={e => setPlanForm({...planForm, didacticResources: e.target.value})} placeholder="Materiais, softwares, ferramentas..."/>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Fontes de Referência</label>
-                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-red-600 outline-none" value={planForm.referenceSources} onChange={e => setPlanForm({...planForm, referenceSources: e.target.value})} placeholder="Livros, links, bibliografia..."/>
-                                            </div>
-                                        </div>
                                     </div>
                                 )}
+
                                 {planningTab === 'inova' && (
                                     <div className="space-y-12 animate-in fade-in duration-500">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -796,7 +825,7 @@ export const TeacherDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                             <div className="bg-purple-900/10 border border-purple-500/20 rounded-[2.5rem] p-8">
-                                                <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest mb-6 flex items-center gap-3"><Sparkles size={18}/> 4. Resultados Esperados (marque 3–5)</h4>
+                                                <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest mb-6 flex items-center gap-3"><Sparkles size={18}/> 4. Resultados Esperados</h4>
                                                 <div className="grid grid-cols-1 gap-3">
                                                     {["Consciência ambiental/consumo responsável", "Criatividade e autoria (criar algo)", "Colaboração e protagonismo", "Comunicação (apresentar/explicar)", "Investigação (observação/pesquisa/dados)", "Uso responsável de tecnologia/IA"].map(res => (
                                                         <label key={res} className="flex items-center gap-4 cursor-pointer group">
@@ -824,12 +853,12 @@ export const TeacherDashboard: React.FC = () => {
                                                         </label>
                                                     ))}
                                                 </div>
-                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm min-h-[80px] focus:border-purple-600 outline-none" value={planForm.finalProductDescription} onChange={e => setPlanForm({...planForm, finalProductDescription: e.target.value})} placeholder="Descrição do produto final (2-3 linhas)..." />
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm min-h-[80px] focus:border-purple-600 outline-none" value={planForm.finalProductDescription} onChange={e => setPlanForm({...planForm, finalProductDescription: e.target.value})} placeholder="Descrição do produto final..." />
                                             </div>
                                             <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
-                                                <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3"><Layers size={18} className="text-purple-500"/> 6. Etapas do Projeto (Checklist)</h4>
+                                                <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3"><Layers size={18} className="text-purple-500"/> 6. Etapas do Projeto</h4>
                                                 <div className="grid grid-cols-1 gap-4">
-                                                    {[{ key: 'sensitize', label: '1. Sensibilizar (apresentar tema / combinar regras)' }, { key: 'investigate', label: '2. Investigar (observar/pesquisar/coletar)' }, { key: 'create', label: '3. Criar (produzir protótipo/peça/solução)' }, { key: 'test', label: '4. Testar e melhorar (ajustes)' }, { key: 'present', label: '5. Apresentar (mostra/seminário)' }, { key: 'register', label: '6. Registrar (portfólio/evidências)' }].map(step => (
+                                                    {[{ key: 'sensitize', label: '1. Sensibilizar' }, { key: 'investigate', label: '2. Investigar' }, { key: 'create', label: '3. Criar' }, { key: 'test', label: '4. Testar e melhorar' }, { key: 'present', label: '5. Apresentar' }, { key: 'register', label: '6. Registrar' }].map(step => (
                                                         <label key={step.key} className="flex items-center gap-3 cursor-pointer group">
                                                             <input type="checkbox" className="hidden" checked={planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps]} onChange={() => { const steps = planForm.projectSteps || { sensitize: false, investigate: false, create: false, test: false, present: false, register: false }; setPlanForm({...planForm, projectSteps: { ...steps, [step.key]: !steps[step.key as keyof typeof steps] }}); }} />
                                                             <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps] ? 'bg-purple-600 border-purple-500' : 'border-white/20'}`}>
@@ -841,29 +870,19 @@ export const TeacherDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                            <div className="space-y-4">
-                                                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><CalendarIcon size={14}/> 7. Cronograma Mínimo (Descrição e Período)</label>
-                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[200px] focus:border-purple-600 outline-none" value={planForm.schedule} onChange={e => setPlanForm({...planForm, schedule: e.target.value})} placeholder="Distribuição das etapas no tempo (Início, Diagnóstico, Mão na massa...)" />
-                                            </div>
-                                            <div className="space-y-4">
-                                                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Briefcase size={14}/> 8. Recursos Necessários</label>
-                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[200px] focus:border-purple-600 outline-none" value={planForm.resourcesNeeded} onChange={e => setPlanForm({...planForm, resourcesNeeded: e.target.value})} placeholder="Liste materiais, ferramentas e espaços necessários..." />
-                                            </div>
-                                        </div>
                                         <div className="bg-black/40 p-10 rounded-[3rem] border border-white/5 space-y-8">
-                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3 border-b border-white/5 pb-6"><Cpu size={20} className="text-purple-500"/> 9. Uso de IA (campo curto e obrigatório)</h4>
+                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3 border-b border-white/5 pb-6"><Cpu size={20} className="text-purple-500"/> 9. Uso de IA</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                                                 <div className="space-y-3">
                                                     <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest ml-1">Ferramenta(s)</label>
-                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiTools} onChange={e => setPlanForm({...planForm, aiTools: e.target.value})} placeholder="Ex: ChatGPT, GEMINI, IA STUDIO, ETC"/>
+                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiTools} onChange={e => setPlanForm({...planForm, aiTools: e.target.value})} placeholder="Ex: Gemini, ChatGPT..."/>
                                                 </div>
                                                 <div className="space-y-3">
                                                     <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest ml-1">Cuidado adotado</label>
-                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiCare} onChange={e => setPlanForm({...planForm, aiCare: e.target.value})} placeholder="Descreva os cuidados éticos e pedagógicos adotados..."/>
+                                                    <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiCare} onChange={e => setPlanForm({...planForm, aiCare: e.target.value})} placeholder="Ética, curadoria..."/>
                                                 </div>
                                                 <div className="bg-purple-900/5 p-6 rounded-2xl border border-purple-500/10">
-                                                    <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-4 block">Para quê? (Objetivo IA)</label>
+                                                    <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-4 block">Objetivo IA</label>
                                                     <div className="grid grid-cols-1 gap-2">
                                                         {["Ideias", "Roteiro", "Texto", "Imagem", "Vídeo", "Dados/gráficos"].map(purp => (
                                                             <label key={purp} className="flex items-center gap-3 cursor-pointer">
@@ -878,26 +897,12 @@ export const TeacherDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
-                                            <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest flex items-center gap-3"><Camera size={18}/> 10. Evidências de Execução</h4>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                                                {["Fotos do processo", "Registro no caderno/diário", "Link de vídeo/podcast", "Tabelas/gráficos", "Relatório curto", "Portfólio da turma", "Outros"].map(evid => (
-                                                    <label key={evid} className="flex items-center gap-3 cursor-pointer group">
-                                                        <input type="checkbox" className="hidden" checked={planForm.evidence?.includes(evid)} onChange={() => { const current = planForm.evidence || []; const updated = current.includes(evid) ? current.filter(e => e !== evid) : [...current, evid]; setPlanForm({...planForm, evidence: updated}); }} />
-                                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${planForm.evidence?.includes(evid) ? 'bg-purple-600 border-purple-500' : 'border-white/20'}`}>
-                                                            {planForm.evidence?.includes(evid) && <Check size={12} className="text-white"/>}
-                                                        </div>
-                                                        <span className="text-[10px] font-bold uppercase text-gray-500 group-hover:text-gray-300">{evid}</span>
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        </div>
                                     </div>
                                 )}
                             </form>
                             <div className="p-8 border-t border-white/5 bg-black/20 flex justify-end">
                                 <Button onClick={handleSavePlan} isLoading={isLoading} className="px-12 h-16 bg-[#E53935] hover:bg-red-700 rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-red-950/40">
-                                    <Save size={20} className="mr-3"/> Salvar Planejamento
+                                    <Save size={20} className="mr-3"/> {planForm.id ? 'Atualizar Planejamento' : 'Salvar Planejamento'}
                                 </Button>
                             </div>
                         </div>
@@ -943,7 +948,21 @@ export const TeacherDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto space-y-12">
                         <header className="mb-12"><h1 className="text-6xl font-black text-white uppercase tracking-tighter">Frequência</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Chamada diária simplificada</p></header>
                         <section className="bg-[#18181b] border border-white/5 rounded-[3rem] p-12 shadow-2xl">
-                            <div className="mb-10"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 block mb-4">Selecione a Turma</label><select className="w-full bg-black/40 border border-red-600/30 rounded-2xl p-6 text-white font-black uppercase tracking-widest outline-none focus:border-red-600 appearance-none text-xl cursor-pointer shadow-inner" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setAttendanceRecords({}); }}><option value="">-- Turma --</option>{myClasses.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                            <div className="mb-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 block mb-4">Selecione a Turma</label>
+                                    <select className="w-full bg-black/40 border border-red-600/30 rounded-2xl p-6 text-white font-black uppercase tracking-widest outline-none focus:border-red-600 appearance-none text-xl cursor-pointer shadow-inner" value={selectedClass} onChange={e => { setSelectedClass(e.target.value); setAttendanceRecords({}); }}><option value="">-- Turma --</option>{myClasses.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 block mb-4">Data da Chamada</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-black/40 border border-red-600/30 rounded-2xl p-6 text-white font-black uppercase tracking-widest outline-none focus:border-red-600 text-xl cursor-pointer shadow-inner"
+                                        value={attendanceDate}
+                                        onChange={e => setAttendanceDate(e.target.value)}
+                                    />
+                                </div>
+                            </div>
                             {selectedClass ? (
                                 <div className="space-y-3">
                                     {students.filter(s => s.className === selectedClass).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(student => (
@@ -1039,7 +1058,7 @@ export const TeacherDashboard: React.FC = () => {
 
             {/* OCCURRENCE FORM MODAL */}
             {showOccModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">{isEditingOcc ? <Edit3 size={24} className="text-yellow-500" /> : <PlusCircle size={24} className="text-red-600" />}{isEditingOcc ? 'Editar Registro' : 'Novo Registro'}</h3><button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><form onSubmit={handleSaveOccurrence} className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occSelectedClass} onChange={(e) => setOccSelectedClass(e.target.value)} disabled={isEditingOcc}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Aluno</label><select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.studentId} onChange={(e) => setOccForm({...occForm, studentId: e.target.value})} disabled={isEditingOcc}><option value="">-- Selecione --</option>{students.filter(s => s.className === occSelectedClass).map(s => <option key={s} value={s.id}>{s.name}</option>)}</select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Categoria</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.category} onChange={(e) => setOccForm({...occForm, category: e.target.value as any})}><option value="indisciplina">Indisciplina</option><option value="atraso">Atraso</option><option value="desempenho">Resumo</option><option value="uniforme">Uniforme</option><option value="elogio">Elogio</option><option value="outros">Outros</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data</label><input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={occForm.date} onChange={(e) => setOccForm({...occForm, date: e.target.value})} /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Descrição Detalhada</label><textarea required className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[150px]" placeholder="Descreva o ocorrido com o máximo de detalhes..." value={occForm.description} onChange={(e) => setOccForm({...occForm, description: e.target.value})} /></div><div className="flex gap-4 pt-4"><Button type="button" variant="outline" onClick={() => setShowOccModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest">Cancelar</Button><Button type="submit" isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">{isEditingOcc ? 'Salvar Alterações' : 'Registrar Ocorrência'}</Button></div></form></div></div>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">{isEditingOcc ? <Edit3 size={24} className="text-yellow-500" /> : <PlusCircle size={24} className="text-red-600" />}{isEditingOcc ? 'Editar Registro' : 'Novo Registro'}</h3><button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><form onSubmit={handleSaveOccurrence} className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occSelectedClass} onChange={(e) => setOccSelectedClass(e.target.value)} disabled={isEditingOcc}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Aluno</label><select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.studentId} onChange={(e) => setOccForm({...occForm, studentId: e.target.value})} disabled={isEditingOcc}><option value="">-- Selecione --</option>{students.filter(s => s.className === occSelectedClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Categoria</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.category} onChange={(e) => setOccForm({...occForm, category: e.target.value as any})}><option value="indisciplina">Indisciplina</option><option value="atraso">Atraso</option><option value="desempenho">Resumo</option><option value="uniforme">Uniforme</option><option value="elogio">Elogio</option><option value="outros">Outros</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data</label><input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={occForm.date} onChange={(e) => setOccForm({...occForm, date: e.target.value})} /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Descrição Detalhada</label><textarea required className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[150px]" placeholder="Descreva o ocorrido com o máximo de detalhes..." value={occForm.description} onChange={(e) => setOccForm({...occForm, description: e.target.value})} /></div><div className="flex gap-4 pt-4"><Button type="button" variant="outline" onClick={() => setShowOccModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest">Cancelar</Button><Button type="submit" isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">{isEditingOcc ? 'Salvar Alterações' : 'Registrar Ocorrência'}</Button></div></form></div></div>
             )}
 
             {/* PEI FORM MODAL */}

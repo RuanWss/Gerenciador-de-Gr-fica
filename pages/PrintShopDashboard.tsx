@@ -174,6 +174,7 @@ export const PrintShopDashboard: React.FC = () => {
             unsubscribe = listenToAllLessonPlans(setLessonPlans, (err) => console.warn("Lesson Plans listener restricted", err));
         } else if (activeTab === 'schedule') {
             unsubscribe = listenToSchedule(setSchedule, (err) => console.warn("Schedule listener restricted", err));
+            /* FIX: Changed setStaff to setStaffMembers to resolve "Cannot find name 'setStaff'" error */
             const unsubStaff = listenToStaffMembers(setStaffMembers, () => {});
             return () => { unsubscribe(); unsubStaff(); };
         } else if (activeTab === 'aee_agenda') {
@@ -410,12 +411,15 @@ export const PrintShopDashboard: React.FC = () => {
         e.teacherName.toLowerCase().includes(examSearch.toLowerCase())
     );
 
-    const filteredStudents = students.filter(s => {
-        const matchesSearch = s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
-                             s.className.toLowerCase().includes(studentSearch.toLowerCase());
-        const matchesClass = selectedClassFilter === '' || s.className === selectedClassFilter;
-        return matchesSearch && matchesClass;
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    /* FIX: Added filteredStudents useMemo to resolve "Cannot find name 'filteredStudents'" error */
+    const filteredStudents = useMemo(() => {
+        return students.filter(student => {
+            const matchesSearch = (student.name || '').toLowerCase().includes(studentSearch.toLowerCase()) ||
+                                 (student.id || '').toLowerCase().includes(studentSearch.toLowerCase());
+            const matchesClass = !selectedClassFilter || student.className === selectedClassFilter;
+            return matchesSearch && matchesClass;
+        });
+    }, [students, studentSearch, selectedClassFilter]);
 
     const allSubjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS, "GERAL", "PROJETOS", "AVALIAÇÕES"])).sort();
 
@@ -585,7 +589,13 @@ export const PrintShopDashboard: React.FC = () => {
                                                 <td className="p-8 text-xs font-bold text-gray-500">{new Date(exam.createdAt).toLocaleDateString()}</td>
                                                 <td className="p-8">
                                                     <p className="font-black text-white uppercase tracking-tight text-sm mb-1">{exam.title}</p>
-                                                    <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-4">Prof. {exam.teacherName}</p>
+                                                    <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-2">Prof. {exam.teacherName}</p>
+                                                    {exam.instructions && (
+                                                        <div className="mb-4 bg-red-900/10 border-l-2 border-red-500 p-2 rounded-r-lg max-w-md">
+                                                            <p className="text-[9px] text-red-400 font-black uppercase tracking-widest mb-1 flex items-center gap-1"><Info size={10}/> Observações:</p>
+                                                            <p className="text-[10px] text-gray-400 italic leading-tight line-clamp-2">{exam.instructions}</p>
+                                                        </div>
+                                                    )}
                                                     <div className="flex flex-wrap gap-2">
                                                         {exam.fileUrls?.map((url, idx) => (
                                                             <div key={idx} className="flex items-center gap-1">
@@ -847,7 +857,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     <tbody className="divide-y divide-white/5">
                                         {filteredStudents.map(student => (
                                             <tr key={student.id} className="hover:bg-white/[0.02] transition-colors group">
-                                                <td className="p-8"><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-black text-gray-500 text-xs uppercase group-hover:border-brand-600 group-hover:text-brand-500 transition-all overflow-hidden">{student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover" alt={student.name} /> : student.name.charAt(0)}</div><span className="font-black text-white uppercase text-xs tracking-tight">{student.name}</span></div></td>
+                                                <td className="p-8"><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-black text-gray-500 text-xs uppercase group-hover:border-brand-600 group-hover:text-brand-500 transition-all overflow-hidden">{student.photoUrl ? <img src={student.photoUrl} className="h-full w-full object-cover" alt={student.name} /> : student.name.charAt(0)}</div><span className="font-black text-white uppercase text-xs tracking-tight">{student.name}</span></div></td>
                                                 <td className="p-8"><span className="bg-black/40 border border-white/5 px-3 py-1 rounded-lg text-[9px] font-black text-gray-500 uppercase tracking-widest">{student.className}</span></td>
                                                 <td className="p-8 text-xs font-mono text-gray-600 uppercase tracking-widest">{student.id.substring(0, 8)}</td>
                                                 <td className="p-8 text-right"><div className="flex justify-end gap-2"><button onClick={() => handleEditStudent(student)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-600 hover:text-white transition-all border border-white/5"><Edit size={14} /></button><button onClick={async () => { if(confirm(`Excluir ${student.name}?`)) await deleteStudent(student.id); }} className="p-3 bg-white/5 hover:bg-brand-600/10 rounded-xl text-gray-600 hover:text-red-500 transition-all border border-white/5"><Trash2 size={14} /></button></div></td>
@@ -1025,7 +1035,6 @@ export const PrintShopDashboard: React.FC = () => {
                                 <div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Nome Completo</label><input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-brand-600 transition-all uppercase" value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} /></div>
                                 <div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma Atual</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-brand-600 transition-all appearance-none" value={editingStudent.className} onChange={e => setEditingStudent({...editingStudent, className: e.target.value, classId: e.target.value})}>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                 
-                                {/* AEE TOGGLE SECTION */}
                                 <div className="flex items-center justify-between bg-black/40 border border-white/10 rounded-2xl p-4">
                                     <div className="flex items-center gap-3">
                                         <Heart size={18} className={editingStudent.isAEE ? 'text-red-500 fill-red-500/20' : 'text-gray-600'} />
@@ -1054,7 +1063,6 @@ export const PrintShopDashboard: React.FC = () => {
                             <button onClick={() => setShowPlanViewModal(false)} className="text-gray-600 hover:text-white transition-colors p-2"><X size={32}/></button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-10 space-y-12 custom-scrollbar">
-                             {/* ... logic for rendering plan details ... */}
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                  <div className="bg-black/40 p-6 rounded-3xl border border-white/5"><p className="text-[10px] font-black text-brand-500 uppercase tracking-widest mb-2">Tema / Tópico</p><p className="text-white font-bold">{selectedPlan.topic || selectedPlan.inovaTheme || '---'}</p></div>
                                  <div className="bg-black/40 p-6 rounded-3xl border border-white/5"><p className="text-[10px] font-black text-brand-500 uppercase tracking-widest mb-2">Conteúdo</p><p className="text-gray-300 text-sm whitespace-pre-wrap">{selectedPlan.content || selectedPlan.contents || '---'}</p></div>

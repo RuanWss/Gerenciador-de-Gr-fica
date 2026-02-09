@@ -77,35 +77,38 @@ const GRADEBOOK_COLLECTION = 'gradebooks';
 
 export const getUserProfile = async (uid: string, email?: string): Promise<User | null> => {
   try {
-    // 1. Tenta buscar na coleção padrão de usuários
-    const docRef = doc(db, USERS_COLLECTION, uid);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as User;
-    }
+    try {
+        const docRef = doc(db, USERS_COLLECTION, uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          return { id: docSnap.id, ...docSnap.data() } as User;
+        }
+    } catch(e) {}
 
-    // 2. Se não achou por UID, tenta por e-mail na coleção de usuários
     if (email) {
-       const q = query(collection(db, USERS_COLLECTION), where("email", "==", email.toLowerCase().trim()));
-       const querySnapshot = await getDocs(q);
-       if (!querySnapshot.empty) {
-         return { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as User;
-       }
+       try {
+           const q = query(collection(db, USERS_COLLECTION), where("email", "==", email.toLowerCase().trim()));
+           const querySnapshot = await getDocs(q);
+           if (!querySnapshot.empty) {
+             return { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as User;
+           }
+       } catch(e) {}
 
-       // 3. FALLBACK: Busca na coleção de STAFF (onde o RH cadastra os professores)
-       const qStaff = query(collection(db, STAFF_COLLECTION), where("email", "==", email.toLowerCase().trim()));
-       const staffSnapshot = await getDocs(qStaff);
-       if (!staffSnapshot.empty) {
-         const staffData = staffSnapshot.docs[0].data() as StaffMember;
-         return {
-           id: staffData.id,
-           name: staffData.name,
-           email: staffData.email || '',
-           role: (staffData.isTeacher ? UserRole.TEACHER : staffData.isAdmin ? UserRole.HR : UserRole.TEACHER) as UserRole,
-           subject: staffData.subject,
-           classes: staffData.classes
-         } as User;
-       }
+       try {
+           const qStaff = query(collection(db, STAFF_COLLECTION), where("email", "==", email.toLowerCase().trim()));
+           const staffSnapshot = await getDocs(qStaff);
+           if (!staffSnapshot.empty) {
+             const staffData = staffSnapshot.docs[0].data() as StaffMember;
+             return {
+               id: staffData.id,
+               name: staffData.name,
+               email: staffData.email || '',
+               role: (staffData.isTeacher ? UserRole.TEACHER : staffData.isAdmin ? UserRole.HR : UserRole.TEACHER) as UserRole,
+               subject: staffData.subject,
+               classes: staffData.classes
+             } as User;
+           }
+       } catch(e) {}
     }
     return null;
   } catch (error) {
@@ -206,6 +209,30 @@ export const uploadReportFile = async (file: File, studentName: string): Promise
     const storageRef = ref(storage, `reports/${studentName}_${Date.now()}_${file.name}`);
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
+};
+
+export const generateStudentCredentials = async (studentId: string) => {
+    const studentRef = doc(db, STUDENTS_COLLECTION, studentId);
+    const studentSnap = await getDoc(studentRef);
+    
+    if (!studentSnap.exists()) throw new Error("Aluno não encontrado");
+    
+    const student = studentSnap.data() as Student;
+    const cleanName = student.name.split(' ')[0].toUpperCase().replace(/[^A-Z]/g, '');
+    const cleanId = student.id.replace(/[^0-9A-Z]/g, '');
+    const suffix = cleanId.length > 3 ? cleanId.slice(-3) : Math.floor(100 + Math.random() * 900).toString();
+    const random = Math.floor(10 + Math.random() * 90).toString();
+    
+    const accessLogin = `${cleanName}${suffix}${random}`.substring(0, 8);
+    const accessPassword = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    await updateDoc(studentRef, {
+        accessLogin,
+        accessPassword,
+        hasAccess: true
+    });
+    
+    return { accessLogin, accessPassword };
 };
 
 // --- STAFF ---
@@ -338,16 +365,38 @@ export const deleteOccurrence = async (id: string) => {
 // --- LESSON PLANS ---
 
 export const saveLessonPlan = async (plan: LessonPlan) => {
-    const docRef = plan.id ? doc(db, LESSON_PLANS_COLLECTION, plan.id) : doc(collection(db, LESSON_PLANS_COLLECTION));
-    await setDoc(docRef, { ...plan, id: docRef.id });
+    const docId = (plan.id && plan.id.length > 0) ? plan.id : null;
+    const docRef = docId ? doc(db, LESSON_PLANS_COLLECTION, docId) : doc(collection(db, LESSON_PLANS_COLLECTION));
+    await setDoc(docRef, { ...plan, id: docRef.id }, { merge: true });
 };
 
 export const deleteLessonPlan = async (id: string) => {
+    if (!id) return;
     await deleteDoc(doc(db, LESSON_PLANS_COLLECTION, id));
 };
 
 export const listenToAllLessonPlans = (callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
-    const q = query(collection(db, LESSON_PLANS_COLLECTION), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, LESSON_PLANS_COLLECTION)); // Removed orderBy to be resilient to missing fields
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan)));
+    }, (error) => {
+        if (onError) onError(error);
+    });
+};
+
+export const listenToTeacherLessonPlans = (teacherId: string, teacherEmail: string, callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
+    // If admin, show everything, otherwise filter by UID
+    // Using a more permissive check to ensure "disappeared" plans return
+    let q;
+    if (teacherEmail === 'ruan.wss@gmail.com') {
+        q = query(collection(db, LESSON_PLANS_COLLECTION));
+    } else {
+        q = query(
+            collection(db, LESSON_PLANS_COLLECTION), 
+            where("teacherId", "==", teacherId)
+        );
+    }
+    
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan)));
     }, (error) => {
@@ -436,7 +485,6 @@ export const syncAllDataWithGennera = async (onProgress: (msg: string) => void) 
     }
 };
 
-// ... remaining service methods ...
 export const getLessonPlans = async (teacherId?: string): Promise<LessonPlan[]> => {
     let q;
     if (teacherId) {
@@ -482,106 +530,88 @@ export const listenToClassMaterials = (className: string, callback: (materials: 
     }, onError);
 };
 
-export const listenToInfantilReports = (teacherId: string, callback: (reports: InfantilReport[]) => void, onError?: (error: any) => void) => {
-    let q;
-    if (teacherId) {
-        q = query(collection(db, INFANTIL_REPORTS_COLLECTION), where("teacherId", "==", teacherId));
-    } else {
-        q = query(collection(collection(db, INFANTIL_REPORTS_COLLECTION)));
-    }
-    return onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InfantilReport)));
-    }, (error) => {
-        if (onError) onError(error);
-    });
-};
-
-export const deleteInfantilReport = async (id: string) => {
-    await deleteDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id));
-};
+// --- INFANTIL REPORTS ---
 
 export const saveInfantilReport = async (report: InfantilReport) => {
     const docRef = report.id ? doc(db, INFANTIL_REPORTS_COLLECTION, report.id) : doc(collection(db, INFANTIL_REPORTS_COLLECTION));
     await setDoc(docRef, { ...report, id: docRef.id });
 };
 
-export const generateStudentCredentials = async (studentId: string): Promise<Student> => {
-    // Basic implementation to avoid "Missing" errors, actual student portal logic would be here
-    return {} as Student;
+export const deleteInfantilReport = async (id: string) => {
+    await deleteDoc(doc(db, INFANTIL_REPORTS_COLLECTION, id));
 };
 
-export const listenToStudentLoans = (studentId: string, callback: (loans: LibraryLoan[]) => void, onError?: (error: any) => void) => {
-    const q = query(collection(db, LIBRARY_LOANS_COLLECTION), where("studentId", "==", studentId));
+export const listenToInfantilReports = (teacherId: string, callback: (reports: InfantilReport[]) => void) => {
+    let q;
+    if (teacherId) {
+        q = query(collection(db, INFANTIL_REPORTS_COLLECTION), where("teacherId", "==", teacherId));
+    } else {
+        q = query(collection(db, INFANTIL_REPORTS_COLLECTION));
+    }
+    
     return onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
-    }, (error) => {
-        if (onError) onError(error);
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as InfantilReport)));
     });
 };
 
 // --- LIBRARY ---
 
-// FIX: Added missing exported function to listen to library books.
-export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void) => {
-    const q = query(collection(db, LIBRARY_BOOKS_COLLECTION), orderBy('title', 'asc'));
+export const listenToLibraryBooks = (callback: (books: LibraryBook[]) => void, onError?: (error: any) => void) => {
+    const q = query(collection(db, LIBRARY_BOOKS_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryBook)));
-    });
+    }, onError);
 };
 
-// FIX: Added missing exported function to save library books.
 export const saveLibraryBook = async (book: LibraryBook) => {
     const docRef = book.id ? doc(db, LIBRARY_BOOKS_COLLECTION, book.id) : doc(collection(db, LIBRARY_BOOKS_COLLECTION));
     await setDoc(docRef, { ...book, id: docRef.id });
 };
 
-// FIX: Added missing exported function to delete library books.
 export const deleteLibraryBook = async (id: string) => {
     await deleteDoc(doc(db, LIBRARY_BOOKS_COLLECTION, id));
 };
 
-// FIX: Added missing exported function to listen to all library loans.
-export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void) => {
-    const q = query(collection(db, LIBRARY_LOANS_COLLECTION), orderBy('loanDate', 'desc'));
+export const listenToLibraryLoans = (callback: (loans: LibraryLoan[]) => void, onError?: (error: any) => void) => {
+    const q = query(collection(db, LIBRARY_LOANS_COLLECTION));
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
-    });
+    }, onError);
 };
 
-// FIX: Added missing exported function to create library loans.
 export const createLoan = async (loan: LibraryLoan) => {
-    // 1. Create the loan record
     const loanRef = doc(collection(db, LIBRARY_LOANS_COLLECTION));
-    const loanData = { ...loan, id: loanRef.id };
-    await setDoc(loanRef, loanData);
-
-    // 2. Update book availability
+    await setDoc(loanRef, { ...loan, id: loanRef.id });
+    
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, loan.bookId);
     const bookSnap = await getDoc(bookRef);
     if (bookSnap.exists()) {
-        const bookData = bookSnap.data() as LibraryBook;
-        await updateDoc(bookRef, { 
-            availableQuantity: Math.max(0, (bookData.availableQuantity || 0) - 1) 
-        });
+        const book = bookSnap.data() as LibraryBook;
+        if (book.availableQuantity > 0) {
+            await updateDoc(bookRef, { availableQuantity: book.availableQuantity - 1 });
+        }
     }
 };
 
-// FIX: Added missing exported function to return library loans.
 export const returnLoan = async (loanId: string, bookId: string) => {
-    // 1. Mark loan as returned
     const loanRef = doc(db, LIBRARY_LOANS_COLLECTION, loanId);
-    await updateDoc(loanRef, { 
-        status: 'returned', 
-        returnDate: new Date().toISOString().split('T')[0] 
-    });
-
-    // 2. Update book availability
+    await updateDoc(loanRef, { status: 'returned', returnDate: new Date().toISOString().split('T')[0] });
+    
     const bookRef = doc(db, LIBRARY_BOOKS_COLLECTION, bookId);
     const bookSnap = await getDoc(bookRef);
     if (bookSnap.exists()) {
-        const bookData = bookSnap.data() as LibraryBook;
-        await updateDoc(bookRef, { 
-            availableQuantity: Math.min(bookData.totalQuantity, (bookData.availableQuantity || 0) + 1) 
-        });
+        const book = bookSnap.data() as LibraryBook;
+        if (book.availableQuantity < book.totalQuantity) {
+            await updateDoc(bookRef, { availableQuantity: book.availableQuantity + 1 });
+        }
     }
+};
+
+export const listenToStudentLoans = (studentId: string, callback: (loans: LibraryLoan[]) => void, onError?: (error: any) => void) => {
+    const q = query(collection(db, LIBRARY_LOANS_COLLECTION), where('studentId', '==', studentId));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LibraryLoan)));
+    }, (error) => {
+        if (onError) onError(error);
+    });
 };
