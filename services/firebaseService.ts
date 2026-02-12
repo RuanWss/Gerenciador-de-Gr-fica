@@ -1,3 +1,4 @@
+
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -49,7 +50,8 @@ import {
   LibraryBook, 
   LibraryLoan,
   DailySchoolLog,
-  GradebookEntry
+  GradebookEntry,
+  DiagrammedExam
 } from '../types';
 import { fetchGenneraClasses, fetchGenneraStudentsByClass } from './genneraService';
 
@@ -74,6 +76,7 @@ const LIBRARY_BOOKS_COLLECTION = 'libraryBooks';
 const LIBRARY_LOANS_COLLECTION = 'libraryLoans';
 const USERS_COLLECTION = 'users';
 const GRADEBOOK_COLLECTION = 'gradebooks';
+const DIAGRAMMED_EXAMS_COLLECTION = 'diagrammedExams';
 
 // --- USERS & AUTH ---
 
@@ -166,6 +169,19 @@ export const updateExamStatus = async (examId: string, status: ExamStatus) => {
 export const uploadExamFile = async (file: File, folderName: string): Promise<string> => {
   const safeFolder = folderName.replace(/[^a-zA-Z0-9À-ÿ -]/g, "").trim(); 
   const storageRef = ref(storage, `exams/${safeFolder}/${Date.now()}_${file.name}`);
+  await uploadBytes(storageRef, file);
+  return await getDownloadURL(storageRef);
+};
+
+// --- DIAGRAMMED EXAMS ---
+
+export const saveDiagrammedExam = async (exam: DiagrammedExam) => {
+  const docRef = exam.id ? doc(db, DIAGRAMMED_EXAMS_COLLECTION, exam.id) : doc(collection(db, DIAGRAMMED_EXAMS_COLLECTION));
+  await setDoc(docRef, { ...exam, id: docRef.id, updatedAt: Date.now() }, { merge: true });
+};
+
+export const uploadQuestionImage = async (file: File): Promise<string> => {
+  const storageRef = ref(storage, `questions/${Date.now()}_${file.name}`);
   await uploadBytes(storageRef, file);
   return await getDownloadURL(storageRef);
 };

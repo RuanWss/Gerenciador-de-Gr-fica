@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -10,12 +11,14 @@ import {
     getAllPEIs,
     logAttendance,
     savePEIDocument,
-    updateExamStatus
+    updateExamStatus,
+    uploadQuestionImage,
+    saveDiagrammedExam
 } from '../services/firebaseService';
 import { 
     ExamRequest, ExamStatus, ClassMaterial, LessonPlan, 
     StudentOccurrence, Student, GradebookEntry, PEIDocument, AttendanceLog,
-    AV1Activity
+    AV1Activity, DiagrammedExam, ExamQuestion, QuestionAlternative
 } from '../types';
 import { Button } from '../components/Button';
 import { 
@@ -24,7 +27,7 @@ import {
     List, PlusCircle, Folder, BookOpen, Calculator, Heart, AlertCircle, CalendarClock,
     Trash2, Save, Search, UserCheck, UserX, Download, BrainCircuit, Layout, Sparkles, ChevronRight,
     Edit3, Info, FolderPlus, Smile, AlertTriangle, Calendar as CalendarIcon, FileDown, FileUp, Upload, MousePointerClick, Users, ShieldAlert, FileCheck,
-    BookMarked, History, Target, Cpu, CheckSquare, Layers, Rocket, Lightbulb, Box, Check, Briefcase, Camera, PackageCheck
+    BookMarked, History, Target, Cpu, CheckSquare, Layers, Rocket, Lightbulb, Box, Check, Briefcase, Camera, PackageCheck, LayoutTemplate, Image as ImageIcon
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -48,7 +51,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 
 export const TeacherDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'send_to_print' | 'materials' | 'planning' | 'gradebook' | 'pei' | 'occurrences' | 'attendance'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'send_to_print' | 'materials' | 'planning' | 'gradebook' | 'pei' | 'occurrences' | 'attendance' | 'diagramming'>('exams');
     const [isLoading, setIsLoading] = useState(false);
     
     // Planning Sub-tab state
@@ -115,6 +118,23 @@ export const TeacherDashboard: React.FC = () => {
         aiPurpose: [],
         aiCare: '',
         evidence: []
+    });
+
+    // Diagramming State
+    const [diagramForm, setDiagramForm] = useState<Partial<DiagrammedExam>>({
+        className: '',
+        subject: '',
+        bimester: '1º BIMESTRE',
+        title: '',
+        questions: Array.from({ length: 10 }).map((_, i) => ({
+            id: Math.random().toString(36).substr(2, 9),
+            number: i + 1,
+            type: i < 7 ? 'objective' : 'discursive',
+            skill: '',
+            statement: '',
+            alternatives: i < 7 ? ['A', 'B', 'C', 'D', 'E'].map(l => ({ id: Math.random().toString(36).substr(2, 9), label: l, text: '', isCorrect: false })) : undefined,
+            lines: 5
+        }))
     });
 
     // Material Form State
@@ -543,6 +563,74 @@ export const TeacherDashboard: React.FC = () => {
         }
     };
 
+    // --- DIAGRAMMING HANDLERS ---
+    const handleDiagramImageUpload = async (file: File, questionIndex: number, altIndex?: number) => {
+        if (!file) return;
+        setIsLoading(true);
+        try {
+            const url = await uploadQuestionImage(file);
+            const updatedQuestions = [...(diagramForm.questions || [])];
+            
+            if (altIndex !== undefined && updatedQuestions[questionIndex].alternatives) {
+                updatedQuestions[questionIndex].alternatives![altIndex].imageUrl = url;
+            } else {
+                updatedQuestions[questionIndex].headerImage = url;
+            }
+            
+            setDiagramForm({ ...diagramForm, questions: updatedQuestions });
+        } catch (e) {
+            alert("Erro ao enviar imagem.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSaveDiagram = async () => {
+        if (!diagramForm.title || !diagramForm.className || !diagramForm.subject) return alert("Preencha as informações básicas.");
+        
+        // Validate skills
+        const missingSkills = diagramForm.questions?.some(q => !q.skill);
+        if (missingSkills) return alert("Preencha a habilidade de todas as questões.");
+
+        setIsLoading(true);
+        try {
+            await saveDiagrammedExam({
+                ...diagramForm,
+                id: diagramForm.id || '',
+                teacherId: user!.id,
+                teacherName: user!.name,
+                className: diagramForm.className!,
+                subject: diagramForm.subject!,
+                bimester: diagramForm.bimester!,
+                title: diagramForm.title!,
+                questions: diagramForm.questions as ExamQuestion[],
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            } as DiagrammedExam);
+            
+            alert("Prova salva com sucesso!");
+            setDiagramForm({
+                className: '',
+                subject: '',
+                bimester: '1º BIMESTRE',
+                title: '',
+                questions: Array.from({ length: 10 }).map((_, i) => ({
+                    id: Math.random().toString(36).substr(2, 9),
+                    number: i + 1,
+                    type: i < 7 ? 'objective' : 'discursive',
+                    skill: '',
+                    statement: '',
+                    alternatives: i < 7 ? ['A', 'B', 'C', 'D', 'E'].map(l => ({ id: Math.random().toString(36).substr(2, 9), label: l, text: '', isCorrect: false })) : undefined,
+                    lines: 5
+                }))
+            });
+        } catch (e) {
+            alert("Erro ao salvar.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const SidebarItem = ({ id, label, icon: Icon }: { id: typeof activeTab, label: string, icon: any }) => (
         <button onClick={() => setActiveTab(id)} className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all mb-1 ${activeTab === id ? 'bg-red-600 text-white shadow-xl shadow-red-900/40' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
             <Icon size={18} /> {label}
@@ -558,6 +646,7 @@ export const TeacherDashboard: React.FC = () => {
                 <nav className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
                     <SidebarItem id="exams" label="Fila da Gráfica" icon={List} />
                     <SidebarItem id="send_to_print" label="Envio para Gráfica" icon={PlusCircle} />
+                    <SidebarItem id="diagramming" label="Diagramação" icon={LayoutTemplate} />
                     <SidebarItem id="materials" label="Materiais de Aula" icon={Folder} />
                     <SidebarItem id="planning" label="Planejamentos" icon={BookOpen} />
                     <SidebarItem id="gradebook" label="Diário de Classe" icon={Calculator} />
@@ -568,6 +657,155 @@ export const TeacherDashboard: React.FC = () => {
             </aside>
 
             <main className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                {activeTab === 'diagramming' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-5xl mx-auto space-y-12 pb-40">
+                        <header className="flex justify-between items-center">
+                            <div>
+                                <h1 className="text-5xl font-black text-white uppercase tracking-tighter">Diagramação de Provas</h1>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-2">Criação padronizada de avaliações (7 Objetivas + 3 Discursivas)</p>
+                            </div>
+                            <Button onClick={handleSaveDiagram} isLoading={isLoading} className="bg-red-600 h-16 px-10 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-900/40">
+                                <Save size={18} className="mr-3"/> Salvar Prova
+                            </Button>
+                        </header>
+
+                        <div className="bg-[#18181b] border border-white/5 rounded-[3rem] p-10 shadow-2xl space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs" value={diagramForm.className} onChange={e => setDiagramForm({...diagramForm, className: e.target.value})}>
+                                        <option value="">Selecione...</option>
+                                        {myClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Disciplina</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs" value={diagramForm.subject} onChange={e => setDiagramForm({...diagramForm, subject: e.target.value})}>
+                                        <option value="">Selecione...</option>
+                                        {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Bimestre</label>
+                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs" value={diagramForm.bimester} onChange={e => setDiagramForm({...diagramForm, bimester: e.target.value})}>
+                                        <option>1º BIMESTRE</option>
+                                        <option>2º BIMESTRE</option>
+                                        <option>3º BIMESTRE</option>
+                                        <option>4º BIMESTRE</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Título da Prova</label>
+                                    <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs" placeholder="EX: AVALIAÇÃO MENSAL" value={diagramForm.title} onChange={e => setDiagramForm({...diagramForm, title: e.target.value})} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-8">
+                            {diagramForm.questions?.map((q, idx) => (
+                                <div key={q.id} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-xl relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 bg-white/5 px-6 py-2 rounded-br-2xl text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-r border-white/5">
+                                        Questão {q.number} • {q.type === 'objective' ? 'Objetiva' : 'Discursiva'}
+                                    </div>
+                                    
+                                    <div className="mt-8 space-y-6">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Habilidade (BNCC/Matriz)</label>
+                                            <input 
+                                                className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium text-xs outline-none focus:border-red-600" 
+                                                placeholder="Código ou descrição da habilidade..."
+                                                value={q.skill}
+                                                onChange={e => {
+                                                    const updated = [...(diagramForm.questions || [])];
+                                                    updated[idx].skill = e.target.value;
+                                                    setDiagramForm({ ...diagramForm, questions: updated });
+                                                }}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 flex items-center gap-2">Enunciado <ImageIcon size={14} className="text-blue-500"/></label>
+                                            <div className="flex gap-4">
+                                                <div className="flex-1">
+                                                    <textarea 
+                                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[100px]"
+                                                        placeholder="Digite o enunciado da questão..."
+                                                        value={q.statement}
+                                                        onChange={e => {
+                                                            const updated = [...(diagramForm.questions || [])];
+                                                            updated[idx].statement = e.target.value;
+                                                            setDiagramForm({ ...diagramForm, questions: updated });
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="w-32 shrink-0">
+                                                    <label className="block w-full h-full bg-black/40 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-red-600 transition-all relative overflow-hidden group">
+                                                        {q.headerImage ? (
+                                                            <img src={q.headerImage} className="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-opacity" />
+                                                        ) : (
+                                                            <>
+                                                                <UploadCloud size={24} className="text-gray-600 group-hover:text-red-600 mb-2"/>
+                                                                <span className="text-[8px] font-black uppercase text-gray-600">Imagem</span>
+                                                            </>
+                                                        )}
+                                                        <input type="file" className="hidden" accept="image/*" onChange={e => e.target.files && handleDiagramImageUpload(e.target.files[0], idx)} />
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {q.type === 'objective' && (
+                                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                                {q.alternatives?.map((alt, altIdx) => (
+                                                    <div key={alt.id} className="flex items-center gap-4">
+                                                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center font-black text-gray-500 text-xs shrink-0">{alt.label}</div>
+                                                        <input 
+                                                            className="flex-1 bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs outline-none focus:border-blue-600"
+                                                            placeholder={`Alternativa ${alt.label}`}
+                                                            value={alt.text}
+                                                            onChange={e => {
+                                                                const updated = [...(diagramForm.questions || [])];
+                                                                updated[idx].alternatives![altIdx].text = e.target.value;
+                                                                setDiagramForm({ ...diagramForm, questions: updated });
+                                                            }}
+                                                        />
+                                                        <label className="w-10 h-10 bg-black/40 border border-white/10 rounded-xl flex items-center justify-center cursor-pointer hover:border-blue-600 relative overflow-hidden">
+                                                            {alt.imageUrl ? <img src={alt.imageUrl} className="w-full h-full object-cover"/> : <ImageIcon size={16} className="text-gray-600"/>}
+                                                            <input type="file" className="hidden" accept="image/*" onChange={e => e.target.files && handleDiagramImageUpload(e.target.files[0], idx, altIdx)} />
+                                                        </label>
+                                                        <div 
+                                                            onClick={() => {
+                                                                const updated = [...(diagramForm.questions || [])];
+                                                                updated[idx].alternatives!.forEach(a => a.isCorrect = false);
+                                                                updated[idx].alternatives![altIdx].isCorrect = true;
+                                                                setDiagramForm({ ...diagramForm, questions: updated });
+                                                            }}
+                                                            className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center cursor-pointer transition-all ${alt.isCorrect ? 'bg-green-600 border-green-600 text-white' : 'border-white/10 text-gray-700 hover:border-green-600'}`}
+                                                        >
+                                                            <Check size={16}/>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {q.type === 'discursive' && (
+                                            <div className="pt-4 border-t border-white/5">
+                                                <div className="bg-white/5 p-4 rounded-2xl flex flex-col gap-2">
+                                                    {Array.from({ length: 5 }).map((_, i) => (
+                                                        <div key={i} className="w-full h-px bg-white/10"></div>
+                                                    ))}
+                                                    <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest text-center mt-2">Espaço para resposta do aluno</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'planning' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-12 flex justify-between items-start">

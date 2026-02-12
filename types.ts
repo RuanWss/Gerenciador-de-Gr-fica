@@ -73,6 +73,39 @@ export interface ExamRequest {
   };
 }
 
+// --- DIAGRAMMING TYPES ---
+export interface QuestionAlternative {
+  id: string;
+  label: string; // A, B, C, D, E
+  text: string;
+  imageUrl?: string;
+  isCorrect: boolean;
+}
+
+export interface ExamQuestion {
+  id: string;
+  number: number;
+  type: 'objective' | 'discursive';
+  skill: string; // Habilidade
+  statement: string; // Enunciado
+  headerImage?: string;
+  alternatives?: QuestionAlternative[]; // Only for objective
+  lines?: number; // Only for discursive
+}
+
+export interface DiagrammedExam {
+  id: string;
+  teacherId: string;
+  teacherName: string;
+  className: string;
+  subject: string;
+  bimester: string;
+  title: string;
+  questions: ExamQuestion[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Student {
   id: string;
   name: string;
