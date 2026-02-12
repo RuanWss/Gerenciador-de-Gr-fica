@@ -295,7 +295,7 @@ export const HRDashboard: React.FC = () => {
         const nameMatch = String(s.name || '').toLowerCase().includes(studentSearch.toLowerCase());
         const classMatch = selectedStudentClass ? s.className === selectedStudentClass : true;
         return nameMatch && classMatch;
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 
     const SidebarItem = ({ id, label, icon: Icon }: { id: typeof activeTab, label: string, icon: any }) => (
         <button
@@ -347,7 +347,7 @@ export const HRDashboard: React.FC = () => {
                                     <tr><th className="p-8">Colaborador</th><th className="p-8">Cargo</th><th className="p-8">Status</th><th className="p-8 text-right">Ações</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {staffList.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).map(s => (
+                                    {staffList.filter(s => (s.name || '').toLowerCase().includes(search.toLowerCase())).map(s => (
                                         <tr key={s.id} className="hover:bg-white/[0.02]">
                                             <td className="p-8">
                                                 <div className="flex items-center gap-4">

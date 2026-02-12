@@ -55,7 +55,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       UserRole.AEE, 
                       UserRole.KINDERGARTEN, 
                       UserRole.LIBRARY,
-                      UserRole.STUDENT
+                      UserRole.STUDENT,
+                      UserRole.ATTENDANCE_MANAGER
                   ],
                   subject: 'TI',
                   classes: []

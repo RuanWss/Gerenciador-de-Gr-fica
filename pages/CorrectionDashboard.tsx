@@ -355,7 +355,7 @@ export const CorrectionDashboard: React.FC = () => {
                                                 </div>
                                                 <div className="flex flex-col items-center justify-center border-4 border-black rounded-full w-24 h-24 relative overflow-hidden shrink-0">
                                                     <span className="text-[9px] font-bold uppercase absolute top-3">TURMA</span>
-                                                    <span className="text-3xl font-black">{selectedKeyForPrint.className.split(' ')[0]}</span>
+                                                    <span className="text-3xl font-black">{selectedKeyForPrint.className?.split(' ')[0] || ''}</span>
                                                 </div>
                                             </div>
 

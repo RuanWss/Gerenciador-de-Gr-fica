@@ -462,6 +462,13 @@ export const listenToGradebook = (
     });
 };
 
+export const listenToClassGradebooks = (className: string, callback: (entries: GradebookEntry[]) => void) => {
+    const q = query(collection(db, GRADEBOOK_COLLECTION), where("className", "==", className));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as GradebookEntry)));
+    });
+};
+
 // --- CORRECTION AREA (NEW) ---
 
 export const saveAnswerKey = async (key: AnswerKey) => {

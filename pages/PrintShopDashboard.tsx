@@ -21,7 +21,8 @@ import {
     listenToAttendanceLogs,
     listenToAllLessonPlans,
     deleteStudent,
-    deleteLessonPlan
+    deleteLessonPlan,
+    listenToClassGradebooks
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -43,7 +44,10 @@ import {
     Heart, ChevronLeft, ChevronRight, Plus, Trash2,
     FileBarChart, Edit, Camera, AlertTriangle, Repeat, Layout, Info, UserCircle,
     Sparkles, Filter, FilterX, Check, History,
-    CheckSquare, Rocket, Lightbulb, Target, Box, Layers, Cpu, ExternalLink
+    CheckSquare, Rocket, Lightbulb, Target, Box, Layers, Cpu, ExternalLink,
+    Map as MapIcon,
+    MapPin,
+    LayoutGrid
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -57,6 +61,40 @@ const GRID_SLOTS = [
     { id: 'm4', label: '4º Horário', time: '10:10 - 11:00' },
     { id: 'm5', label: '5º Horário', time: '11:00 - 12:00' },
 ];
+
+const KNOWLEDGE_AREAS: Record<string, string> = {
+    "LÍNGUA PORTUGUESA": "Linguagens",
+    "ARTE": "Linguagens",
+    "EDUCAÇÃO FÍSICA": "Linguagens",
+    "LÍNGUA ESTRANGEIRA MODERNA - INGLÊS": "Linguagens",
+    "REDAÇÃO": "Linguagens",
+    "LITERATURA": "Linguagens",
+    "PRODUÇÃO TEXTUAL": "Linguagens",
+    "MATEMÁTICA": "Matemática",
+    "MATEMÁTICA II": "Matemática",
+    "EDUCAÇÃO FINANCEIRA": "Matemática",
+    "BIOLOGIA": "Ciências da Natureza",
+    "BIOLOGIA II": "Ciências da Natureza",
+    "FÍSICA": "Ciências da Natureza",
+    "QUÍMICA": "Ciências da Natureza",
+    "QUÍMICA II": "Ciências da Natureza",
+    "CIÊNCIAS": "Ciências da Natureza",
+    "HISTÓRIA": "Ciências Humanas",
+    "GEOGRAFIA": "Ciências Humanas",
+    "SOCIOLOGIA": "Ciências Humanas",
+    "FILOSOFIA": "Ciências Humanas",
+    "PROJETO DE VIDA": "Outros/Projetos",
+    "PENSAMENTO COMPUTACIONAL": "Outros/Projetos",
+    "DINÂMICAS DE LEITURA": "Outros/Projetos",
+    "ITINERÁRIO FORMATIVO": "Outros/Projetos",
+    "ELETIVA 03: EMPREENDEDORISMO CRIATIVO": "Outros/Projetos",
+    "ELETIVA 04: PROJETO DE VIDA": "Outros/Projetos"
+};
+
+const getArea = (subject?: string) => {
+    if (!subject) return "Geral";
+    return KNOWLEDGE_AREAS[subject.trim().toUpperCase()] || "Geral";
+};
 
 const StatCard: React.FC<{ title: string; value: number; icon: React.ElementType; color: string }> = ({ title, value, icon: Icon, color }) => (
     <div className="bg-[#18181b] border border-white/5 p-6 rounded-[2rem] shadow-lg flex items-center gap-6">
@@ -90,7 +128,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'answer_keys' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'sync' | 'config'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'sync' | 'config' | 'mapa'>('exams');
     const [isLoading, setIsLoading] = useState(false);
     
     // Data Collections
@@ -143,6 +181,16 @@ export const PrintShopDashboard: React.FC = () => {
     const [configBannerMsg, setConfigBannerMsg] = useState('');
     const [configBannerType, setConfigBannerType] = useState<'info' | 'warning' | 'error' | 'success'>('info');
     const [configIsBannerActive, setConfigIsBannerActive] = useState(false);
+
+    // Mapa de Atividades State
+    const [mapaClass, setMapaClass] = useState('');
+    const [mapaGradebooks, setMapaGradebooks] = useState<GradebookEntry[]>([]);
+    const [mapaFilters, setMapaFilters] = useState({
+        search: '',
+        area: '',
+        professor: '',
+        bimester: '1º BIMESTRE'
+    });
 
     // 1. Listeners for UI state that are needed globally or for the initial view (Exams)
     useEffect(() => {
@@ -201,6 +249,65 @@ export const PrintShopDashboard: React.FC = () => {
             return () => unsub();
         }
     }, [user, activeTab, gradeAdminClass, gradeAdminSubject, gradeAdminBimester]);
+
+    // 5. Mapa Gradebook Listener
+    useEffect(() => {
+        if (activeTab === 'mapa' && mapaClass) {
+            const unsub = listenToClassGradebooks(mapaClass, (data) => {
+                setMapaGradebooks(data);
+            });
+            return () => unsub();
+        } else if (activeTab === 'mapa') {
+            setMapaGradebooks([]);
+        }
+    }, [activeTab, mapaClass]);
+
+    const filteredMapa = useMemo(() => {
+        let activities: Array<{ 
+            gradebookId: string, 
+            subject: string, 
+            area: string, 
+            activity: any,
+            bimester: string
+        }> = [];
+
+        // Flatten activities from all gradebooks of the class
+        mapaGradebooks.forEach(gb => {
+            if (gb.av1Config) {
+                gb.av1Config.forEach(act => {
+                    activities.push({
+                        gradebookId: gb.id,
+                        subject: gb.subject || '',
+                        area: getArea(gb.subject),
+                        activity: act,
+                        bimester: gb.bimester
+                    });
+                });
+            }
+        });
+
+        return activities.filter(item => {
+            const activityName = item.activity.activityName || '';
+            const subject = item.subject || '';
+            const searchLower = mapaFilters.search.toLowerCase();
+
+            const matchesSearch = activityName.toLowerCase().includes(searchLower) ||
+                                subject.toLowerCase().includes(searchLower);
+            const matchesArea = !mapaFilters.area || item.area === mapaFilters.area;
+            const matchesBimester = item.bimester === mapaFilters.bimester;
+            
+            return matchesSearch && matchesArea && matchesBimester;
+        });
+    }, [mapaGradebooks, mapaFilters]);
+
+    const mapaGroupedByArea = useMemo(() => {
+        const grouped: Record<string, typeof filteredMapa> = {};
+        filteredMapa.forEach(item => {
+            if (!grouped[item.area]) grouped[item.area] = [];
+            grouped[item.area].push(item);
+        });
+        return grouped;
+    }, [filteredMapa]);
 
     const handleUpdateAdminGrade = async (studentId: string, type: 'av2' | 'av3', value: number) => {
         if (!gradeAdminClass || !gradeAdminSubject) return;
@@ -397,9 +504,9 @@ export const PrintShopDashboard: React.FC = () => {
         printWindow.document.close();
     };
 
-    const SidebarItem = ({ id, label, icon: Icon }: { id: typeof activeTab, label: string, icon: any }) => (
+    const SidebarItem = ({ id, label, icon: Icon, onClick }: { id: typeof activeTab, label: string, icon: any, onClick?: () => void }) => (
         <button
-            onClick={() => setActiveTab(id)}
+            onClick={onClick || (() => setActiveTab(id))}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest mb-1 ${activeTab === id ? 'bg-brand-600 text-white shadow-lg shadow-red-900/40' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
         >
             <Icon size={18} /> <span>{label}</span>
@@ -407,8 +514,8 @@ export const PrintShopDashboard: React.FC = () => {
     );
 
     const filteredExams = exams.filter(e => 
-        e.title.toLowerCase().includes(examSearch.toLowerCase()) || 
-        e.teacherName.toLowerCase().includes(examSearch.toLowerCase())
+        (e.title || '').toLowerCase().includes(examSearch.toLowerCase()) || 
+        (e.teacherName || '').toLowerCase().includes(examSearch.toLowerCase())
     );
 
     /* FIX: Added filteredStudents useMemo to resolve "Cannot find name 'filteredStudents'" error */
@@ -536,13 +643,18 @@ export const PrintShopDashboard: React.FC = () => {
                 <div className="mb-6 flex-1 overflow-y-auto custom-scrollbar">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-6 ml-2">Painel de Gestão</p>
                     <SidebarItem id="exams" label="Fila de Impressão" icon={Printer} />
-                    <SidebarItem id="answer_keys" label="Gabaritos" icon={FileCheck} />
+                    <SidebarItem id="mapa" label="Mapa de Atividades" icon={MapIcon} />
                     <SidebarItem id="grades_admin" label="Lançamento ADM" icon={Calculator} />
                     <SidebarItem id="students" label="Base de Alunos" icon={Users} />
                     <SidebarItem id="aee_agenda" label="Agenda AEE" icon={Heart} />
                     <SidebarItem id="occurrences" label="Ocorrências" icon={AlertTriangle} />
                     <SidebarItem id="lesson_plans" label="Planejamentos" icon={BookMarked} />
-                    <SidebarItem id="schedule" label="Horários TV" icon={CalendarClock} />
+                    <SidebarItem 
+                        id="schedule" 
+                        label="Horários TV" 
+                        icon={CalendarClock} 
+                        onClick={() => window.open('https://lightgrey-goat-712571.hostingersite.com/', '_blank')}
+                    />
                     <SidebarItem id="sync" label="Sync Gennera" icon={Repeat} />
                     <SidebarItem id="config" label="Configurações" icon={Settings} />
                 </div>
@@ -591,7 +703,7 @@ export const PrintShopDashboard: React.FC = () => {
                                                     <p className="font-black text-white uppercase tracking-tight text-sm mb-1">{exam.title}</p>
                                                     <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mb-2">Prof. {exam.teacherName}</p>
                                                     {exam.instructions && (
-                                                        <div className="mb-4 bg-red-900/10 border-l-2 border-red-500 p-2 rounded-r-lg max-w-md">
+                                                        <div className="mb-4 bg-red-500/10 border-l-2 border-red-500 p-2 rounded-r-lg max-w-md">
                                                             <p className="text-[9px] text-red-400 font-black uppercase tracking-widest mb-1 flex items-center gap-1"><Info size={10}/> Observações:</p>
                                                             <p className="text-[10px] text-gray-400 italic leading-tight line-clamp-2">{exam.instructions}</p>
                                                         </div>
@@ -643,6 +755,158 @@ export const PrintShopDashboard: React.FC = () => {
                                 </table>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'mapa' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-8">
+                        <header className="flex flex-col md:flex-row justify-between items-end gap-6 mb-8">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Mapa de Atividades</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest mt-2">Visão geral das avaliações cadastradas</p>
+                            </div>
+                            <div className="w-full md:w-64 space-y-2">
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Selecionar Turma</label>
+                                <select 
+                                    className="w-full bg-[#18181b] border border-white/10 rounded-2xl py-3 px-4 text-white text-sm font-bold outline-none focus:border-red-600 transition-all appearance-none cursor-pointer shadow-xl"
+                                    value={mapaClass}
+                                    onChange={e => setMapaClass(e.target.value)}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                        </header>
+
+                        {mapaClass ? (
+                            <>
+                                {/* Mapa Filters */}
+                                <div className="bg-[#18181b] p-6 rounded-3xl border border-white/5 shadow-2xl flex flex-col md:flex-row gap-6 items-end">
+                                    <div className="flex-1 w-full space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Pesquisar Atividade</label>
+                                        <div className="relative">
+                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18}/>
+                                            <input 
+                                                className="w-full bg-[#0a0a0b] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-white text-xs font-bold outline-none focus:border-white/20 transition-all placeholder-gray-600"
+                                                placeholder="Ex: Seminário, Prova, Trabalho..."
+                                                value={mapaFilters.search}
+                                                onChange={e => setMapaFilters({...mapaFilters, search: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="w-full md:w-56 space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Bimestre</label>
+                                        <select 
+                                            className="w-full bg-[#0a0a0b] border border-white/5 rounded-2xl py-4 px-4 text-white text-xs font-bold outline-none focus:border-white/20 transition-all appearance-none cursor-pointer"
+                                            value={mapaFilters.bimester}
+                                            onChange={e => setMapaFilters({...mapaFilters, bimester: e.target.value})}
+                                        >
+                                            <option value="1º BIMESTRE">1º BIMESTRE</option>
+                                            <option value="2º BIMESTRE">2º BIMESTRE</option>
+                                            <option value="3º BIMESTRE">3º BIMESTRE</option>
+                                            <option value="4º BIMESTRE">4º BIMESTRE</option>
+                                        </select>
+                                    </div>
+                                    <div className="w-full md:w-56 space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Área</label>
+                                        <select 
+                                            className="w-full bg-[#0a0a0b] border border-white/5 rounded-2xl py-4 px-4 text-white text-xs font-bold outline-none focus:border-white/20 transition-all appearance-none cursor-pointer"
+                                            value={mapaFilters.area}
+                                            onChange={e => setMapaFilters({...mapaFilters, area: e.target.value})}
+                                        >
+                                            <option value="">Todas as Áreas</option>
+                                            <option value="Linguagens">Linguagens</option>
+                                            <option value="Matemática">Matemática</option>
+                                            <option value="Ciências da Natureza">Ciências da Natureza</option>
+                                            <option value="Ciências Humanas">Ciências Humanas</option>
+                                            <option value="Outros/Projetos">Outros/Projetos</option>
+                                        </select>
+                                    </div>
+                                    <button 
+                                        onClick={() => setMapaFilters({search: '', area: '', professor: '', bimester: '1º BIMESTRE'})}
+                                        className="h-[52px] w-[52px] flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-2xl text-gray-400 hover:text-white transition-all border border-white/5"
+                                        title="Limpar Filtros"
+                                    >
+                                        <Filter size={20}/>
+                                    </button>
+                                </div>
+
+                                {/* Mapa Content Grouped by Area */}
+                                <div className="space-y-12 pb-20">
+                                    {Object.entries(mapaGroupedByArea).length > 0 ? Object.entries(mapaGroupedByArea).map(([area, items]) => (
+                                        <section key={area} className="space-y-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-px flex-1 bg-white/5"></div>
+                                                <h2 className="text-xs font-black text-blue-500 uppercase tracking-[0.3em] flex items-center gap-3">
+                                                    <Layers size={14}/> {area}
+                                                </h2>
+                                                <div className="h-px flex-1 bg-white/5"></div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                {/* FIX: Cast items to any[] to fix 'map' does not exist on type 'unknown' error */}
+                                                {(items as any[]).map((item, idx) => (
+                                                    <div key={`${item.gradebookId}-${idx}`} className="bg-[#18181b] border border-white/10 rounded-[2rem] p-8 shadow-2xl hover:border-blue-500/30 transition-all relative overflow-hidden group">
+                                                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                                                            <Target size={80} />
+                                                        </div>
+                                                        
+                                                        <div className="flex justify-between items-start mb-6">
+                                                            <div className="space-y-1">
+                                                                <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest block">{item.subject}</span>
+                                                                <h3 className="text-xl font-black text-white uppercase tracking-tight leading-tight">{item.activity.activityName}</h3>
+                                                            </div>
+                                                            <div className="bg-blue-600/10 border border-blue-500/20 px-3 py-1 rounded-xl text-blue-500 font-black text-xs">
+                                                                {item.activity.maxScore.toFixed(1)} <span className="text-[8px] opacity-60">PTS</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-2 gap-4 mb-8">
+                                                            <div className="bg-black/20 p-4 rounded-2xl border border-white/5">
+                                                                <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1 flex items-center gap-1"><Calendar size={10}/> Aplicação</p>
+                                                                <p className="text-xs font-bold text-white">{item.activity.applicationDate}</p>
+                                                            </div>
+                                                            <div className="bg-black/20 p-4 rounded-2xl border border-white/5">
+                                                                <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1 flex items-center gap-1"><Clock size={10}/> Entrega</p>
+                                                                <p className="text-xs font-bold text-white">{item.activity.deliveryDate}</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between pt-6 border-t border-white/5">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={`h-8 w-8 rounded-full flex items-center justify-center border ${item.activity.location === 'CASA' ? 'bg-blue-600/10 border-blue-500/20 text-blue-400' : 'bg-orange-600/10 border-orange-500/20 text-orange-400'}`}>
+                                                                    {item.activity.location === 'CASA' ? <MapPin size={14}/> : <LayoutGrid size={14}/>}
+                                                                </div>
+                                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                                                    {item.activity.location === 'CASA' ? 'Tarefa/Casa' : 'Sala de Aula'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="h-8 w-px bg-white/5"></div>
+                                                            <div className="flex items-center gap-2 text-gray-500 group-hover:text-blue-400 transition-colors">
+                                                                <UserCircle size={14}/>
+                                                                <span className="text-[9px] font-black uppercase tracking-widest">Avaliação AV1</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    )) : (
+                                        <div className="py-40 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
+                                            <MapIcon size={64} className="mx-auto mb-6 text-gray-600" />
+                                            <h3 className="text-xl font-black text-white uppercase tracking-[0.4em]">Nenhuma atividade encontrada</h3>
+                                            <p className="text-sm text-gray-500 mt-2 font-bold uppercase tracking-widest">Verifique o bimestre ou aguarde lançamento dos professores</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        ) : (
+                            <div className="py-40 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
+                                <Search size={64} className="mx-auto mb-6 text-gray-600" />
+                                <h3 className="text-xl font-black text-white uppercase tracking-[0.4em]">Selecione uma Turma</h3>
+                                <p className="text-sm text-gray-500 mt-2 font-bold uppercase tracking-widest">Utilize o seletor acima para visualizar o mapa</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -711,7 +975,7 @@ export const PrintShopDashboard: React.FC = () => {
                                                         {entry ? (
                                                             <>
                                                                 <span className="text-white font-black text-[13px] uppercase tracking-tight">{entry.subject}</span>
-                                                                <span className="text-[9px] text-red-500 font-black uppercase tracking-widest">{entry.professor.split(' ')[0]}</span>
+                                                                <span className="text-[9px] text-red-500 font-black uppercase tracking-widest">{entry.professor?.split(' ')[0] || ''}</span>
                                                             </>
                                                         ) : (
                                                             <Plus size={24} className="text-gray-800 group-hover:text-red-500 group-hover:scale-110 transition-all"/>
@@ -947,6 +1211,7 @@ export const PrintShopDashboard: React.FC = () => {
                 )}
 
                 {activeTab === 'sync' && <GenneraSyncPanel />}
+
             </div>
 
             {/* Modal for Exam Detail & Slips */}
@@ -1012,7 +1277,7 @@ export const PrintShopDashboard: React.FC = () => {
                                     {selectedExam.status === ExamStatus.IN_PROGRESS && (
                                         <button 
                                             onClick={() => handleUpdateExamStatus(selectedExam.id, ExamStatus.READY)}
-                                            className="flex items-center justify-center gap-3 bg-purple-600 hover:bg-purple-700 text-white h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg"
+                                            className="flex items-center justify-center gap-3 bg-purple-600 hover:bg-purple-700 text-white h-16 rounded-2xl font-black uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg"
                                         >
                                             <CheckCircle size={18}/> Marcar como Pronto
                                         </button>

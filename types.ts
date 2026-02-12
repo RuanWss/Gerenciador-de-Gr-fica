@@ -1,3 +1,4 @@
+
 export enum UserRole {
   TEACHER = 'TEACHER',
   PRINTSHOP = 'PRINTSHOP',
@@ -9,7 +10,8 @@ export enum UserRole {
   AEE = 'AEE',
   KINDERGARTEN = 'KINDERGARTEN',
   STUDENT = 'STUDENT',
-  CORRECTION_MANAGER = 'CORRECTION_MANAGER'
+  CORRECTION_MANAGER = 'CORRECTION_MANAGER',
+  ATTENDANCE_MANAGER = 'ATTENDANCE_MANAGER'
 }
 
 export interface User {
@@ -373,6 +375,7 @@ export interface AV1Activity {
   applicationDate: string; // Data de Aplicação
   deliveryDate: string; // Data de Entrega
   maxScore: number;
+  location?: 'SALA' | 'CASA';
 }
 
 export interface GradebookEntry {
