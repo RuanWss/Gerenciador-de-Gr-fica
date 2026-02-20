@@ -110,6 +110,7 @@ export const StaffAttendanceTerminal: React.FC = () => {
             for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
                 const batch = toProcess.slice(i, i + BATCH_SIZE);
                 const results = await Promise.all(batch.map(async (member) => {
+                    if (!member.photoUrl) return null;
                     try {
                         const img = await faceApi.fetchImage(member.photoUrl);
                         const detection = await faceApi.detectSingleFace(img, new faceApi.TinyFaceDetectorOptions()).withFaceLandmarks(true).withFaceDescriptor();

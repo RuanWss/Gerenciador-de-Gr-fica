@@ -109,19 +109,21 @@ const StatCard: React.FC<{ title: string; value: number; icon: React.ElementType
 );
 
 const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
-    const statusInfo = {
+    const statusInfo: Record<string, { text: string; icon: any; color: string }> = {
         [ExamStatus.PENDING]: { text: 'Pendente', icon: Hourglass, color: 'yellow' },
+        [ExamStatus.RECEIVED]: { text: 'Recebido', icon: Clock, color: 'blue' },
         [ExamStatus.IN_PROGRESS]: { text: 'Em Produção', icon: Printer, color: 'blue' },
         [ExamStatus.READY]: { text: 'Pronto p/ Retirada', icon: ClipboardCheck, color: 'purple' },
         [ExamStatus.COMPLETED]: { text: 'Entregue', icon: CheckCircle, color: 'green' },
-    }[status] || { text: status, icon: Clock, color: 'gray' };
+    };
 
-    const Icon = statusInfo.icon;
+    const info = statusInfo[status] || { text: status, icon: Clock, color: 'gray' };
+    const Icon = info.icon;
 
     return (
-        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border bg-${statusInfo.color}-500/10 text-${statusInfo.color}-500 border-${statusInfo.color}-500/20`}>
+        <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border bg-${info.color}-500/10 text-${info.color}-500 border-${info.color}-500/20`}>
             <Icon size={14} />
-            {statusInfo.text}
+            {info.text}
         </span>
     );
 };
@@ -214,7 +216,7 @@ export const PrintShopDashboard: React.FC = () => {
         if (!user) return;
         let unsubscribe: () => void = () => {};
 
-        if (activeTab === 'students' || activeTab === 'grades_admin' || activeTab === 'aee_agenda') {
+        if (activeTab === 'students' || activeTab === 'grades_admin') {
             unsubscribe = listenToStudents(setStudents, (err) => console.warn("Students listener restricted", err));
         } else if (activeTab === 'occurrences') {
             unsubscribe = listenToOccurrences(setOccurrences, (err) => console.warn("Occurrences listener restricted", err));
