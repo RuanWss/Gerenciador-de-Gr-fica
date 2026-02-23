@@ -245,9 +245,9 @@ export const ClassroomFiles: React.FC = () => {
                                 >
                                     Todos os Arquivos
                                 </button>
-                                {subjects.map(sub => (
+                                {subjects.map((sub, i) => (
                                     <button 
-                                        key={sub}
+                                        key={`${sub}-${i}`}
                                         onClick={() => setSelectedSubject(sub)}
                                         className={`w-full text-left px-5 py-4 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${selectedSubject === sub ? (themeColor === 'red' ? 'bg-red-600 text-white shadow-lg' : 'bg-blue-600 text-white shadow-lg') : 'bg-[#18181b] text-gray-500 hover:text-white'}`}
                                     >

@@ -660,3 +660,10 @@ export const listenToStudentLoans = (studentId: string, callback: (loans: Librar
         if (onError) onError(error);
     });
 };
+
+export const listenToAllDiagrammedExams = (callback: (exams: DiagrammedExam[]) => void, onError?: (error: any) => void) => {
+    const q = query(collection(db, DIAGRAMMED_EXAMS_COLLECTION));
+    return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DiagrammedExam)));
+    }, onError);
+};

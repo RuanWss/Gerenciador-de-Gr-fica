@@ -22,7 +22,8 @@ import {
     listenToAllLessonPlans,
     deleteStudent,
     deleteLessonPlan,
-    listenToClassGradebooks
+    listenToClassGradebooks,
+    listenToAllDiagrammedExams
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -35,7 +36,8 @@ import {
     StaffMember,
     StudentOccurrence,
     AttendanceLog,
-    LessonPlan
+    LessonPlan,
+    DiagrammedExam
 } from '../types';
 import { 
     Printer, Search, Users, Settings, FileText, CheckCircle, Clock, Hourglass, 
@@ -130,11 +132,12 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'sync' | 'config' | 'mapa'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'mapa' | 'diagrammed_exams'>('exams');
     const [isLoading, setIsLoading] = useState(false);
     
     // Data Collections
     const [exams, setExams] = useState<ExamRequest[]>([]);
+    const [diagrammedExams, setDiagrammedExams] = useState<DiagrammedExam[]>([]);
     const [examSearch, setExamSearch] = useState('');
     const [students, setStudents] = useState<Student[]>([]);
     const [studentSearch, setStudentSearch] = useState('');
@@ -162,11 +165,17 @@ export const PrintShopDashboard: React.FC = () => {
 
     // Lesson Plan States
     const [planFilterClass, setPlanFilterClass] = useState('');
+    const [planFilterTeacher, setPlanFilterTeacher] = useState('');
     const [planFilterType, setPlanFilterType] = useState<string>('todos');
     const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
     const [showPlanViewModal, setShowPlanViewModal] = useState(false);
 
-    // Schedule Grid States
+    // Occurrences States
+    const [occFilterClass, setOccFilterClass] = useState('');
+    const [occFilterTeacher, setOccFilterTeacher] = useState('');
+    const [occFilterStudent, setOccFilterStudent] = useState('');
+    const [selectedOccurrence, setSelectedOccurrence] = useState<StudentOccurrence | null>(null);
+    const [showOccurrenceModal, setShowOccurrenceModal] = useState(false);
     const [selectedSegment, setSelectedSegment] = useState<'INFANTIL' | 'EFAI' | 'EFAF' | 'MÉDIO'>('EFAF');
     const [selectedDay, setSelectedDay] = useState<number>(4);
     const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -194,10 +203,6 @@ export const PrintShopDashboard: React.FC = () => {
         bimester: '1º BIMESTRE'
     });
 
-    // Occurrences Filters
-    const [occFilterClass, setOccFilterClass] = useState('');
-    const [occFilterTeacher, setOccFilterTeacher] = useState('');
-    const [occFilterStudent, setOccFilterStudent] = useState('');
 
     // 1. Listeners for UI state that are needed globally or for the initial view (Exams)
     useEffect(() => {
@@ -227,6 +232,8 @@ export const PrintShopDashboard: React.FC = () => {
             unsubscribe = listenToOccurrences(setOccurrences, (err) => console.warn("Occurrences listener restricted", err));
         } else if (activeTab === 'lesson_plans') {
             unsubscribe = listenToAllLessonPlans(setLessonPlans, (err) => console.warn("Lesson Plans listener restricted", err));
+        } else if (activeTab === 'diagrammed_exams') {
+            unsubscribe = listenToAllDiagrammedExams(setDiagrammedExams, (err) => console.warn("Diagrammed Exams listener restricted", err));
         } else if (activeTab === 'schedule') {
             unsubscribe = listenToSchedule(setSchedule, (err) => console.warn("Schedule listener restricted", err));
             /* FIX: Changed setStaff to setStaffMembers to resolve "Cannot find name 'setStaff'" error */
@@ -360,8 +367,10 @@ export const PrintShopDashboard: React.FC = () => {
                 <td style="padding: 8px; border: 1px solid #ddd;">${item.area}</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">${item.subject}</td>
                 <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.activityName}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.date ? new Date(item.activity.date).toLocaleDateString() : '-'}</td>
-                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.value}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.applicationDate ? new Date(item.activity.applicationDate).toLocaleDateString() : '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.deliveryDate ? new Date(item.activity.deliveryDate).toLocaleDateString() : '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.location === 'CASA' ? 'CASA' : 'ESCOLA'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.maxScore}</td>
             </tr>
         `).join('');
 
@@ -374,7 +383,9 @@ export const PrintShopDashboard: React.FC = () => {
                         <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Área</th>
                         <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Disciplina</th>
                         <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Atividade</th>
-                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Data</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Aplicação</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Entrega</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Local</th>
                         <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Valor</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
@@ -598,14 +609,57 @@ export const PrintShopDashboard: React.FC = () => {
         return lessonPlans.filter(p => {
             const type = getNormalizedType(p.type);
             const matchClass = !planFilterClass || p.className === planFilterClass;
+            const matchTeacher = !planFilterTeacher || p.teacherName.toLowerCase().includes(planFilterTeacher.toLowerCase());
             let matchType = planFilterType === 'todos';
             if (planFilterType === 'diario') matchType = type === 'diario' || type === 'daily';
             if (planFilterType === 'bimestral') matchType = type === 'bimestral' || type === 'bimester';
             if (planFilterType === 'inova') matchType = type === 'inova';
             
-            return matchClass && matchType;
+            return matchClass && matchType && matchTeacher;
         });
-    }, [lessonPlans, planFilterClass, planFilterType]);
+    }, [lessonPlans, planFilterClass, planFilterType, planFilterTeacher]);
+
+    const filteredOccurrences = useMemo(() => {
+        return occurrences.filter(occ => {
+            const matchClass = !occFilterClass || occ.studentClass === occFilterClass;
+            const matchTeacher = !occFilterTeacher || occ.reportedBy.toLowerCase().includes(occFilterTeacher.toLowerCase());
+            const matchStudent = !occFilterStudent || occ.studentName.toLowerCase().includes(occFilterStudent.toLowerCase());
+            return matchClass && matchTeacher && matchStudent;
+        });
+    }, [occurrences, occFilterClass, occFilterTeacher, occFilterStudent]);
+
+    const generateOccurrencesPDF = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const rows = filteredOccurrences.map(occ => `
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">${new Date(occ.timestamp).toLocaleDateString()}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${occ.studentName}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${occ.studentClass}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${occ.reportedBy}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${occ.description}</td>
+            </tr>
+        `).join('');
+
+        printWindow.document.write(`
+            <html><body style="font-family: sans-serif; padding: 20px;">
+                <h2>Diário de Ocorrências</h2>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead><tr style="background: #f4f4f4;">
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Data</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Aluno</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Turma</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Relatado por</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Descrição</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <script>window.onload = () => { window.print(); window.close(); }</script>
+            </body></html>
+        `);
+        printWindow.document.close();
+    };
 
     const handleViewPlan = (plan: LessonPlan) => {
         setSelectedPlan(plan);
@@ -692,14 +746,13 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="aee_agenda" label="Agenda AEE" icon={Heart} />
                     <SidebarItem id="occurrences" label="Ocorrências" icon={AlertTriangle} />
                     <SidebarItem id="lesson_plans" label="Planejamentos" icon={BookMarked} />
+                    <SidebarItem id="diagrammed_exams" label="Provas" icon={FileCheck} />
                     <SidebarItem 
                         id="schedule" 
                         label="Horários TV" 
                         icon={CalendarClock} 
                         onClick={() => window.open('https://lightgrey-goat-712571.hostingersite.com/', '_blank')}
                     />
-                    <SidebarItem id="sync" label="Sync Gennera" icon={Repeat} />
-                    <SidebarItem id="config" label="Configurações" icon={Settings} />
                 </div>
             </div>
 
@@ -1190,7 +1243,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-center gap-6">
                             <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Lançamento de Notas ADM</h1><p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Preenchimento de Simulados e Provas Bimestrais</p></div>
-                            <div className="flex flex-wrap gap-4"><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]" value={gradeAdminClass} onChange={e => setGradeAdminClass(e.target.value)}><option value="">Turma</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]" value={gradeAdminSubject} onChange={e => setGradeAdminSubject(e.target.value)}><option value="">Disciplina</option>{allSubjects.map(s => <option key={s} value={s}>{s}</option>)}</select><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]" value={gradeAdminBimester} onChange={e => setGradeAdminBimester(e.target.value)}><option>1º BIMESTRE</option><option>2º BIMESTRE</option><option>3º BIMESTRE</option><option>4º BIMESTRE</option></select><Button onClick={generateGradeMap} className="bg-blue-600 h-12 px-6 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-900/20"><FileBarChart size={16} className="mr-2"/> Mapa de Notas</Button></div>
+                            <div className="flex flex-wrap gap-4"><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]" value={gradeAdminClass} onChange={e => setGradeAdminClass(e.target.value)}><option value="">Turma</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]" value={gradeAdminSubject} onChange={e => setGradeAdminSubject(e.target.value)}><option value="">Disciplina</option>{allSubjects.map((s, i) => <option key={`${s}-${i}`} value={s}>{s}</option>)}</select><select className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]" value={gradeAdminBimester} onChange={e => setGradeAdminBimester(e.target.value)}><option>1º BIMESTRE</option><option>2º BIMESTRE</option><option>3º BIMESTRE</option><option>4º BIMESTRE</option></select><Button onClick={generateGradeMap} className="bg-blue-600 h-12 px-6 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-900/20"><FileBarChart size={16} className="mr-2"/> Mapa de Notas</Button></div>
                         </header>
                         {gradeAdminClass && gradeAdminSubject ? (
                             <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] shadow-xl overflow-hidden">
@@ -1244,6 +1297,13 @@ export const PrintShopDashboard: React.FC = () => {
                                     value={occFilterStudent}
                                     onChange={e => setOccFilterStudent(e.target.value)}
                                 />
+                                <button 
+                                    onClick={generateOccurrencesPDF}
+                                    className="p-2 bg-brand-600/10 text-brand-500 hover:bg-brand-600 hover:text-white rounded-xl transition-all"
+                                    title="Imprimir Ocorrências Filtradas"
+                                >
+                                    <Printer size={16}/>
+                                </button>
                                 {(occFilterClass || occFilterTeacher || occFilterStudent) && (
                                     <button 
                                         onClick={() => { setOccFilterClass(''); setOccFilterTeacher(''); setOccFilterStudent(''); }}
@@ -1260,13 +1320,8 @@ export const PrintShopDashboard: React.FC = () => {
                                     <tr><th className="p-8">Data</th><th className="p-8">Aluno / Turma</th><th className="p-8">Relatado por</th><th className="p-8">Descrição</th><th className="p-8 text-right">Ações</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {occurrences.filter(occ => {
-                                        const matchClass = !occFilterClass || occ.studentClass === occFilterClass;
-                                        const matchTeacher = !occFilterTeacher || occ.reportedBy.toLowerCase().includes(occFilterTeacher.toLowerCase());
-                                        const matchStudent = !occFilterStudent || occ.studentName.toLowerCase().includes(occFilterStudent.toLowerCase());
-                                        return matchClass && matchTeacher && matchStudent;
-                                    }).map(occ => (
-                                        <tr key={occ.id} className="hover:bg-white/[0.02]"><td className="p-8 text-xs font-bold text-gray-500">{new Date(occ.timestamp).toLocaleDateString()}</td><td className="p-8"><p className="font-black text-white uppercase text-sm">{occ.studentName}</p><p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">{occ.studentClass}</p></td><td className="p-8 font-black text-brand-500 text-xs uppercase tracking-widest">{occ.reportedBy}</td><td className="p-8"><p className="text-xs text-gray-400 line-clamp-2 max-w-md">{occ.description}</p></td><td className="p-8 text-right"><button onClick={async () => { if(confirm("Excluir?")) await deleteOccurrence(occ.id); }} className="p-3 bg-white/5 hover:bg-brand-600/10 text-gray-600 hover:text-red-500 rounded-xl transition-all"><Trash2 size={16}/></button></td></tr>
+                                    {filteredOccurrences.map(occ => (
+                                        <tr key={occ.id} className="hover:bg-white/[0.02]"><td className="p-8 text-xs font-bold text-gray-500">{new Date(occ.timestamp).toLocaleDateString()}</td><td className="p-8"><p className="font-black text-white uppercase text-sm">{occ.studentName}</p><p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">{occ.studentClass}</p></td><td className="p-8 font-black text-brand-500 text-xs uppercase tracking-widest">{occ.reportedBy}</td><td className="p-8"><p className="text-xs text-gray-400 line-clamp-2 max-w-md">{occ.description}</p></td><td className="p-8 text-right"><div className="flex justify-end gap-2"><button onClick={() => { setSelectedOccurrence(occ); setShowOccurrenceModal(true); }} className="p-3 bg-white/5 hover:bg-brand-600/10 text-gray-600 hover:text-brand-500 rounded-xl transition-all"><FileText size={16}/></button><button onClick={async () => { if(confirm("Excluir?")) await deleteOccurrence(occ.id); }} className="p-3 bg-white/5 hover:bg-brand-600/10 text-gray-600 hover:text-red-500 rounded-xl transition-all"><Trash2 size={16}/></button></div></td></tr>
                                     ))}
                                 </tbody>
                             </table>
@@ -1278,7 +1333,31 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="animate-in fade-in slide-in-from-right-4">
                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
                             <div><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Planejamentos Recebidos</h1><p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Monitoramento pedagógico centralizado</p></div>
-                            <div className="flex flex-wrap items-center gap-4 bg-[#18181b] border border-white/5 p-4 rounded-3xl shadow-xl"><div className="relative group"><Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16}/><select className="bg-black/40 border border-white/10 rounded-xl px-10 py-3 text-white font-black text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[200px] cursor-pointer" value={planFilterClass} onChange={e => setPlanFilterClass(e.target.value)}><option value="">Todas as Turmas</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="flex bg-black/40 p-1 rounded-xl border border-white/10">{['todos', 'diario', 'bimestral', 'inova'].map(type => (<button key={type} onClick={() => setPlanFilterType(type)} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${planFilterType === type ? 'bg-brand-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>{type}</button>))}</div>{(planFilterClass || planFilterType !== 'todos') && (<button onClick={() => { setPlanFilterClass(''); setPlanFilterType('todos'); }} className="p-3 bg-brand-600/10 text-brand-500 hover:bg-brand-600 hover:text-white rounded-xl transition-all" title="Limpar Filtros"><FilterX size={18}/></button>)}</div>
+                            <div className="flex flex-wrap items-center gap-4 bg-[#18181b] border border-white/5 p-4 rounded-3xl shadow-xl">
+                                <div className="relative group">
+                                    <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16}/>
+                                    <select className="bg-black/40 border border-white/10 rounded-xl px-10 py-3 text-white font-black text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[200px] cursor-pointer" value={planFilterClass} onChange={e => setPlanFilterClass(e.target.value)}>
+                                        <option value="">Todas as Turmas</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div className="relative group">
+                                    <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16}/>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Filtrar por Professor..."
+                                        className="bg-black/40 border border-white/10 rounded-xl px-10 py-3 text-white font-black text-[10px] uppercase tracking-widest outline-none focus:border-brand-600 min-w-[200px]"
+                                        value={planFilterTeacher}
+                                        onChange={e => setPlanFilterTeacher(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex bg-black/40 p-1 rounded-xl border border-white/10">
+                                    {['todos', 'diario', 'bimestral', 'inova'].map(type => (<button key={type} onClick={() => setPlanFilterType(type)} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${planFilterType === type ? 'bg-brand-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}>{type}</button>))}
+                                </div>
+                                {(planFilterClass || planFilterType !== 'todos' || planFilterTeacher) && (
+                                    <button onClick={() => { setPlanFilterClass(''); setPlanFilterType('todos'); setPlanFilterTeacher(''); }} className="p-3 bg-brand-600/10 text-brand-500 hover:bg-brand-600 hover:text-white rounded-xl transition-all" title="Limpar Filtros"><FilterX size={18}/></button>
+                                )}
+                            </div>
                         </header>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {filteredLessonPlans.map(plan => {
@@ -1292,16 +1371,40 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'config' && (
-                    <div className="animate-in fade-in slide-in-from-right-4 max-w-2xl mx-auto">
-                        <header className="mb-12"><h1 className="text-4xl font-black text-white uppercase tracking-tighter">Configurações Globais</h1><p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Ajustes de sistema e comunicação</p></header>
-                        <div className="bg-[#18181b] border border-white/10 p-12 rounded-[3.5rem] shadow-2xl space-y-12">
-                            <div className="space-y-6"><h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-4"><Settings size={28} className="text-brand-600"/> Comunicado no Mural</h3><div className="flex items-center justify-between bg-black/40 p-6 rounded-3xl border border-white/5"><label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Exibir Aviso Público</label><button onClick={() => setConfigIsBannerActive(!configIsBannerActive)}>{configIsBannerActive ? <Check size={40} className="text-green-500" /> : <X size={40} className="text-gray-800" />}</button></div><textarea className="w-full bg-black/40 border border-white/5 rounded-[2rem] p-6 text-white font-medium outline-none focus:border-brand-600 transition-all min-h-[150px]" value={configBannerMsg} onChange={e => setConfigBannerMsg(e.target.value)} placeholder="Mensagem do banner..." /><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-brand-600 appearance-none" value={configBannerType} onChange={e => setConfigBannerType(e.target.value as any)}><option value="info">Informação (Azul)</option><option value="warning">Aviso (Amarelo)</option><option value="error">Crítico (Vermelho)</option><option value="success">Sucesso (Verde)</option></select></div><Button onClick={handleSaveConfig} className="w-full h-20 rounded-[2rem] font-black uppercase tracking-[0.2em] bg-brand-600 shadow-2xl shadow-red-900/40 text-sm"><Save size={24} className="mr-3"/> Atualizar Sistema</Button>
+                {activeTab === 'diagrammed_exams' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Provas Diagramadas</h1>
+                            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Banco de provas criadas pelos professores</p>
+                        </header>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {diagrammedExams.map(exam => (
+                                <div key={exam.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-brand-600/30 transition-all flex flex-col relative overflow-hidden">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="p-4 rounded-2xl bg-brand-600/10 text-brand-500">
+                                            <FileCheck size={24}/>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest block">{new Date(exam.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{exam.title}</h3>
+                                    <p className="text-brand-500 font-black uppercase text-[10px] tracking-widest mb-6">{exam.subject} • {exam.className}</p>
+                                    <div className="mt-auto pt-4 border-t border-white/5">
+                                        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Prof. {exam.teacherName}</p>
+                                        <p className="text-gray-600 text-[10px] font-black uppercase tracking-widest">{exam.questions.length} Questões • {exam.bimester}</p>
+                                    </div>
+                                </div>
+                            ))}
+                            {diagrammedExams.length === 0 && (
+                                <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
+                                    <FileCheck size={64} className="mx-auto mb-4 text-gray-500" />
+                                    <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhuma prova diagramada encontrada</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
-
-                {activeTab === 'sync' && <GenneraSyncPanel />}
 
             </div>
 
@@ -1438,9 +1541,41 @@ export const PrintShopDashboard: React.FC = () => {
                     <div className="bg-[#18181b] border border-white/10 w-full max-w-lg rounded-[2.5rem] shadow-2xl animate-in zoom-in-95">
                         <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20"><div><h3 className="text-2xl font-black text-white uppercase tracking-tight">Configurar Aula</h3><p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{scheduleFormData.className} • {GRID_SLOTS.find(s => s.id === scheduleFormData.slotId)?.label}</p></div><button onClick={() => setShowScheduleModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div>
                         <div className="p-10 space-y-8">
-                            <div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Disciplina</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 appearance-none" value={scheduleFormData.subject} onChange={e => setScheduleFormData({...scheduleFormData, subject: e.target.value})}><option value="">Selecione...</option>{allSubjects.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                            <div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Disciplina</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 appearance-none" value={scheduleFormData.subject} onChange={e => setScheduleFormData({...scheduleFormData, subject: e.target.value})}><option value="">Selecione...</option>{allSubjects.map((s, i) => <option key={`${s}-${i}`} value={s}>{s}</option>)}</select></div>
                             <div><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Professor</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-red-600 appearance-none" value={scheduleFormData.professor} onChange={e => setScheduleFormData({...scheduleFormData, professor: e.target.value})}><option value="">Selecione...</option>{staffMembers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
                             <div className="flex gap-4">{scheduleFormData.id && (<button onClick={handleDeleteSchedule} className="h-16 w-16 bg-white/5 hover:bg-red-600/10 text-gray-600 hover:text-red-500 rounded-2xl border border-white/5 flex items-center justify-center transition-all"><Trash2 size={24}/></button>)}<Button onClick={handleSaveSchedule} isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40"><Save size={20} className="mr-3"/> Salvar</Button></div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal for Occurrence Details */}
+            {showOccurrenceModal && selectedOccurrence && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                    <div className="bg-[#18181b] border border-white/10 w-full max-w-2xl rounded-[2.5rem] shadow-2xl animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tight">Detalhes da Ocorrência</h3>
+                                <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest mt-1">{new Date(selectedOccurrence.timestamp).toLocaleDateString()} • {selectedOccurrence.studentClass}</p>
+                            </div>
+                            <button onClick={() => setShowOccurrenceModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <div className="p-10 space-y-8">
+                            <div className="bg-black/40 p-6 rounded-3xl border border-white/5">
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Aluno</p>
+                                <p className="text-white font-bold text-lg">{selectedOccurrence.studentName}</p>
+                            </div>
+                            <div className="bg-black/40 p-6 rounded-3xl border border-white/5">
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Relatado por</p>
+                                <p className="text-brand-500 font-bold text-lg">{selectedOccurrence.reportedBy}</p>
+                            </div>
+                            <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5">
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Descrição do Fato</p>
+                                <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap font-medium">{selectedOccurrence.description}</p>
+                            </div>
+                            <div className="flex justify-end">
+                                <Button onClick={() => setShowOccurrenceModal(false)} className="h-16 px-8 bg-white/5 hover:bg-white/10 rounded-2xl font-black uppercase tracking-widest border border-white/10">Fechar</Button>
+                            </div>
                         </div>
                     </div>
                 </div>
