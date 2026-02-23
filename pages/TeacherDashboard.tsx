@@ -29,7 +29,7 @@ import {
     Edit3, Info, FolderPlus, Smile, AlertTriangle, Calendar as CalendarIcon, FileDown, FileUp, Upload, MousePointerClick, Users, ShieldAlert, FileCheck,
     BookMarked, History, Target, Cpu, CheckSquare, Layers, Rocket, Lightbulb, Box, Check, Briefcase, Camera, PackageCheck, LayoutTemplate, Image as ImageIcon
 } from 'lucide-react';
-import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
+import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS, INFANTIL_CLASSES, EFAI_CLASSES } from '../constants';
 
 const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
     const statusInfo: Record<string, { text: string; icon: any; color: string }> = {
@@ -128,16 +128,23 @@ export const TeacherDashboard: React.FC = () => {
         subject: '',
         bimester: '1º BIMESTRE',
         title: '',
-        questions: Array.from({ length: 10 }).map((_, i) => ({
+        questions: []
+    });
+
+    const generateQuestionsForClass = (className: string) => {
+        const isLowerGrade = [...INFANTIL_CLASSES, ...EFAI_CLASSES].includes(className);
+        const numObjective = isLowerGrade ? 5 : 7;
+        
+        return Array.from({ length: 10 }).map((_, i) => ({
             id: Math.random().toString(36).substr(2, 9),
             number: i + 1,
-            type: i < 7 ? 'objective' : 'discursive',
+            type: (i < numObjective ? 'objective' : 'discursive') as 'objective' | 'discursive',
             skill: '',
             statement: '',
-            alternatives: i < 7 ? ['A', 'B', 'C', 'D', 'E'].map(l => ({ id: Math.random().toString(36).substr(2, 9), label: l, text: '', isCorrect: false })) : undefined,
+            alternatives: i < numObjective ? ['A', 'B', 'C', 'D', 'E'].map(l => ({ id: Math.random().toString(36).substr(2, 9), label: l, text: '', isCorrect: false })) : undefined,
             lines: 5
-        }))
-    });
+        }));
+    };
 
     // Material Form State
     const [materialForm, setMaterialForm] = useState({ title: '', className: '', subject: '' });
@@ -639,7 +646,7 @@ export const TeacherDashboard: React.FC = () => {
         </button>
     );
 
-    const subjects = [...EFAF_SUBJECTS, ...EM_SUBJECTS];
+    const subjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS]));
 
     return (
         <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
@@ -675,7 +682,18 @@ export const TeacherDashboard: React.FC = () => {
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label>
-                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs" value={diagramForm.className} onChange={e => setDiagramForm({...diagramForm, className: e.target.value})}>
+                                    <select 
+                                        className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs" 
+                                        value={diagramForm.className} 
+                                        onChange={e => {
+                                            const newClass = e.target.value;
+                                            setDiagramForm({
+                                                ...diagramForm, 
+                                                className: newClass,
+                                                questions: generateQuestionsForClass(newClass)
+                                            });
+                                        }}
+                                    >
                                         <option value="">Selecione...</option>
                                         {myClasses.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>

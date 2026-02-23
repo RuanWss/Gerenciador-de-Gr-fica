@@ -403,15 +403,10 @@ export const listenToAllLessonPlans = (callback: (plans: LessonPlan[]) => void, 
 };
 
 export const listenToTeacherLessonPlans = (teacherId: string, teacherEmail: string, callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
-    let q;
-    if (teacherEmail === 'ruan.wss@gmail.com') {
-        q = query(collection(db, LESSON_PLANS_COLLECTION));
-    } else {
-        q = query(
-            collection(db, LESSON_PLANS_COLLECTION), 
-            where("teacherId", "==", teacherId)
-        );
-    }
+    const q = query(
+        collection(db, LESSON_PLANS_COLLECTION), 
+        where("teacherId", "==", teacherId)
+    );
     
     return onSnapshot(q, (snapshot) => {
         callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan)));

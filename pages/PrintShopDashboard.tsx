@@ -194,6 +194,11 @@ export const PrintShopDashboard: React.FC = () => {
         bimester: '1º BIMESTRE'
     });
 
+    // Occurrences Filters
+    const [occFilterClass, setOccFilterClass] = useState('');
+    const [occFilterTeacher, setOccFilterTeacher] = useState('');
+    const [occFilterStudent, setOccFilterStudent] = useState('');
+
     // 1. Listeners for UI state that are needed globally or for the initial view (Exams)
     useEffect(() => {
         if (!user) return;
@@ -342,6 +347,42 @@ export const PrintShopDashboard: React.FC = () => {
         if (selectedExam && selectedExam.id === id) {
             setSelectedExam({ ...selectedExam, status });
         }
+    };
+
+    const generateActivityMapPDF = () => {
+        if (!mapaClass) return alert("Selecione uma turma.");
+        
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const rows = filteredMapa.map(item => `
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.area}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.subject}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.activityName}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.date ? new Date(item.activity.date).toLocaleDateString() : '-'}</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">${item.activity.value}</td>
+            </tr>
+        `).join('');
+
+        printWindow.document.write(`
+            <html><body style="font-family: sans-serif; padding: 20px;">
+                <h2>Mapa de Atividades - ${mapaClass}</h2>
+                <p>${mapaFilters.bimester}</p>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead><tr style="background: #f4f4f4;">
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Área</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Disciplina</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Atividade</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Data</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Valor</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <script>window.onload = () => { window.print(); window.close(); }</script>
+            </body></html>
+        `);
+        printWindow.document.close();
     };
 
     const handleSaveConfig = async () => {
@@ -769,14 +810,23 @@ export const PrintShopDashboard: React.FC = () => {
                             </div>
                             <div className="w-full md:w-64 space-y-2">
                                 <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Selecionar Turma</label>
-                                <select 
-                                    className="w-full bg-[#18181b] border border-white/10 rounded-2xl py-3 px-4 text-white text-sm font-bold outline-none focus:border-red-600 transition-all appearance-none cursor-pointer shadow-xl"
-                                    value={mapaClass}
-                                    onChange={e => setMapaClass(e.target.value)}
-                                >
-                                    <option value="">Selecione...</option>
-                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                <div className="flex gap-2">
+                                    <select 
+                                        className="w-full bg-[#18181b] border border-white/10 rounded-2xl py-3 px-4 text-white text-sm font-bold outline-none focus:border-red-600 transition-all appearance-none cursor-pointer shadow-xl"
+                                        value={mapaClass}
+                                        onChange={e => setMapaClass(e.target.value)}
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                    <button 
+                                        onClick={generateActivityMapPDF}
+                                        className="bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl shadow-lg transition-all"
+                                        title="Gerar PDF"
+                                    >
+                                        <FileText size={20} />
+                                    </button>
+                                </div>
                             </div>
                         </header>
 
@@ -1166,9 +1216,43 @@ export const PrintShopDashboard: React.FC = () => {
 
                 {activeTab === 'occurrences' && (
                     <div className="animate-in fade-in slide-in-from-right-4">
-                         <header className="mb-12">
-                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Ocorrências Global</h1>
-                            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Visualização de todos os registros da escola</p>
+                         <header className="mb-12 flex flex-col md:flex-row justify-between items-end gap-6">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Diário de Ocorrências Global</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Visualização de todos os registros da escola</p>
+                            </div>
+                            <div className="flex flex-wrap gap-4 bg-[#18181b] p-4 rounded-3xl border border-white/5 shadow-xl">
+                                <select 
+                                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-[10px] font-black uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]"
+                                    value={occFilterClass}
+                                    onChange={e => setOccFilterClass(e.target.value)}
+                                >
+                                    <option value="">Todas as Turmas</option>
+                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                                <input 
+                                    type="text" 
+                                    placeholder="Filtrar por Professor..." 
+                                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-[10px] font-bold outline-none focus:border-brand-600 min-w-[150px]"
+                                    value={occFilterTeacher}
+                                    onChange={e => setOccFilterTeacher(e.target.value)}
+                                />
+                                <input 
+                                    type="text" 
+                                    placeholder="Filtrar por Aluno..." 
+                                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-[10px] font-bold outline-none focus:border-brand-600 min-w-[150px]"
+                                    value={occFilterStudent}
+                                    onChange={e => setOccFilterStudent(e.target.value)}
+                                />
+                                {(occFilterClass || occFilterTeacher || occFilterStudent) && (
+                                    <button 
+                                        onClick={() => { setOccFilterClass(''); setOccFilterTeacher(''); setOccFilterStudent(''); }}
+                                        className="p-2 bg-brand-600/10 text-brand-500 hover:bg-brand-600 hover:text-white rounded-xl transition-all"
+                                    >
+                                        <FilterX size={16}/>
+                                    </button>
+                                )}
+                            </div>
                         </header>
                         <div className="bg-[#18181b] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
                              <table className="w-full text-left">
@@ -1176,7 +1260,12 @@ export const PrintShopDashboard: React.FC = () => {
                                     <tr><th className="p-8">Data</th><th className="p-8">Aluno / Turma</th><th className="p-8">Relatado por</th><th className="p-8">Descrição</th><th className="p-8 text-right">Ações</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {occurrences.map(occ => (
+                                    {occurrences.filter(occ => {
+                                        const matchClass = !occFilterClass || occ.studentClass === occFilterClass;
+                                        const matchTeacher = !occFilterTeacher || occ.reportedBy.toLowerCase().includes(occFilterTeacher.toLowerCase());
+                                        const matchStudent = !occFilterStudent || occ.studentName.toLowerCase().includes(occFilterStudent.toLowerCase());
+                                        return matchClass && matchTeacher && matchStudent;
+                                    }).map(occ => (
                                         <tr key={occ.id} className="hover:bg-white/[0.02]"><td className="p-8 text-xs font-bold text-gray-500">{new Date(occ.timestamp).toLocaleDateString()}</td><td className="p-8"><p className="font-black text-white uppercase text-sm">{occ.studentName}</p><p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">{occ.studentClass}</p></td><td className="p-8 font-black text-brand-500 text-xs uppercase tracking-widest">{occ.reportedBy}</td><td className="p-8"><p className="text-xs text-gray-400 line-clamp-2 max-w-md">{occ.description}</p></td><td className="p-8 text-right"><button onClick={async () => { if(confirm("Excluir?")) await deleteOccurrence(occ.id); }} className="p-3 bg-white/5 hover:bg-brand-600/10 text-gray-600 hover:text-red-500 rounded-xl transition-all"><Trash2 size={16}/></button></td></tr>
                                     ))}
                                 </tbody>
