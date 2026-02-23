@@ -686,6 +686,14 @@ export const HRDashboard: React.FC = () => {
                                             <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">E-mail Corporativo</label>
                                             <input required type="email" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium outline-none focus:border-blue-600 transition-all text-xs" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value.toLowerCase().trim()})} placeholder="nome@cemal.com" />
                                         </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Login de Acesso</label>
+                                            <input required type="text" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium outline-none focus:border-blue-600 transition-all text-xs uppercase" value={formData.accessLogin} onChange={e => setFormData({...formData, accessLogin: e.target.value.toUpperCase().trim()})} placeholder="EX: JOAO.SILVA" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Senha de Acesso</label>
+                                            <input required type="text" className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-medium outline-none focus:border-blue-600 transition-all text-xs" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Senha" />
+                                        </div>
                                         <div className="pt-4">
                                             <button 
                                                 type="button"
