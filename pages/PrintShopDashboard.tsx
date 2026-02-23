@@ -134,7 +134,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'mapa' | 'diagrammed_exams'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'mapa' | 'diagrammed_exams' | 'reports'>('exams');
     const [isLoading, setIsLoading] = useState(false);
     
     // Data Collections
@@ -909,6 +909,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="occurrences" label="Ocorrências" icon={AlertTriangle} />
                     <SidebarItem id="lesson_plans" label="Planejamentos" icon={BookMarked} />
                     <SidebarItem id="diagrammed_exams" label="Provas" icon={FileCheck} />
+                    <SidebarItem id="reports" label="Relatórios" icon={FileBarChart} />
                     <SidebarItem 
                         id="schedule" 
                         label="Horários TV" 
@@ -1621,9 +1622,126 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-            </div>
+                {activeTab === 'reports' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12">
+                            <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Relatórios Específicos</h1>
+                            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Gere documentos detalhados para análise da coordenação.</p>
+                        </header>
 
-            {/* Modal for Exam Detail & Slips */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Card 1: Frequência por Turma */}
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl flex flex-col h-full">
+                                <div className="flex items-start gap-4 mb-6">
+                                    <div className="p-4 rounded-2xl bg-red-500/10 text-red-500 shrink-0">
+                                        <FileBarChart size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tight mb-1">Frequência por Turma</h3>
+                                        <p className="text-gray-400 text-[10px] font-medium leading-tight">Relatório padrão com a frequência % de todos os alunos de uma turma.</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="mt-auto space-y-4">
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-1 block">SELECIONE A TURMA:</label>
+                                        <select 
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-brand-600 appearance-none"
+                                            value={occFilterClass}
+                                            onChange={e => setOccFilterClass(e.target.value)}
+                                        >
+                                            <option value="">-- Selecione --</option>
+                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            if (!occFilterClass) return alert("Selecione uma turma");
+                                            alert("Gerando PDF de Frequência para " + occFilterClass);
+                                        }}
+                                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5"
+                                    >
+                                        Gerar PDF da Turma
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Card 2: Relatório do Aluno */}
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl flex flex-col h-full">
+                                <div className="flex items-start gap-4 mb-6">
+                                    <div className="p-4 rounded-2xl bg-blue-500/10 text-blue-500 shrink-0">
+                                        <UserCircle size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tight mb-1">Relatório do Aluno</h3>
+                                        <p className="text-gray-400 text-[10px] font-medium leading-tight">Extrato detalhado de presenças e faltas de um único aluno.</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="mt-auto space-y-4">
+                                    <div>
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-1 block">SELECIONE O ALUNO:</label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Buscar aluno..."
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-brand-600 mb-2"
+                                            value={occFilterStudent}
+                                            onChange={e => setOccFilterStudent(e.target.value)}
+                                        />
+                                        {occFilterStudent && filteredStudents.length > 0 && (
+                                            <div className="max-h-32 overflow-y-auto bg-black/60 rounded-xl border border-white/5 p-2 custom-scrollbar">
+                                                {filteredStudents.slice(0, 5).map(s => (
+                                                    <div key={s.id} className="p-2 hover:bg-white/10 rounded-lg cursor-pointer text-xs text-gray-300" onClick={() => setOccFilterStudent(s.name)}>
+                                                        {s.name}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            if (!occFilterStudent) return alert("Selecione um aluno");
+                                            alert("Gerando Relatório Individual para " + occFilterStudent);
+                                        }}
+                                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5"
+                                    >
+                                        Gerar PDF Individual
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Card 3: Relatório de Atrasos */}
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl flex flex-col h-full">
+                                <div className="flex items-start gap-4 mb-6">
+                                    <div className="p-4 rounded-2xl bg-yellow-500/10 text-yellow-500 shrink-0">
+                                        <Clock size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tight mb-1">Relatório de Atrasos</h3>
+                                        <p className="text-gray-400 text-[10px] font-medium leading-tight">Lista alunos que registraram presença após o horário limite.</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="mt-auto space-y-4">
+                                    <div className="bg-black/40 border border-white/5 rounded-xl p-4 space-y-2">
+                                        <p className="text-[10px] text-gray-400 flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-white/20"></span> Manhã: Após <span className="text-red-400 font-bold">07:20</span></p>
+                                        <p className="text-[10px] text-gray-400 flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-white/20"></span> Tarde: Após <span className="text-red-400 font-bold">13:00</span></p>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            alert("Gerando Relatório de Atrasos...");
+                                        }}
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg shadow-red-900/20"
+                                    >
+                                        Gerar Relatório de Atrasos
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+            </div>
             {showExamDetail && selectedExam && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
                     <div className="bg-[#121214] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">
