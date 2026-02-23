@@ -161,6 +161,7 @@ export const TeacherDashboard: React.FC = () => {
         date: new Date().toISOString().split('T')[0]
     });
     const [occSelectedClass, setOccSelectedClass] = useState('');
+    const [occSelectedStudentIds, setOccSelectedStudentIds] = useState<string[]>([]);
 
     // PEI Modal State
     const [showPeiForm, setShowPeiForm] = useState(false);
@@ -517,6 +518,7 @@ export const TeacherDashboard: React.FC = () => {
         if (occ) {
             setIsEditingOcc(true);
             setOccForm(occ);
+            setOccSelectedStudentIds([occ.studentId]);
             const student = students.find(s => s.id === occ.studentId);
             setOccSelectedClass(student?.className || '');
         } else {
@@ -528,6 +530,7 @@ export const TeacherDashboard: React.FC = () => {
                 description: '',
                 date: new Date().toISOString().split('T')[0]
             });
+            setOccSelectedStudentIds([]);
             setOccSelectedClass('');
         }
         setShowOccModal(true);
@@ -535,27 +538,46 @@ export const TeacherDashboard: React.FC = () => {
 
     const handleSaveOccurrence = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!occForm.studentId || !occForm.description) return alert("Preencha todos os campos.");
+        if (occSelectedStudentIds.length === 0 || !occForm.description) return alert("Preencha todos os campos.");
         
         setIsLoading(true);
         try {
-            const student = students.find(s => s.id === occForm.studentId);
-            const dataToSave: StudentOccurrence = {
-                id: occForm.id || '',
-                studentId: student!.id,
-                studentName: student!.name,
-                studentClass: student!.className,
-                category: occForm.category as any,
-                severity: occForm.severity as any,
-                description: occForm.description!,
-                date: occForm.date!,
-                timestamp: occForm.timestamp || Date.now(),
-                reportedBy: user!.name
-            };
-
-            await saveOccurrence(dataToSave);
+            if (isEditingOcc) {
+                const student = students.find(s => s.id === occSelectedStudentIds[0]);
+                const dataToSave: StudentOccurrence = {
+                    id: occForm.id || '',
+                    studentId: student!.id,
+                    studentName: student!.name,
+                    studentClass: student!.className,
+                    category: occForm.category as any,
+                    severity: occForm.severity as any,
+                    description: occForm.description!,
+                    date: occForm.date!,
+                    timestamp: occForm.timestamp || Date.now(),
+                    reportedBy: user!.name
+                };
+                await saveOccurrence(dataToSave);
+            } else {
+                for (const studentId of occSelectedStudentIds) {
+                    const student = students.find(s => s.id === studentId);
+                    if (!student) continue;
+                    const dataToSave: StudentOccurrence = {
+                        id: '',
+                        studentId: student.id,
+                        studentName: student.name,
+                        studentClass: student.className,
+                        category: occForm.category as any,
+                        severity: occForm.severity as any,
+                        description: occForm.description!,
+                        date: occForm.date!,
+                        timestamp: Date.now(),
+                        reportedBy: user!.name
+                    };
+                    await saveOccurrence(dataToSave);
+                }
+            }
             setShowOccModal(false);
-            alert(isEditingOcc ? "Ocorrência atualizada!" : "Ocorrência registrada!");
+            alert(isEditingOcc ? "Ocorrência atualizada!" : "Ocorrências registradas!");
         } catch (err) {
             alert("Erro ao salvar ocorrência.");
         } finally {
@@ -1081,6 +1103,16 @@ export const TeacherDashboard: React.FC = () => {
                                                 <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.evaluationStrategies} onChange={e => setPlanForm({...planForm, evaluationStrategies: e.target.value})} placeholder="Como o progresso será medido?"/>
                                             </div>
                                         </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Práticas Educativas</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.educationalPractices} onChange={e => setPlanForm({...planForm, educationalPractices: e.target.value})} placeholder="Quais práticas serão utilizadas?"/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Espaços Educativos</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.educationalSpaces} onChange={e => setPlanForm({...planForm, educationalSpaces: e.target.value})} placeholder="Onde as atividades ocorrerão?"/>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
 
@@ -1335,7 +1367,7 @@ export const TeacherDashboard: React.FC = () => {
 
             {/* OCCURRENCE FORM MODAL */}
             {showOccModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">{isEditingOcc ? <Edit3 size={24} className="text-yellow-500" /> : <PlusCircle size={24} className="text-red-600" />}{isEditingOcc ? 'Editar Registro' : 'Novo Registro'}</h3><button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><form onSubmit={handleSaveOccurrence} className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occSelectedClass} onChange={(e) => setOccSelectedClass(e.target.value)} disabled={isEditingOcc}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Aluno</label><select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.studentId} onChange={(e) => setOccForm({...occForm, studentId: e.target.value})} disabled={isEditingOcc}><option value="">-- Selecione --</option>{students.filter(s => s.className === occSelectedClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Categoria</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.category} onChange={(e) => setOccForm({...occForm, category: e.target.value as any})}><option value="indisciplina">Indisciplina</option><option value="atraso">Atraso</option><option value="desempenho">Resumo</option><option value="uniforme">Uniforme</option><option value="elogio">Elogio</option><option value="outros">Outros</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data</label><input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={occForm.date} onChange={(e) => setOccForm({...occForm, date: e.target.value})} /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Descrição Detalhada</label><textarea required className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[150px]" placeholder="Descreva o ocorrido com o máximo de detalhes..." value={occForm.description} onChange={(e) => setOccForm({...occForm, description: e.target.value})} /></div><div className="flex gap-4 pt-4"><Button type="button" variant="outline" onClick={() => setShowOccModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest">Cancelar</Button><Button type="submit" isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">{isEditingOcc ? 'Salvar Alterações' : 'Registrar Ocorrência'}</Button></div></form></div></div>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md"><div className="bg-[#18181b] border border-white/10 w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 animate-in zoom-in-95"><div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black text-white uppercase tracking-tight flex items-center gap-3">{isEditingOcc ? <Edit3 size={24} className="text-yellow-500" /> : <PlusCircle size={24} className="text-red-600" />}{isEditingOcc ? 'Editar Registro' : 'Novo Registro'}</h3><button onClick={() => setShowOccModal(false)} className="text-gray-500 hover:text-white transition-colors p-2"><X size={32}/></button></div><form onSubmit={handleSaveOccurrence} className="space-y-6"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occSelectedClass} onChange={(e) => setOccSelectedClass(e.target.value)} disabled={isEditingOcc}><option value="">-- Selecione --</option>{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Aluno(s)</label><select required={occSelectedStudentIds.length === 0} multiple={!isEditingOcc} className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none min-h-[56px] custom-scrollbar" value={isEditingOcc ? occSelectedStudentIds[0] || '' : occSelectedStudentIds} onChange={(e) => { if (isEditingOcc) { setOccSelectedStudentIds([e.target.value]); } else { const options = Array.from(e.target.selectedOptions, option => option.value); setOccSelectedStudentIds(options); } }} disabled={isEditingOcc}><option value="" disabled={!isEditingOcc}>-- Selecione --</option>{students.filter(s => s.className === occSelectedClass).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>{!isEditingOcc && <p className="text-[9px] text-gray-500 ml-2">Segure CTRL/CMD para selecionar vários</p>}</div></div><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Categoria</label><select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none" value={occForm.category} onChange={(e) => setOccForm({...occForm, category: e.target.value as any})}><option value="indisciplina">Indisciplina</option><option value="atraso">Atraso</option><option value="desempenho">Resumo</option><option value="uniforme">Uniforme</option><option value="elogio">Elogio</option><option value="entrega de tarefa">Entrega de Tarefa</option><option value="outros">Outros</option></select></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data</label><input type="date" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600" value={occForm.date} onChange={(e) => setOccForm({...occForm, date: e.target.value})} /></div></div><div className="space-y-2"><label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Descrição Detalhada</label><textarea required className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-white font-medium text-sm outline-none focus:border-red-600 min-h-[150px]" placeholder="Descreva o ocorrido com o máximo de detalhes..." value={occForm.description} onChange={(e) => setOccForm({...occForm, description: e.target.value})} /></div><div className="flex gap-4 pt-4"><Button type="button" variant="outline" onClick={() => setShowOccModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest">Cancelar</Button><Button type="submit" isLoading={isLoading} className="flex-1 h-16 bg-red-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40">{isEditingOcc ? 'Salvar Alterações' : 'Registrar Ocorrência'}</Button></div></form></div></div>
             )}
 
             {/* PEI FORM MODAL */}

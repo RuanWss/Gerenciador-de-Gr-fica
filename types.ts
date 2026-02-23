@@ -133,7 +133,7 @@ export interface StudentOccurrence {
   studentId: string;
   studentName: string;
   studentClass: string;
-  category: 'indisciplina' | 'atraso' | 'desempenho' | 'uniforme' | 'elogio' | 'outros';
+  category: 'indisciplina' | 'atraso' | 'desempenho' | 'uniforme' | 'elogio' | 'entrega de tarefa' | 'outros';
   severity: 'low' | 'medium' | 'high';
   description: string;
   date: string;

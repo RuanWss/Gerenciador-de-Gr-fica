@@ -24,6 +24,7 @@ import {
     listenToAllLessonPlans,
     deleteStudent,
     deleteLessonPlan,
+    saveLessonPlan,
     listenToClassGradebooks,
     listenToAllDiagrammedExams
 } from '../services/firebaseService';
@@ -171,6 +172,9 @@ export const PrintShopDashboard: React.FC = () => {
     const [planFilterType, setPlanFilterType] = useState<string>('todos');
     const [selectedPlan, setSelectedPlan] = useState<LessonPlan | null>(null);
     const [showPlanViewModal, setShowPlanViewModal] = useState(false);
+    const [showPlanEditModal, setShowPlanEditModal] = useState(false);
+    const [planningTab, setPlanningTab] = useState<'diario' | 'bimestral' | 'inova'>('diario');
+    const [planForm, setPlanForm] = useState<Partial<LessonPlan>>({});
 
     // Occurrences States
     const [occFilterClass, setOccFilterClass] = useState('');
@@ -251,7 +255,17 @@ export const PrintShopDashboard: React.FC = () => {
 
             doc.setFont("helvetica", "bold");
             doc.text(`QUESTÃO ${q.number}`, 14, yPos);
-            yPos += 7;
+            yPos += 5;
+
+            if (q.skill) {
+                doc.setFont("helvetica", "italic");
+                doc.setFontSize(8);
+                doc.text(`Habilidade: ${q.skill}`, 14, yPos);
+                doc.setFontSize(10);
+                yPos += 5;
+            } else {
+                yPos += 2;
+            }
 
             doc.setFont("helvetica", "normal");
             const splitStatement = doc.splitTextToSize(q.statement, 180);
@@ -827,6 +841,42 @@ export const PrintShopDashboard: React.FC = () => {
         setSelectedPlan(plan);
         setShowPlanViewModal(true);
     };
+
+    const handleEditPlan = (plan: LessonPlan) => {
+        setPlanForm({ ...plan });
+        if (plan.type) {
+            setPlanningTab(plan.type as any);
+        } else {
+            setPlanningTab('diario');
+        }
+        setShowPlanEditModal(true);
+    };
+
+    const handleSavePlan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+        try {
+            const planToSave: LessonPlan = {
+                ...planForm,
+                id: planForm.id || '',
+                teacherId: planForm.teacherId || '',
+                teacherName: planForm.teacherName || '',
+                createdAt: planForm.createdAt || Date.now(),
+                type: planningTab,
+                className: planForm.className || '',
+                subject: planForm.subject || 'Geral',
+            } as LessonPlan;
+            await saveLessonPlan(planToSave);
+            alert("Planejamento salvo com sucesso!");
+            setShowPlanEditModal(false);
+        } catch (err) {
+            alert("Erro ao salvar planejamento.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const subjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS]));
 
     const filteredClassesForGrid = useMemo(() => {
         switch(selectedSegment) {
@@ -1536,7 +1586,7 @@ export const PrintShopDashboard: React.FC = () => {
                                 const type = getNormalizedType(plan.type);
                                 const isProjectInova = type === 'inova';
                                 return (
-                                    <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-brand-600/30 transition-all flex flex-col relative overflow-hidden"><div className="flex justify-between items-start mb-6"><div className={`p-4 rounded-2xl ${isProjectInova ? 'bg-[#9D44FF]/10 text-[#9D44FF]' : 'bg-brand-600/10 text-brand-500'}`}>{isProjectInova ? <Sparkles size={24}/> : <BookOpen size={24}/>}</div><div className="text-right flex items-center gap-2"><span className="text-[10px] font-black text-gray-600 uppercase tracking-widest block">{new Date(plan.createdAt).toLocaleDateString()}</span><button onClick={async () => { if(confirm("Excluir planejamento?")) await deleteLessonPlan(plan.id); }} className="text-gray-800 hover:text-red-500"><Trash2 size={16}/></button></div></div><h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{plan.className}</h3><p className="text-brand-500 font-black uppercase text-[10px] tracking-widest mb-6">{plan.subject} • {plan.teacherName}</p><button onClick={() => handleViewPlan(plan)} className="mt-auto w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5">Visualizar Completo</button></div>
+                                    <div key={plan.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-brand-600/30 transition-all flex flex-col relative overflow-hidden"><div className="flex justify-between items-start mb-6"><div className={`p-4 rounded-2xl ${isProjectInova ? 'bg-[#9D44FF]/10 text-[#9D44FF]' : 'bg-brand-600/10 text-brand-500'}`}>{isProjectInova ? <Sparkles size={24}/> : <BookOpen size={24}/>}</div><div className="text-right flex items-center gap-2"><span className="text-[10px] font-black text-gray-600 uppercase tracking-widest block">{new Date(plan.createdAt).toLocaleDateString()}</span><button onClick={async () => { if(confirm("Excluir planejamento?")) await deleteLessonPlan(plan.id); }} className="text-gray-800 hover:text-red-500"><Trash2 size={16}/></button></div></div><h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{plan.className}</h3><p className="text-brand-500 font-black uppercase text-[10px] tracking-widest mb-6">{plan.subject} • {plan.teacherName}</p><div className="mt-auto flex gap-2"><button onClick={() => handleViewPlan(plan)} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5">Visualizar Completo</button><button onClick={() => handleEditPlan(plan)} className="p-4 bg-white/5 hover:bg-brand-600/10 text-gray-500 hover:text-brand-500 rounded-2xl transition-all border border-white/5" title="Editar Planejamento"><Edit size={18}/></button></div></div>
                                 );
                             })}
                         </div>
@@ -1842,6 +1892,268 @@ export const PrintShopDashboard: React.FC = () => {
                              </div>
                              <div className="flex gap-4"><Button variant="outline" onClick={() => setShowStudentModal(false)} className="flex-1 h-16 rounded-2xl font-black uppercase tracking-widest border-2">Cancelar</Button><Button onClick={handleSaveStudentEdit} isLoading={isLoading} className="flex-1 h-16 bg-brand-600 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/40"><Save size={20} className="mr-3"/> Salvar Alterações</Button></div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal for Plan Editing */}
+            {showPlanEditModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
+                    <div className="bg-[#121214] border border-white/10 w-full max-w-6xl max-h-[95vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95">
+                        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-black/20">
+                            <div className="flex items-center gap-6">
+                                <div className="h-16 w-16 bg-red-600/10 border border-red-600/20 rounded-2xl flex items-center justify-center">
+                                    {planningTab === 'inova' ? <Sparkles className="text-purple-500" size={32} /> : <History className="text-red-600" size={32} />}
+                                </div>
+                                <div>
+                                    <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Editar Planejamento</h3>
+                                    <p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">
+                                        {planningTab === 'diario' ? 'Registro de Aula' : planningTab === 'bimestral' ? 'Guia de Aprendizagem' : 'Projeto Acadêmico'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowPlanEditModal(false)} className="text-gray-600 hover:text-white transition-colors p-2"><X size={32}/></button>
+                        </div>
+                        <form onSubmit={handleSavePlan} className="flex-1 overflow-y-auto p-10 space-y-12 custom-scrollbar">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Tipo</label>
+                                    <div className="relative group">
+                                        <select 
+                                            className="w-full bg-black/40 border-2 border-red-600/30 rounded-2xl p-4 text-white font-black uppercase text-xs tracking-widest outline-none focus:border-red-600 transition-all appearance-none cursor-pointer shadow-inner"
+                                            value={planningTab}
+                                            onChange={(e) => setPlanningTab(e.target.value as any)}
+                                        >
+                                            <option value="diario">Diário</option>
+                                            <option value="bimestral">Bimestral</option>
+                                            <option value="inova">Projeto Inova</option>
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-red-600/50 group-hover:text-red-600 transition-colors">
+                                            <ChevronRight size={14} className="rotate-90" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Turma</label>
+                                    <select required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs transition-all" value={planForm.className} onChange={e => setPlanForm({...planForm, className: e.target.value})}>
+                                        <option value="">Selecionar...</option>
+                                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                {(planningTab === 'diario' || planningTab === 'bimestral') && (
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Disciplina</label>
+                                        <div className="relative group">
+                                            <select 
+                                                required
+                                                className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs transition-all cursor-pointer shadow-inner"
+                                                value={planForm.subject}
+                                                onChange={e => setPlanForm({...planForm, subject: e.target.value})}
+                                            >
+                                                <option value="">Selecionar...</option>
+                                                {subjects.map((s, i) => <option key={`${s}-${i}`} value={s}>{s}</option>)}
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                                                <ChevronRight size={14} className="rotate-90" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {planningTab === 'bimestral' && (
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Bimestre</label>
+                                        <div className="relative group">
+                                            <select 
+                                                className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 appearance-none text-xs transition-all cursor-pointer"
+                                                value={planForm.bimester}
+                                                onChange={e => setPlanForm({...planForm, bimester: e.target.value})}
+                                            >
+                                                <option value="1º BIMESTRE">1º BIMESTRE</option>
+                                                <option value="2º BIMESTRE">2º BIMESTRE</option>
+                                                <option value="3º BIMESTRE">3º BIMESTRE</option>
+                                                <option value="4º BIMESTRE">4º BIMESTRE</option>
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                                                <ChevronRight size={14} className="rotate-90" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {(planningTab === 'diario') && (
+                                    <div className="space-y-2 animate-in fade-in">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Data da Aula</label>
+                                        <input type="date" required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" value={planForm.date} onChange={e => setPlanForm({...planForm, date: e.target.value})} />
+                                    </div>
+                                )}
+                            </div>
+
+                            {planningTab === 'diario' && (
+                                <>
+                                    <div className="space-y-2 animate-in fade-in">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Assunto / Tema</label>
+                                        <input required className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-red-600 text-xs transition-all" placeholder="Tema da aula..." value={planForm.topic} onChange={e => setPlanForm({...planForm, topic: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-2 animate-in fade-in duration-500">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2">Conteúdo e Metodologia</label>
+                                        <textarea required className="w-full bg-black/40 border border-white/10 rounded-[2rem] p-8 text-white text-sm min-h-[300px] focus:border-red-600 outline-none transition-all resize-none shadow-inner" placeholder="Descreva os objetivos e etapas da aula..." value={planForm.content} onChange={e => setPlanForm({...planForm, content: e.target.value})} />
+                                    </div>
+                                </>
+                            )}
+
+                            {planningTab === 'bimestral' && (
+                                <div className="space-y-12 animate-in fade-in duration-500">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Breve Justificativa</label>
+                                            <textarea required className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.justification} onChange={e => setPlanForm({...planForm, justification: e.target.value})} placeholder="Descrição da importância pedagógica..."/>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Conteúdos Prioritários</label>
+                                            <textarea required className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.contents} onChange={e => setPlanForm({...planForm, contents: e.target.value})} placeholder="Descrição dos conteúdos centrais..."/>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Habilidades Cognitivas</label>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.cognitiveSkills} onChange={e => setPlanForm({...planForm, cognitiveSkills: e.target.value})} placeholder="Quais habilidades mentais serão trabalhadas?"/>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Habilidades Socioemocionais</label>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.socioEmotionalSkills} onChange={e => setPlanForm({...planForm, socioEmotionalSkills: e.target.value})} placeholder="Soft skills e inteligência emocional..."/>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/20 border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+                                        <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3 border-b border-white/5 pb-4"><CheckSquare size={18} className="text-red-500"/> Tipologia de Atividades</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                            {[{ key: 'Previous', label: 'Prévias' }, { key: 'Autodidactic', label: 'Autodidáticas' }, { key: 'Cooperative', label: 'Cooperativas' }, { key: 'Complementary', label: 'Complementares' }].map(item => (
+                                                <div key={item.key} className="space-y-3">
+                                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] block text-center">{item.label}</span>
+                                                    <textarea className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white text-xs min-h-[150px] focus:border-red-600 outline-none" value={(planForm as any)[`activities${item.key}`]} onChange={e => setPlanForm({...planForm, [`activities${item.key}`]: e.target.value})} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Situações Didáticas</label>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.didacticSituations} onChange={e => setPlanForm({...planForm, didacticSituations: e.target.value})} placeholder="Descrição do cenário de aprendizagem..."/>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Estratégias de Avaliação</label>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.evaluationStrategies} onChange={e => setPlanForm({...planForm, evaluationStrategies: e.target.value})} placeholder="Como o progresso será medido?"/>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Práticas Educativas</label>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.educationalPractices} onChange={e => setPlanForm({...planForm, educationalPractices: e.target.value})} placeholder="Quais práticas serão utilizadas?"/>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-2">Espaços Educativos</label>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[120px] focus:border-red-600 outline-none" value={planForm.educationalSpaces} onChange={e => setPlanForm({...planForm, educationalSpaces: e.target.value})} placeholder="Onde as atividades ocorrerão?"/>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {planningTab === 'inova' && (
+                                <div className="space-y-12 animate-in fade-in duration-500">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                        <div className="space-y-8">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Rocket size={14}/> 1. Tema do Subprojeto</label>
+                                                <input className="w-full bg-black/40 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-purple-600" value={planForm.inovaTheme} onChange={e => setPlanForm({...planForm, inovaTheme: e.target.value})} placeholder="Título criativo do projeto..." />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Lightbulb size={14}/> 2. Questão Norteadora</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-purple-600 outline-none" value={planForm.guidingQuestion} onChange={e => setPlanForm({...planForm, guidingQuestion: e.target.value})} placeholder="Que problema real vamos investigar e melhorar?" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-purple-400 uppercase tracking-widest ml-2 flex items-center gap-2"><Target size={14}/> 3. Objetivo Geral do Subprojeto</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-3xl p-6 text-white text-sm min-h-[100px] focus:border-purple-600 outline-none" value={planForm.subprojectGoal} onChange={e => setPlanForm({...planForm, subprojectGoal: e.target.value})} placeholder="Ao final, os alunos serão capazes de...?" />
+                                            </div>
+                                        </div>
+                                        <div className="bg-purple-900/10 border border-purple-500/20 rounded-[2.5rem] p-8">
+                                            <h4 className="text-xs font-black text-purple-400 uppercase tracking-widest mb-6 flex items-center gap-3"><Sparkles size={18}/> 4. Resultados Esperados</h4>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                {["Consciência ambiental/consumo responsável", "Criatividade e autoria (criar algo)", "Colaboração e protagonismo", "Comunicação (apresentar/explicar)", "Investigação (observação/pesquisa/dados)", "Uso responsável de tecnologia/IA"].map(res => (
+                                                    <label key={res} className="flex items-center gap-4 cursor-pointer group">
+                                                        <input type="checkbox" className="hidden" checked={planForm.expectedResults?.includes(res)} onChange={() => { const current = planForm.expectedResults || []; const updated = current.includes(res) ? current.filter(r => r !== res) : [...current, res]; setPlanForm({...planForm, expectedResults: updated}); }} />
+                                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${planForm.expectedResults?.includes(res) ? 'bg-purple-600 border-purple-500 shadow-lg' : 'border-white/10 group-hover:border-purple-600'}`}>
+                                                            {planForm.expectedResults?.includes(res) && <Check size={14} className="text-white"/>}
+                                                        </div>
+                                                        <span className={`text-[11px] font-bold uppercase tracking-tight transition-colors ${planForm.expectedResults?.includes(res) ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`}>{res}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                        <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
+                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3"><Box size={18} className="text-purple-500"/> 5. Produto Final</h4>
+                                            <div className="grid grid-cols-1 gap-2 mb-4">
+                                                {["Painel/Cartaz", "Maquete Digital/Protótipo", "Experimento", "Podcast/Vídeo", "Campanha/Intervenção", "Seminário", "Outro"].map(prod => (
+                                                    <label key={prod} className="flex items-center gap-3 cursor-pointer">
+                                                        <input type="radio" className="hidden" name="productType" checked={planForm.finalProductType === prod} onChange={() => setPlanForm({...planForm, finalProductType: prod})} />
+                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${planForm.finalProductType === prod ? 'bg-purple-600 border-purple-500' : 'border-white/20'}`}>
+                                                            {planForm.finalProductType === prod && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                                        </div>
+                                                        <span className="text-[10px] font-bold uppercase text-gray-500">{prod}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                            <textarea className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white text-sm min-h-[80px] focus:border-purple-600 outline-none" value={planForm.finalProductDescription} onChange={e => setPlanForm({...planForm, finalProductDescription: e.target.value})} placeholder="Descrição do produto final..." />
+                                        </div>
+                                        <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 space-y-6">
+                                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3"><Layers size={18} className="text-purple-500"/> 6. Etapas do Projeto</h4>
+                                            <div className="grid grid-cols-1 gap-4">
+                                                {[{ key: 'sensitize', label: '1. Sensibilizar' }, { key: 'investigate', label: '2. Investigar' }, { key: 'create', label: '3. Criar' }, { key: 'test', label: '4. Testar e melhorar' }, { key: 'present', label: '5. Apresentar' }, { key: 'register', label: '6. Registrar' }].map(step => (
+                                                    <label key={step.key} className="flex items-center gap-3 cursor-pointer group">
+                                                        <input type="checkbox" className="hidden" checked={planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps]} onChange={() => { const steps = planForm.projectSteps || { sensitize: false, investigate: false, create: false, test: false, present: false, register: false }; setPlanForm({...planForm, projectSteps: { ...steps, [step.key]: !steps[step.key as keyof typeof steps] }}); }} />
+                                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps] ? 'bg-purple-600 border-purple-500' : 'border-white/20'}`}>
+                                                            {planForm.projectSteps?.[step.key as keyof typeof planForm.projectSteps] && <Check size={12} className="text-white"/>}
+                                                        </div>
+                                                        <span className="text-[10px] font-black uppercase text-gray-500 group-hover:text-gray-300">{step.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/40 p-10 rounded-[3rem] border border-white/5 space-y-8">
+                                        <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-3 border-b border-white/5 pb-6"><Cpu size={20} className="text-purple-500"/> 9. Uso de IA</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                            <div className="space-y-3">
+                                                <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest ml-1">Ferramenta(s)</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiTools} onChange={e => setPlanForm({...planForm, aiTools: e.target.value})} placeholder="Ex: Gemini, ChatGPT..."/>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest ml-1">Cuidado adotado</label>
+                                                <textarea className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-xs min-h-[120px] focus:border-purple-600 outline-none" value={planForm.aiCare} onChange={e => setPlanForm({...planForm, aiCare: e.target.value})} placeholder="Ética, curadoria..."/>
+                                            </div>
+                                            <div className="bg-purple-900/5 p-6 rounded-2xl border border-purple-500/10">
+                                                <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest mb-4 block">Objetivo IA</label>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    {["Ideias", "Roteiro", "Texto", "Imagem", "Vídeo", "Dados/gráficos"].map(purp => (
+                                                        <label key={purp} className="flex items-center gap-3 cursor-pointer">
+                                                            <input type="checkbox" className="hidden" checked={planForm.aiPurpose?.includes(purp)} onChange={() => { const current = planForm.aiPurpose || []; const updated = current.includes(purp) ? current.filter(p => p !== purp) : [...current, purp]; setPlanForm({...planForm, aiPurpose: updated}); }} />
+                                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${planForm.aiPurpose?.includes(purp) ? 'bg-purple-600 border-purple-500' : 'border-white/10'}`}>
+                                                                {planForm.aiPurpose?.includes(purp) && <Check size={10} className="text-white"/>}
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-gray-500 uppercase">{purp}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="pt-8 border-t border-white/5 flex justify-end gap-4">
+                                <Button type="button" onClick={() => setShowPlanEditModal(false)} className="px-8 h-16 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em]">Cancelar</Button>
+                                <Button type="submit" isLoading={isLoading} className="px-12 h-16 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-2xl shadow-red-900/40">Salvar Alterações</Button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
