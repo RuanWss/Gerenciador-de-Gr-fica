@@ -235,9 +235,8 @@ export const TeacherDashboard: React.FC = () => {
     }, [gradebookData]);
 
     const monitoredStudents = useMemo(() => {
-        const teacherClasses = new Set(user?.classes || []);
-        return students.filter(s => s.isAEE && (teacherClasses.has(s.className) || user?.email === 'ruan.wss@gmail.com'));
-    }, [students, user]);
+        return students.filter(s => s.isAEE);
+    }, [students]);
 
     // Fallback for older plans: if type is missing, treat as 'diario'
     const filteredPlans = useMemo(() => {
