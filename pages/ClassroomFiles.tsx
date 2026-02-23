@@ -33,6 +33,62 @@ export const ClassroomFiles: React.FC = () => {
     const [showAttendanceModal, setShowAttendanceModal] = useState(false);
     const [attendanceRecords, setAttendanceRecords] = useState<Record<string, boolean>>({});
 
+    // Alarm Logic
+    const lastAlarmTimeRef = React.useRef("");
+
+    useEffect(() => {
+        const ALARM_TIMES = [
+            "07:20", "08:10", "09:00", "09:20", "10:10", "11:00", "12:00",
+            "13:00", "13:50", "14:40", "15:30", "16:00", "16:50", "17:40", "18:30", "19:20"
+        ];
+
+        const playChime = () => {
+            try {
+                const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                
+                const playTone = (freq: number, startTime: number, duration: number) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + startTime);
+                    
+                    gain.gain.setValueAtTime(0, ctx.currentTime + startTime);
+                    gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + startTime + 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + startTime + duration);
+                    
+                    osc.start(ctx.currentTime + startTime);
+                    osc.stop(ctx.currentTime + startTime + duration);
+                };
+
+                // Simple double chime
+                playTone(523.25, 0, 0.8); // C5
+                playTone(659.25, 0.3, 1.2); // E5
+            } catch (e) {
+                console.error("Audio play failed", e);
+            }
+        };
+
+        const checkAlarm = () => {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const currentTime = `${hours}:${minutes}`;
+
+            if (ALARM_TIMES.includes(currentTime) && lastAlarmTimeRef.current !== currentTime) {
+                playChime();
+                lastAlarmTimeRef.current = currentTime;
+            }
+        };
+
+        const interval = setInterval(checkAlarm, 10000); // Check every 10 seconds
+        return () => clearInterval(interval);
+    }, []);
+
     useEffect(() => {
         const unsub = listenToStudents(setStudents);
         return () => unsub();
