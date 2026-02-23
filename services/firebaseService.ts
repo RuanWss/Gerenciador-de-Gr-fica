@@ -405,12 +405,21 @@ export const listenToAllLessonPlans = (callback: (plans: LessonPlan[]) => void, 
 export const listenToTeacherLessonPlans = (teacherId: string, teacherName: string, callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
     const q = query(collection(db, LESSON_PLANS_COLLECTION));
     
+    const normalize = (str: string) => str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+    const normalizedTeacherName = normalize(teacherName);
+
     return onSnapshot(q, (snapshot) => {
         const allPlans = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
-        const teacherPlans = allPlans.filter(p => 
-            p.teacherId === teacherId || 
-            (p.teacherName && teacherName && p.teacherName.toLowerCase().trim() === teacherName.toLowerCase().trim())
-        );
+        const teacherPlans = allPlans.filter(p => {
+            if (p.teacherId === teacherId) return true;
+            if (!p.teacherName || !normalizedTeacherName) return false;
+            const pName = normalize(p.teacherName);
+            // Match if one name contains the other and is at least 5 chars long to avoid false positives
+            if (pName.length > 4 && normalizedTeacherName.length > 4) {
+                return pName.includes(normalizedTeacherName) || normalizedTeacherName.includes(pName);
+            }
+            return pName === normalizedTeacherName;
+        });
         callback(teacherPlans);
     }, (error) => {
         if (onError) onError(error);

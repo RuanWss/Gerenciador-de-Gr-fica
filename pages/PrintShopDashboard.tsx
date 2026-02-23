@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
     getExams, 
     updateExamStatus, 
@@ -196,6 +198,166 @@ export const PrintShopDashboard: React.FC = () => {
     // Mapa de Atividades State
     const [mapaClass, setMapaClass] = useState('');
     const [mapaGradebooks, setMapaGradebooks] = useState<GradebookEntry[]>([]);
+
+    // --- PDF GENERATION ---
+    const handleDownloadPDF = async (exam: DiagrammedExam) => {
+        const doc = new jsPDF();
+        
+        // Helper to load image
+        const loadImage = (url: string): Promise<string> => {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'Anonymous';
+                img.src = url;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0);
+                        resolve(canvas.toDataURL('image/jpeg'));
+                    } else {
+                        reject(new Error('Canvas context is null'));
+                    }
+                };
+                img.onerror = reject;
+            });
+        };
+
+        // Header
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("CENTRO DE ESTUDOS PROF. MANOEL LESTE", 105, 20, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.text(`AVALIAÇÃO DE ${exam.subject.toUpperCase()}`, 105, 30, { align: "center" });
+        doc.text(`${exam.bimester} - ${exam.className}`, 105, 38, { align: "center" });
+        
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Professor(a): ${exam.teacherName}`, 14, 50);
+        doc.text(`Aluno(a): ___________________________________________________`, 14, 58);
+        doc.text(`Data: ____/____/________`, 150, 58);
+
+        let yPos = 70;
+
+        for (const q of exam.questions) {
+            // Check page break
+            if (yPos > 250) {
+                doc.addPage();
+                yPos = 20;
+            }
+
+            doc.setFont("helvetica", "bold");
+            doc.text(`QUESTÃO ${q.number}`, 14, yPos);
+            yPos += 7;
+
+            doc.setFont("helvetica", "normal");
+            const splitStatement = doc.splitTextToSize(q.statement, 180);
+            doc.text(splitStatement, 14, yPos);
+            yPos += (splitStatement.length * 5) + 5;
+
+            // Image Handling
+            if (q.headerImage) {
+                try {
+                    const imgData = await loadImage(q.headerImage);
+                    const imgProps = doc.getImageProperties(imgData);
+                    const pdfWidth = 100; // max width in mm
+                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                    
+                    if (yPos + pdfHeight > 270) {
+                        doc.addPage();
+                        yPos = 20;
+                    }
+                    
+                    doc.addImage(imgData, 'JPEG', 14, yPos, pdfWidth, pdfHeight);
+                    yPos += pdfHeight + 5;
+                } catch (err) {
+                    console.error("Error loading image for question " + q.number, err);
+                }
+            }
+
+            if (q.type === 'objective' && q.alternatives) {
+                q.alternatives.forEach(alt => {
+                    if (yPos > 270) {
+                        doc.addPage();
+                        yPos = 20;
+                    }
+                    const altText = `${alt.label}) ${alt.text}`;
+                    const splitAlt = doc.splitTextToSize(altText, 170);
+                    doc.text(splitAlt, 20, yPos);
+                    yPos += (splitAlt.length * 5) + 2;
+                });
+                yPos += 5;
+            } else if (q.type === 'discursive') {
+                const lines = q.lines || 5;
+                for (let i = 0; i < lines; i++) {
+                    if (yPos > 270) {
+                        doc.addPage();
+                        yPos = 20;
+                    }
+                    doc.line(14, yPos, 196, yPos);
+                    yPos += 8;
+                }
+                yPos += 5;
+            }
+        }
+
+        // --- ANSWER KEY PAGE ---
+        doc.addPage();
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("GABARITO", 105, 20, { align: "center" });
+        doc.setFontSize(12);
+        doc.text(`AVALIAÇÃO DE ${exam.subject.toUpperCase()} - ${exam.className}`, 105, 30, { align: "center" });
+
+        let gabaritoY = 50;
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+
+        // Create a table-like structure or just list them
+        // Let's list them in columns if possible, but simple list is safer
+        
+        const objectiveQuestions = exam.questions.filter(q => q.type === 'objective');
+        
+        if (objectiveQuestions.length > 0) {
+            objectiveQuestions.forEach(q => {
+                if (gabaritoY > 270) {
+                    doc.addPage();
+                    gabaritoY = 20;
+                }
+                
+                const correctAlt = q.alternatives?.find(a => a.isCorrect);
+                const answerText = correctAlt ? correctAlt.label : "Sem resposta definida";
+                
+                doc.text(`Questão ${q.number}: ${answerText}`, 20, gabaritoY);
+                gabaritoY += 10;
+            });
+        } else {
+            doc.text("Esta prova não contém questões objetivas.", 20, gabaritoY);
+        }
+
+        doc.save(`${exam.className} - ${exam.subject} - ${exam.bimester}.pdf`);
+    };
+
+    const teachersWithExams = useMemo(() => {
+        // Filter for teachers
+        const teachers = staffMembers.filter(s => s.role === 'TEACHER' || s.isTeacher);
+        
+        return teachers.map(t => {
+            const exams = diagrammedExams.filter(e => e.teacherId === t.id);
+            // Get unique classes from exams
+            const classes = [...new Set(exams.map(e => e.className))];
+            
+            return {
+                id: t.id,
+                name: t.name,
+                hasExams: exams.length > 0,
+                classes
+            };
+        });
+    }, [staffMembers, diagrammedExams]);
     const [mapaFilters, setMapaFilters] = useState({
         search: '',
         area: '',
@@ -1386,6 +1548,41 @@ export const PrintShopDashboard: React.FC = () => {
                             <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Provas Diagramadas</h1>
                             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Banco de provas criadas pelos professores</p>
                         </header>
+
+                        {/* Teachers Status Section */}
+                        <div className="mb-12">
+                            <h2 className="text-xl font-black text-white uppercase tracking-tight mb-6 flex items-center gap-3">
+                                <Users size={20} className="text-brand-500" />
+                                Controle de Entregas
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {teachersWithExams.map(teacher => (
+                                    <div key={teacher.id} className="bg-[#18181b] border border-white/5 p-6 rounded-2xl flex flex-col gap-3">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="font-bold text-white text-sm">{teacher.name}</h4>
+                                            {teacher.hasExams ? (
+                                                <div className="bg-green-500/10 text-green-500 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <CheckCircle size={12} />
+                                                    Entregue
+                                                </div>
+                                            ) : (
+                                                <div className="bg-white/5 text-gray-500 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                                                    <Clock size={12} />
+                                                    Pendente
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {teacher.classes.map(c => (
+                                                <span key={c} className="text-[10px] bg-white/5 px-2 py-1 rounded-md text-gray-400 border border-white/5">{c}</span>
+                                            ))}
+                                            {teacher.classes.length === 0 && <span className="text-[10px] text-gray-600 italic">Nenhuma turma registrada</span>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {diagrammedExams.map(exam => (
                                 <div key={exam.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-brand-600/30 transition-all flex flex-col relative overflow-hidden">
@@ -1399,9 +1596,18 @@ export const PrintShopDashboard: React.FC = () => {
                                     </div>
                                     <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2 truncate">{exam.title}</h3>
                                     <p className="text-brand-500 font-black uppercase text-[10px] tracking-widest mb-6">{exam.subject} • {exam.className}</p>
-                                    <div className="mt-auto pt-4 border-t border-white/5">
-                                        <p className="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Prof. {exam.teacherName}</p>
-                                        <p className="text-gray-600 text-[10px] font-black uppercase tracking-widest">{exam.questions.length} Questões • {exam.bimester}</p>
+                                    <div className="mt-auto pt-4 border-t border-white/5 flex justify-between items-end">
+                                        <div>
+                                            <p className="text-gray-400 text-xs font-bold uppercase tracking-wide mb-1">Prof. {exam.teacherName}</p>
+                                            <p className="text-gray-600 text-[10px] font-black uppercase tracking-widest">{exam.questions.length} Questões • {exam.bimester}</p>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleDownloadPDF(exam)}
+                                            className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-white transition-colors border border-white/5 hover:border-white/20"
+                                            title="Baixar PDF"
+                                        >
+                                            <Download size={20} />
+                                        </button>
                                     </div>
                                 </div>
                             ))}

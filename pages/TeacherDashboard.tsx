@@ -242,7 +242,9 @@ export const TeacherDashboard: React.FC = () => {
     // Fallback for older plans: if type is missing, treat as 'diario'
     const filteredPlans = useMemo(() => {
         return plans.filter(p => {
-            const type = p.type || 'diario';
+            const type = p.type ? p.type.normalize('NFD').replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : 'diario';
+            if (planningTab === 'diario') return type === 'diario' || type === 'daily';
+            if (planningTab === 'bimestral') return type === 'bimestral' || type === 'bimester';
             return type === planningTab;
         });
     }, [plans, planningTab]);
@@ -595,6 +597,7 @@ export const TeacherDashboard: React.FC = () => {
     };
 
     const handleSaveDiagram = async () => {
+        if (!user) return alert("Erro: Usuário não identificado. Recarregue a página.");
         if (!diagramForm.title || !diagramForm.className || !diagramForm.subject) return alert("Preencha as informações básicas.");
         
         // Validate skills
@@ -603,16 +606,25 @@ export const TeacherDashboard: React.FC = () => {
 
         setIsLoading(true);
         try {
+            // Sanitize questions to remove undefined values which Firestore rejects
+            const sanitizedQuestions = diagramForm.questions?.map(q => {
+                const cleanQ: any = { ...q };
+                if (cleanQ.alternatives === undefined) delete cleanQ.alternatives;
+                if (cleanQ.lines === undefined) delete cleanQ.lines;
+                if (cleanQ.imageUrl === undefined) delete cleanQ.imageUrl;
+                return cleanQ;
+            });
+
             await saveDiagrammedExam({
                 ...diagramForm,
                 id: diagramForm.id || '',
-                teacherId: user!.id,
-                teacherName: user!.name,
+                teacherId: user.id,
+                teacherName: user.name,
                 className: diagramForm.className!,
                 subject: diagramForm.subject!,
                 bimester: diagramForm.bimester!,
                 title: diagramForm.title!,
-                questions: diagramForm.questions as ExamQuestion[],
+                questions: sanitizedQuestions as ExamQuestion[],
                 createdAt: Date.now(),
                 updatedAt: Date.now()
             } as DiagrammedExam);
@@ -633,8 +645,9 @@ export const TeacherDashboard: React.FC = () => {
                     lines: 5
                 }))
             });
-        } catch (e) {
-            alert("Erro ao salvar.");
+        } catch (e: any) {
+            console.error(e);
+            alert("Erro ao salvar: " + (e.message || "Erro desconhecido"));
         } finally {
             setIsLoading(false);
         }
