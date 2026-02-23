@@ -579,7 +579,7 @@ export const PrintShopDashboard: React.FC = () => {
                                  (student.id || '').toLowerCase().includes(studentSearch.toLowerCase());
             const matchesClass = !selectedClassFilter || student.className === selectedClassFilter;
             return matchesSearch && matchesClass;
-        });
+        }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }, [students, studentSearch, selectedClassFilter]);
 
     const allSubjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS, "GERAL", "PROJETOS", "AVALIAÇÕES"])).sort();
@@ -1221,7 +1221,7 @@ export const PrintShopDashboard: React.FC = () => {
                             <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
                                 <table className="w-full text-left">
                                     <thead className="bg-black/30 text-[9px] font-black text-gray-600 uppercase tracking-[0.2em] sticky top-0 z-10 backdrop-blur-sm">
-                                        <tr><th className="p-8">Aluno</th><th className="p-8">Turma</th><th className="p-8">Matrícula</th><th className="p-8 text-right">Ações</th></tr>
+                                        <tr><th className="p-8">Aluno</th><th className="p-8">Turma</th><th className="p-8">Matrícula</th><th className="p-8 text-center">Status</th><th className="p-8 text-right">Ações</th></tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
                                         {filteredStudents.map(student => (
@@ -1229,6 +1229,15 @@ export const PrintShopDashboard: React.FC = () => {
                                                 <td className="p-8"><div className="flex items-center gap-4"><div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center font-black text-gray-500 text-xs uppercase group-hover:border-brand-600 group-hover:text-brand-500 transition-all overflow-hidden">{student.photoUrl ? <img src={student.photoUrl} className="h-full w-full object-cover" alt={student.name} /> : student.name.charAt(0)}</div><span className="font-black text-white uppercase text-xs tracking-tight">{student.name}</span></div></td>
                                                 <td className="p-8"><span className="bg-black/40 border border-white/5 px-3 py-1 rounded-lg text-[9px] font-black text-gray-500 uppercase tracking-widest">{student.className}</span></td>
                                                 <td className="p-8 text-xs font-mono text-gray-600 uppercase tracking-widest">{student.id.substring(0, 8)}</td>
+                                                <td className="p-8 text-center">
+                                                    {(() => {
+                                                        const log = todayAttendance.find(l => l.studentId === student.id);
+                                                        if (!log) return <span className="text-gray-600 text-[9px] font-black uppercase tracking-widest">Sem Registro</span>;
+                                                        return log.type === 'entry' 
+                                                            ? <span className="text-green-500 bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">Presente</span>
+                                                            : <span className="text-red-500 bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">Ausente</span>;
+                                                    })()}
+                                                </td>
                                                 <td className="p-8 text-right"><div className="flex justify-end gap-2"><button onClick={() => handleEditStudent(student)} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-600 hover:text-white transition-all border border-white/5"><Edit size={14} /></button><button onClick={async () => { if(confirm(`Excluir ${student.name}?`)) await deleteStudent(student.id); }} className="p-3 bg-white/5 hover:bg-brand-600/10 rounded-xl text-gray-600 hover:text-red-500 transition-all border border-white/5"><Trash2 size={14} /></button></div></td>
                                             </tr>
                                         ))}

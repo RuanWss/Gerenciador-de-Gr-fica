@@ -186,7 +186,7 @@ export const TeacherDashboard: React.FC = () => {
     // Listener de planejamentos em tempo real
     useEffect(() => {
         if (!user || activeTab !== 'planning') return;
-        const unsubscribe = listenToTeacherLessonPlans(user.id, user.email, (data) => {
+        const unsubscribe = listenToTeacherLessonPlans(user.id, user.name, (data) => {
             const sortedData = data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
             setPlans(sortedData);
         });

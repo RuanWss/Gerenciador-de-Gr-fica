@@ -402,14 +402,16 @@ export const listenToAllLessonPlans = (callback: (plans: LessonPlan[]) => void, 
     });
 };
 
-export const listenToTeacherLessonPlans = (teacherId: string, teacherEmail: string, callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
-    const q = query(
-        collection(db, LESSON_PLANS_COLLECTION), 
-        where("teacherId", "==", teacherId)
-    );
+export const listenToTeacherLessonPlans = (teacherId: string, teacherName: string, callback: (plans: LessonPlan[]) => void, onError?: (error: any) => void) => {
+    const q = query(collection(db, LESSON_PLANS_COLLECTION));
     
     return onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan)));
+        const allPlans = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LessonPlan));
+        const teacherPlans = allPlans.filter(p => 
+            p.teacherId === teacherId || 
+            (p.teacherName && teacherName && p.teacherName.toLowerCase().trim() === teacherName.toLowerCase().trim())
+        );
+        callback(teacherPlans);
     }, (error) => {
         if (onError) onError(error);
     });
