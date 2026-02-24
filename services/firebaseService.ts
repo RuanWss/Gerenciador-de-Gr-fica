@@ -327,6 +327,12 @@ export const listenToAttendanceLogs = (date: string, callback: (logs: Attendance
     });
 };
 
+export const getAttendanceLogsForClass = async (className: string) => {
+    const q = query(collection(db, ATTENDANCE_COLLECTION), where("className", "==", className));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLog));
+};
+
 export const logStaffAttendance = async (log: StaffAttendanceLog): Promise<string> => {
     const today = new Date().toISOString().split('T')[0];
     const qLast = query(

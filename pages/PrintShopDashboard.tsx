@@ -26,7 +26,8 @@ import {
     deleteLessonPlan,
     saveLessonPlan,
     listenToClassGradebooks,
-    listenToAllDiagrammedExams
+    listenToAllDiagrammedExams,
+    getAttendanceLogsForClass
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -876,6 +877,85 @@ export const PrintShopDashboard: React.FC = () => {
         }
     };
 
+    const generateClassAttendancePDF = async () => {
+        if (!occFilterClass) return alert("Selecione uma turma");
+        setIsLoading(true);
+        try {
+            const logs = await getAttendanceLogsForClass(occFilterClass);
+            const classStudents = students.filter(s => s.className === occFilterClass).sort((a,b) => a.name.localeCompare(b.name));
+            
+            // Calculate total days (unique dates in logs)
+            const uniqueDates = Array.from(new Set(logs.map(l => l.dateString)));
+            const totalDays = uniqueDates.length || 1; // Avoid division by zero
+
+            const doc = new jsPDF();
+            
+            // Header
+            doc.setFontSize(18);
+            doc.text(`Relatório de Frequência - ${occFilterClass}`, 14, 20);
+            doc.setFontSize(10);
+            doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 14, 28);
+            doc.text(`Total de Dias Letivos Registrados: ${totalDays}`, 14, 34);
+
+            const tableData = classStudents.map(student => {
+                const studentLogs = logs.filter(l => l.studentId === student.id);
+                const presentDays = new Set(studentLogs.map(l => l.dateString)).size;
+                const percentage = ((presentDays / totalDays) * 100).toFixed(1) + '%';
+                return [student.name, presentDays, percentage];
+            });
+
+            autoTable(doc, {
+                startY: 40,
+                head: [['Aluno', 'Dias Presente', 'Frequência (%)']],
+                body: tableData,
+            });
+
+            doc.save(`Frequencia_${occFilterClass}.pdf`);
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao gerar relatório");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const generateSignatureListPDF = () => {
+        if (!occFilterClass) return alert("Selecione uma turma");
+        
+        const classStudents = students.filter(s => s.className === occFilterClass).sort((a,b) => a.name.localeCompare(b.name));
+        const doc = new jsPDF();
+        const date = new Date().toLocaleDateString();
+
+        // Header
+        doc.setFontSize(16);
+        doc.text("LISTA DE ASSINATURA", 105, 20, { align: 'center' });
+        
+        doc.setFontSize(12);
+        doc.text(`Turma: ${occFilterClass}`, 14, 30);
+        doc.text(`Data: ${date}`, 14, 36);
+        doc.text(`Qtd. Alunos: ${classStudents.length}`, 14, 42);
+
+        const tableData = classStudents.map((student, index) => [
+            index + 1,
+            student.name,
+            '' // Empty space for signature
+        ]);
+
+        autoTable(doc, {
+            startY: 50,
+            head: [['Nº', 'Nome do Aluno', 'Assinatura']],
+            body: tableData,
+            columnStyles: {
+                0: { cellWidth: 15 },
+                1: { cellWidth: 80 },
+                2: { cellWidth: 'auto' }
+            },
+            styles: { minCellHeight: 15, valign: 'middle' } // Space for signature
+        });
+
+        doc.save(`Lista_Assinatura_${occFilterClass}.pdf`);
+    };
+
     const subjects = Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS]));
 
     const filteredClassesForGrid = useMemo(() => {
@@ -1705,13 +1785,11 @@ export const PrintShopDashboard: React.FC = () => {
                                         </select>
                                     </div>
                                     <button 
-                                        onClick={() => {
-                                            if (!occFilterClass) return alert("Selecione uma turma");
-                                            alert("Gerando PDF de Frequência para " + occFilterClass);
-                                        }}
-                                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5"
+                                        onClick={generateClassAttendancePDF}
+                                        disabled={isLoading}
+                                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all border border-white/5 disabled:opacity-50"
                                     >
-                                        Gerar PDF da Turma
+                                        {isLoading ? 'Gerando...' : 'Gerar PDF da Turma'}
                                     </button>
                                 </div>
                             </div>
@@ -1731,22 +1809,16 @@ export const PrintShopDashboard: React.FC = () => {
                                 <div className="mt-auto space-y-4">
                                     <div>
                                         <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-1 block">SELECIONE O ALUNO:</label>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Buscar aluno..."
-                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-brand-600 mb-2"
+                                        <select 
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-brand-600 mb-2 appearance-none"
                                             value={occFilterStudent}
                                             onChange={e => setOccFilterStudent(e.target.value)}
-                                        />
-                                        {occFilterStudent && filteredStudents.length > 0 && (
-                                            <div className="max-h-32 overflow-y-auto bg-black/60 rounded-xl border border-white/5 p-2 custom-scrollbar">
-                                                {filteredStudents.slice(0, 5).map(s => (
-                                                    <div key={s.id} className="p-2 hover:bg-white/10 rounded-lg cursor-pointer text-xs text-gray-300" onClick={() => setOccFilterStudent(s.name)}>
-                                                        {s.name}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                        >
+                                            <option value="">-- Selecione --</option>
+                                            {students.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(s => (
+                                                <option key={s.id} value={s.name}>{s.name} - {s.className}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <button 
                                         onClick={() => {
@@ -1774,16 +1846,50 @@ export const PrintShopDashboard: React.FC = () => {
                                 
                                 <div className="mt-auto space-y-4">
                                     <div className="bg-black/40 border border-white/5 rounded-xl p-4 space-y-2">
-                                        <p className="text-[10px] text-gray-400 flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-white/20"></span> Manhã: Após <span className="text-red-400 font-bold">07:20</span></p>
-                                        <p className="text-[10px] text-gray-400 flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-white/20"></span> Tarde: Após <span className="text-red-400 font-bold">13:00</span></p>
+                                        <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                                            <div className="w-2 h-2 rounded-full bg-gray-600"></div>
+                                            Manhã: Após <span className="text-red-500 font-bold">07:20</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                                            <div className="w-2 h-2 rounded-full bg-gray-600"></div>
+                                            Tarde: Após <span className="text-red-500 font-bold">13:00</span>
+                                        </div>
+                                    </div>
+                                    <button className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl shadow-red-900/20">
+                                        Gerar Relatório de Atrasos
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Card 4: Lista de Assinatura */}
+                            <div className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl flex flex-col h-full col-span-1 md:col-span-3 mt-6">
+                                <div className="flex items-start gap-4 mb-6">
+                                    <div className="p-4 rounded-2xl bg-pink-500/10 text-pink-500 shrink-0">
+                                        <FileText size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-white uppercase tracking-tight mb-1">Lista de Assinatura</h3>
+                                        <p className="text-gray-400 text-[10px] font-medium leading-tight">Gera uma lista de presença para assinatura manual com logo e cabeçalho.</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="mt-auto flex items-end gap-4">
+                                    <div className="flex-1">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-2 mb-1 block">SELECIONE A TURMA:</label>
+                                        <select 
+                                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs outline-none focus:border-pink-600 appearance-none"
+                                            value={occFilterClass}
+                                            onChange={e => setOccFilterClass(e.target.value)}
+                                        >
+                                            <option value="">-- Selecione --</option>
+                                            {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
                                     </div>
                                     <button 
-                                        onClick={() => {
-                                            alert("Gerando Relatório de Atrasos...");
-                                        }}
-                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg shadow-red-900/20"
+                                        onClick={generateSignatureListPDF}
+                                        className="px-8 py-3 bg-pink-600 hover:bg-pink-700 text-white rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg shadow-pink-900/20 h-[42px]"
                                     >
-                                        Gerar Relatório de Atrasos
+                                        Gerar Lista
                                     </button>
                                 </div>
                             </div>
