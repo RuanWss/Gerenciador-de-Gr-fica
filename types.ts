@@ -115,6 +115,7 @@ export interface Student {
   isAEE?: boolean;
   disorder?: string; 
   disorders?: string[];
+  otherDisorder?: string;
   reportUrl?: string;
   contacts?: string; 
   pedagogicalResponsible?: string;

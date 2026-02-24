@@ -314,7 +314,6 @@ export const HRDashboard: React.FC = () => {
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-6 ml-2">Menu RH</p>
                     <SidebarItem id="staff" label="Equipe" icon={Users} />
                     <SidebarItem id="attendance" label="Ponto Facial" icon={Clock} />
-                    <SidebarItem id="substitutions" label="Substituições" icon={Repeat} />
                     <SidebarItem id="subjects" label="Disciplinas" icon={Layers} />
                     <SidebarItem id="students" label="Acessos Alunos" icon={ShieldCheck} />
                 </div>

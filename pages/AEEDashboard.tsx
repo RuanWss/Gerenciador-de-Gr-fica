@@ -10,6 +10,8 @@ import {
     Phone, UserCircle, MessageSquare, AlertTriangle, Star, Plus, Calendar, ChevronLeft, ChevronRight, Trash2, Clock
 } from 'lucide-react';
 
+import { INFANTIL_CLASSES, EFAI_CLASSES } from '../constants';
+
 const DISORDERS = [
     "TEA (Autismo)",
     "TDAH",
@@ -33,6 +35,7 @@ export const AEEDashboard: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [allPeis, setAllPeis] = useState<PEIDocument[]>([]);
     const [search, setSearch] = useState('');
+    const [levelFilter, setLevelFilter] = useState<'ALL' | 'EI' | 'EFAI' | 'EFAF' | 'EM'>('ALL');
     const [isLoading, setIsLoading] = useState(false);
     
     // Agenda State
@@ -92,7 +95,8 @@ export const AEEDashboard: React.FC = () => {
                 skills: selectedStudent.skills || '',
                 weaknesses: selectedStudent.weaknesses || '',
                 disorder: selectedStudent.disorder || '',
-                disorders: selectedStudent.disorders || []
+                disorders: selectedStudent.disorders || [],
+                otherDisorder: selectedStudent.otherDisorder || ''
             };
 
             await updateStudent(studentToUpdate);
@@ -141,10 +145,21 @@ export const AEEDashboard: React.FC = () => {
         }
     };
 
-    const filteredStudents = students.filter(s => 
-        String(s.name || '').toLowerCase().includes(search.toLowerCase()) || 
-        String(s.className || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredStudents = students.filter(s => {
+        const matchesSearch = String(s.name || '').toLowerCase().includes(search.toLowerCase()) || 
+                              String(s.className || '').toLowerCase().includes(search.toLowerCase());
+        
+        if (!matchesSearch) return false;
+
+        if (levelFilter === 'ALL') return true;
+        const cls = (s.className || '').toUpperCase();
+        if (levelFilter === 'EI') return INFANTIL_CLASSES.includes(cls);
+        if (levelFilter === 'EFAI') return EFAI_CLASSES.includes(cls);
+        if (levelFilter === 'EFAF') return ['6A','6B','7A','7B','8A','8B','9A','9B'].includes(cls);
+        if (levelFilter === 'EM') return ['1A','1B','2A','2B','3A','3B'].includes(cls);
+        
+        return true;
+    });
 
     const filteredPeis = allPeis.filter(p => 
         String(p.studentName || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -181,14 +196,27 @@ export const AEEDashboard: React.FC = () => {
                         <button onClick={() => setActiveTab('agenda')} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'agenda' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Agenda</button>
                     </div>
                     {activeTab !== 'agenda' && (
-                        <div className="relative w-full md:w-80">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                            <input 
-                                className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-red-600 outline-none transition-all"
-                                placeholder="Buscar aluno inclusive..."
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                            />
+                        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                            <div className="flex bg-black/40 p-1 rounded-xl border border-white/10 overflow-x-auto">
+                                {['ALL', 'EI', 'EFAI', 'EFAF', 'EM'].map(level => (
+                                    <button 
+                                        key={level}
+                                        onClick={() => setLevelFilter(level as any)}
+                                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${levelFilter === level ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-white'}`}
+                                    >
+                                        {level === 'ALL' ? 'Todos' : level}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="relative w-full md:w-64">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                                <input 
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-red-600 outline-none transition-all text-sm font-medium"
+                                    placeholder="Buscar aluno inclusive..."
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                />
+                            </div>
                         </div>
                     )}
                 </div>
@@ -588,6 +616,18 @@ export const AEEDashboard: React.FC = () => {
                                         <option value="">+ Adicionar Diagnóstico...</option>
                                         {DISORDERS.map(d => <option key={d} value={d}>{d}</option>)}
                                     </select>
+
+                                    {(selectedStudent.disorders?.includes('Outros') || selectedStudent.disorder === 'Outros') && (
+                                        <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Especificar "Outros"</label>
+                                            <input 
+                                                className="w-full border-2 border-red-100 rounded-xl p-3 text-sm focus:border-red-500 outline-none bg-white text-gray-900 font-medium" 
+                                                value={selectedStudent.otherDisorder || ''} 
+                                                onChange={e => setSelectedStudent({...selectedStudent, otherDisorder: e.target.value})} 
+                                                placeholder="Descreva o diagnóstico..."
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 <div>

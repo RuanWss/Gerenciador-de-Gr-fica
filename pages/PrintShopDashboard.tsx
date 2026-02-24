@@ -53,7 +53,11 @@ import {
     CheckSquare, Rocket, Lightbulb, Target, Box, Layers, Cpu, ExternalLink,
     Map as MapIcon,
     MapPin,
-    LayoutGrid
+    LayoutGrid,
+    CalendarDays,
+    UserCheck,
+    XCircle,
+    PlusCircle
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
@@ -136,7 +140,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'mapa' | 'diagrammed_exams' | 'reports'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'mapa' | 'diagrammed_exams' | 'reports' | 'substitutions'>('exams');
     const [isLoading, setIsLoading] = useState(false);
     
     // Data Collections
@@ -203,6 +207,31 @@ export const PrintShopDashboard: React.FC = () => {
     // Mapa de Atividades State
     const [mapaClass, setMapaClass] = useState('');
     const [mapaGradebooks, setMapaGradebooks] = useState<GradebookEntry[]>([]);
+
+    // Substitutions State
+    const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+    const [substitutions, setSubstitutions] = useState<Record<string, { present: boolean, substitute?: string }>>({});
+    const [extraClasses, setExtraClasses] = useState<Array<{professor: string, subject: string, className: string}>>([]);
+
+    const teachers = useMemo(() => staffMembers.filter(s => s.isTeacher && s.active), [staffMembers]);
+
+    const toggleTeacherPresence = (id: string) => {
+        setSubstitutions(prev => ({
+            ...prev,
+            [id]: { ...prev[id], present: !(prev[id]?.present ?? true) }
+        }));
+    };
+
+    const setTeacherSubstitute = (id: string, substitute: string) => {
+        setSubstitutions(prev => ({
+            ...prev,
+            [id]: { ...prev[id], present: false, substitute }
+        }));
+    };
+
+    const handleAddExtraClass = () => {
+        setExtraClasses([...extraClasses, { professor: '', subject: '', className: '' }]);
+    };
 
     // --- PDF GENERATION ---
     const handleDownloadPDF = async (exam: DiagrammedExam) => {
@@ -416,6 +445,9 @@ export const PrintShopDashboard: React.FC = () => {
             /* FIX: Changed setStaff to setStaffMembers to resolve "Cannot find name 'setStaff'" error */
             const unsubStaff = listenToStaffMembers(setStaffMembers, () => {});
             return () => { unsubscribe(); unsubStaff(); };
+        } else if (activeTab === 'substitutions') {
+            const unsubStaff = listenToStaffMembers(setStaffMembers, () => {});
+            return () => { unsubStaff(); };
         } else if (activeTab === 'aee_agenda') {
             unsubscribe = listenToAEEAppointments(setAeeAppointments, (err) => console.warn("AEE listener restricted", err));
         }
@@ -1040,6 +1072,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="lesson_plans" label="Planejamentos" icon={BookMarked} />
                     <SidebarItem id="diagrammed_exams" label="Provas" icon={FileCheck} />
                     <SidebarItem id="reports" label="Relatórios" icon={FileBarChart} />
+                    <SidebarItem id="substitutions" label="Substituições" icon={CalendarDays} />
                     <SidebarItem 
                         id="schedule" 
                         label="Horários TV" 
@@ -1893,6 +1926,84 @@ export const PrintShopDashboard: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'substitutions' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto pb-40">
+                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Substituições e Extras</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Log diário de faltas e aulas extraordinárias</p>
+                            </div>
+                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
+                                <CalendarDays className="text-red-600" size={18} />
+                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
+                            </div>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* FALTAS / SUBSTITUIÇÕES */}
+                            <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-8 flex items-center gap-3">
+                                    <AlertTriangle className="text-yellow-500" size={24}/> Faltas do Dia
+                                </h3>
+                                <div className="space-y-4">
+                                    {teachers.map(teacher => (
+                                        <div key={teacher.id} className="bg-black/20 p-5 rounded-2xl border border-white/5 flex flex-col gap-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <button onClick={() => toggleTeacherPresence(teacher.id)} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${substitutions[teacher.id]?.present === false ? 'bg-red-600 text-white shadow-lg' : 'bg-green-600/10 text-green-500'}`}>
+                                                        {substitutions[teacher.id]?.present === false ? <XCircle size={20}/> : <UserCheck size={20}/>}
+                                                    </button>
+                                                    <span className="font-black text-white uppercase text-xs">{teacher.name}</span>
+                                                </div>
+                                                {substitutions[teacher.id]?.present === false && (
+                                                    <div className="flex-1 ml-6 relative">
+                                                        <select 
+                                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-bold appearance-none outline-none focus:border-red-600"
+                                                            onChange={(e) => setTeacherSubstitute(teacher.id, e.target.value)}
+                                                            value={substitutions[teacher.id]?.substitute || ''}
+                                                        >
+                                                            <option value="">Sem substituto</option>
+                                                            {staffMembers.filter(s => s.id !== teacher.id && s.active).map(s => (
+                                                                <option key={s.id} value={s.name}>{s.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            {/* AULAS EXTRAS */}
+                            <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl flex flex-col">
+                                <div className="flex justify-between items-center mb-8">
+                                    <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                        <PlusCircle className="text-blue-500" size={24}/> Aulas Extras
+                                    </h3>
+                                    <button onClick={handleAddExtraClass} className="p-3 bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white rounded-xl transition-all border border-blue-600/20"><Plus size={18}/></button>
+                                </div>
+                                <div className="space-y-4 flex-1">
+                                    {extraClasses.map((ex, idx) => (
+                                        <div key={idx} className="grid grid-cols-3 gap-3 p-4 bg-black/20 rounded-2xl border border-white/5">
+                                            <select className="bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black" value={ex.professor} onChange={e => { const list = [...extraClasses]; list[idx].professor = e.target.value; setExtraClasses(list); }}>
+                                                <option>Professor</option>
+                                                {staffMembers.filter(s => s.isTeacher).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                            </select>
+                                            <input className="bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black uppercase" placeholder="Turma" value={ex.className} onChange={e => { const list = [...extraClasses]; list[idx].className = e.target.value.toUpperCase(); setExtraClasses(list); }} />
+                                            <div className="relative">
+                                                <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black uppercase" placeholder="Matéria" value={ex.subject} onChange={e => { const list = [...extraClasses]; list[idx].subject = e.target.value.toUpperCase(); setExtraClasses(list); }} />
+                                                <button onClick={() => setExtraClasses(extraClasses.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow-lg"><X size={10}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <Button className="w-full h-16 bg-blue-600 rounded-2xl font-black uppercase text-xs mt-8 shadow-xl shadow-blue-900/40"><Save size={18} className="mr-3"/> Salvar Log do Dia</Button>
+                            </section>
                         </div>
                     </div>
                 )}

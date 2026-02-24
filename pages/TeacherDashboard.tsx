@@ -174,6 +174,10 @@ export const TeacherDashboard: React.FC = () => {
         period: '1º BIMESTRE'
     });
 
+    // PEI Search & Filter
+    const [peiSearch, setPeiSearch] = useState('');
+    const [peiLevel, setPeiLevel] = useState<'ALL' | 'EI' | 'EFAI' | 'EFAF' | 'EM'>('ALL');
+
     // Gradebook AV1 Config
     const [showAV1Modal, setShowAV1Modal] = useState(false);
     const [newAV1, setNewAV1] = useState<Partial<AV1Activity>>({ activityName: '', applicationDate: '', deliveryDate: '', maxScore: 2, location: 'SALA' });
@@ -236,8 +240,26 @@ export const TeacherDashboard: React.FC = () => {
     }, [gradebookData]);
 
     const monitoredStudents = useMemo(() => {
-        return students.filter(s => s.isAEE);
-    }, [students]);
+        let filtered = students.filter(s => s.isAEE);
+
+        if (peiSearch) {
+            const search = peiSearch.toLowerCase();
+            filtered = filtered.filter(s => s.name.toLowerCase().includes(search));
+        }
+
+        if (peiLevel !== 'ALL') {
+            filtered = filtered.filter(s => {
+                const cls = s.className.toUpperCase();
+                if (peiLevel === 'EI') return INFANTIL_CLASSES.includes(cls);
+                if (peiLevel === 'EFAI') return EFAI_CLASSES.includes(cls);
+                if (peiLevel === 'EFAF') return ['6A','6B','7A','7B','8A','8B','9A','9B'].includes(cls);
+                if (peiLevel === 'EM') return ['1A','1B','2A','2B','3A','3B'].includes(cls);
+                return true;
+            });
+        }
+
+        return filtered;
+    }, [students, peiSearch, peiLevel]);
 
     // Fallback for older plans: if type is missing, treat as 'diario'
     const filteredPlans = useMemo(() => {
@@ -1289,6 +1311,30 @@ export const TeacherDashboard: React.FC = () => {
                 {activeTab === 'pei' && (
                     <div className="animate-in fade-in slide-in-from-right-4 space-y-12">
                         <header><h1 className="text-5xl font-black text-white uppercase tracking-tighter">PEI / AEE</h1><p className="text-gray-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2">Planos de Ensino Individualizado</p></header>
+                        
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-[#18181b] border border-white/5 p-6 rounded-[2rem] shadow-xl">
+                            <div className="relative flex-1 w-full md:w-auto group">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-red-500 transition-colors" size={18} />
+                                <input 
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white font-bold outline-none focus:border-red-600 transition-all text-sm" 
+                                    placeholder="Buscar aluno AEE..." 
+                                    value={peiSearch} 
+                                    onChange={e => setPeiSearch(e.target.value)} 
+                                />
+                            </div>
+                            <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                                {['ALL', 'EI', 'EFAI', 'EFAF', 'EM'].map(level => (
+                                    <button 
+                                        key={level}
+                                        onClick={() => setPeiLevel(level as any)}
+                                        className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${peiLevel === level ? 'bg-red-600 text-white shadow-lg' : 'bg-black/40 text-gray-500 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        {level === 'ALL' ? 'Todos' : level}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
                         <section><div className="flex items-center gap-4 mb-10"><Heart className="text-red-600 fill-red-600/10" size={28} /><h2 className="text-xl font-black text-white uppercase tracking-widest">Meus alunos em acompanhamento</h2></div><div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10">
                                 {monitoredStudents.map(student => (
                                     <div key={student.id} className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden group hover:border-red-600/20 transition-all flex flex-col"><div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-black px-5 py-2 rounded-bl-2xl uppercase tracking-widest shadow-lg">AEE</div><div className="flex items-center gap-6 mb-10"><div className="h-28 w-28 rounded-[2rem] bg-[#121214] border-2 border-white/5 flex items-center justify-center text-gray-700 shadow-2xl group-hover:scale-105 transition-transform overflow-hidden shrink-0">{student.photoUrl ? <img src={student.photoUrl} className="w-full h-full object-cover" /> : <Users size={40} />}</div><div className="min-w-0"><h3 className="text-2xl font-black text-white uppercase tracking-tight leading-none mb-3 line-clamp-2">{student.name}</h3><span className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-xl text-[10px] font-black text-gray-500 uppercase tracking-widest">{student.className}</span></div></div><div className="space-y-4 mb-10 flex-1"><div className="bg-black/30 border-l-4 border-red-600 p-6 rounded-2xl"><span className="text-[9px] font-black text-red-500 uppercase tracking-widest block mb-2">Diagnóstico(s)</span><div className="space-y-1">{(student.disorders || [student.disorder]).filter(d => d).map((d, i) => <p key={i} className="text-sm font-black text-white uppercase tracking-tight">• {d}</p>) || <p className="text-xs text-gray-600 italic">Nenhum diagnóstico registrado.</p>}</div></div><div className="bg-black/30 border-l-4 border-emerald-600 p-6 rounded-2xl"><span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block mb-2">Habilidades</span><p className="text-xs font-bold text-gray-400 leading-relaxed">{student.skills || 'Não registrado.'}</p></div><div className="bg-black/30 border-l-4 border-amber-600 p-6 rounded-2xl"><span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block mb-2">Fragilidades</span><p className="text-xs font-bold text-gray-400 leading-relaxed">{student.weaknesses || 'Não registrado.'}</p></div><div className="bg-black/30 p-4 rounded-2xl flex items-center justify-center gap-3">{student.reportUrl ? <><FileCheck size={16} className="text-green-500" /><span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Laudo Digital Ok</span></> : <><ShieldAlert size={16} className="text-orange-500" /><span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Laudo Pendente</span></>}</div></div><Button onClick={() => { setCurrentPeiStudent(student); setShowPeiForm(true); }} className="w-full h-16 bg-red-600 hover:bg-red-700 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-red-900/40"><Plus size={20} className="mr-3" /> Criar PEI</Button></div>
