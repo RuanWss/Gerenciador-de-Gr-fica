@@ -27,7 +27,9 @@ import {
     saveLessonPlan,
     listenToClassGradebooks,
     listenToAllDiagrammedExams,
-    getAttendanceLogsForClass
+    getAttendanceLogsForClass,
+    saveDailySchoolLog,
+    listenToDailySchoolLog
 } from '../services/firebaseService';
 import { 
     ExamRequest, 
@@ -41,7 +43,8 @@ import {
     StudentOccurrence,
     AttendanceLog,
     LessonPlan,
-    DiagrammedExam
+    DiagrammedExam,
+    DailySchoolLog
 } from '../types';
 import { 
     Printer, Search, Users, Settings, FileText, CheckCircle, Clock, Hourglass, 
@@ -56,12 +59,14 @@ import {
     LayoutGrid,
     CalendarDays,
     UserCheck,
+    UserX,
+    TrendingUp,
+    BarChart3,
     XCircle,
     PlusCircle
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
-import { GenneraSyncPanel } from './GenneraSyncPanel';
 import { useAuth } from '../context/AuthContext';
 
 const GRID_SLOTS = [
@@ -140,7 +145,7 @@ const StatusBadge: React.FC<{ status: ExamStatus }> = ({ status }) => {
 
 export const PrintShopDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'mapa' | 'diagrammed_exams' | 'reports' | 'substitutions'>('exams');
+    const [activeTab, setActiveTab] = useState<'exams' | 'grades_admin' | 'students' | 'aee_agenda' | 'occurrences' | 'lesson_plans' | 'schedule' | 'mapa' | 'diagrammed_exams' | 'reports' | 'substitutions' | 'attendance'>('exams');
     const [isLoading, setIsLoading] = useState(false);
     
     // Data Collections
@@ -208,29 +213,121 @@ export const PrintShopDashboard: React.FC = () => {
     const [mapaClass, setMapaClass] = useState('');
     const [mapaGradebooks, setMapaGradebooks] = useState<GradebookEntry[]>([]);
 
-    // Substitutions State
-    const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
-    const [substitutions, setSubstitutions] = useState<Record<string, { present: boolean, substitute?: string }>>({});
-    const [extraClasses, setExtraClasses] = useState<Array<{professor: string, subject: string, className: string}>>([]);
+    // Attendance Tab State
+    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [attendanceFilterClass, setAttendanceFilterClass] = useState('');
+    const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
+
+    // Substitutions Tab State
+    const [substitutionDate, setSubstitutionDate] = useState(new Date().toISOString().split('T')[0]);
+    const [dailyLog, setDailyLog] = useState<DailySchoolLog | null>(null);
 
     const teachers = useMemo(() => staffMembers.filter(s => s.isTeacher && s.active), [staffMembers]);
 
-    const toggleTeacherPresence = (id: string) => {
-        setSubstitutions(prev => ({
-            ...prev,
-            [id]: { ...prev[id], present: !(prev[id]?.present ?? true) }
-        }));
+    // Listen to Attendance Logs
+    useEffect(() => {
+        if (activeTab === 'attendance') {
+            const unsub = listenToAttendanceLogs(attendanceDate, setAttendanceLogs);
+            return () => unsub();
+        }
+    }, [activeTab, attendanceDate]);
+
+    // Listen to Daily School Log & Staff
+    useEffect(() => {
+        if (activeTab === 'substitutions') {
+            const unsubLog = listenToDailySchoolLog(substitutionDate, setDailyLog);
+            const unsubStaff = listenToStaffMembers(setStaffMembers);
+            return () => {
+                unsubLog();
+                unsubStaff();
+            };
+        }
+    }, [activeTab, substitutionDate]);
+
+    const handleAddAbsence = async () => {
+        const currentLog = dailyLog || {
+            id: substitutionDate,
+            date: substitutionDate,
+            absences: [],
+            extraClasses: []
+        };
+
+        const updatedLog = {
+            ...currentLog,
+            absences: [...(currentLog.absences || []), { teacherId: '', teacherName: '', substitute: '' }]
+        };
+        
+        setDailyLog(updatedLog);
+        await saveDailySchoolLog(updatedLog);
     };
 
-    const setTeacherSubstitute = (id: string, substitute: string) => {
-        setSubstitutions(prev => ({
-            ...prev,
-            [id]: { ...prev[id], present: false, substitute }
-        }));
+    const handleUpdateAbsence = async (index: number, field: string, value: string) => {
+        if (!dailyLog) return;
+        const newAbsences = [...(dailyLog.absences || [])];
+        
+        if (field === 'teacherId') {
+            const teacher = teachers.find(t => t.id === value);
+            newAbsences[index] = { 
+                ...newAbsences[index], 
+                teacherId: value, 
+                teacherName: teacher?.name || '' 
+            };
+        } else {
+            newAbsences[index] = { ...newAbsences[index], [field]: value };
+        }
+        
+        const updatedLog = { ...dailyLog, absences: newAbsences };
+        setDailyLog(updatedLog);
+        await saveDailySchoolLog(updatedLog);
     };
 
-    const handleAddExtraClass = () => {
-        setExtraClasses([...extraClasses, { professor: '', subject: '', className: '' }]);
+    const handleDeleteAbsence = async (index: number) => {
+        if (!dailyLog) return;
+        const newAbsences = [...(dailyLog.absences || [])];
+        newAbsences.splice(index, 1);
+        
+        const updatedLog = { ...dailyLog, absences: newAbsences };
+        setDailyLog(updatedLog);
+        await saveDailySchoolLog(updatedLog);
+    };
+
+    const handleAddExtraClass = async () => {
+        const currentLog = dailyLog || {
+            id: substitutionDate,
+            date: substitutionDate,
+            absences: [],
+            extraClasses: []
+        };
+        
+        const updatedLog = {
+            ...currentLog,
+            extraClasses: [...(currentLog.extraClasses || []), { professor: '', shift: 'Manhã', quantity: 1 }]
+        };
+
+        setDailyLog(updatedLog);
+        await saveDailySchoolLog(updatedLog);
+    };
+
+    const handleUpdateExtraClass = async (index: number, field: string, value: string) => {
+        if (!dailyLog) return;
+        const newExtraClasses = [...(dailyLog.extraClasses || [])];
+        
+        const val = field === 'quantity' ? Number(value) : value;
+        newExtraClasses[index] = { ...newExtraClasses[index], [field]: val };
+        
+        const updatedLog = { ...dailyLog, extraClasses: newExtraClasses };
+        setDailyLog(updatedLog);
+        await saveDailySchoolLog(updatedLog);
+    };
+
+    const handleDeleteExtraClass = async (index: number) => {
+        if (!dailyLog) return;
+        const newExtraClasses = [...(dailyLog.extraClasses || [])];
+        newExtraClasses.splice(index, 1);
+        
+        const updatedLog = { ...dailyLog, extraClasses: newExtraClasses };
+        setDailyLog(updatedLog);
+        await saveDailySchoolLog(updatedLog);
     };
 
     // --- PDF GENERATION ---
@@ -410,6 +507,13 @@ export const PrintShopDashboard: React.FC = () => {
     });
 
 
+    // Attendance Tab State
+    const [attSelectedDate, setAttSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [attSelectedClass, setAttSelectedClass] = useState('');
+    const [attSelectedPeriod, setAttSelectedPeriod] = useState('Todos os Períodos');
+    const [attActiveTab, setAttActiveTab] = useState<'presentes' | 'ausentes' | 'mensal'>('presentes');
+    const [attLogs, setAttLogs] = useState<AttendanceLog[]>([]);
+
     // 1. Listeners for UI state that are needed globally or for the initial view (Exams)
     useEffect(() => {
         if (!user) return;
@@ -448,12 +552,16 @@ export const PrintShopDashboard: React.FC = () => {
         } else if (activeTab === 'substitutions') {
             const unsubStaff = listenToStaffMembers(setStaffMembers, () => {});
             return () => { unsubStaff(); };
+        } else if (activeTab === 'attendance') {
+             unsubscribe = listenToAttendanceLogs(attSelectedDate, (data) => {
+                setAttLogs(data.filter(l => l.type === 'entry' || !l.type));
+            }, (err) => console.warn("Attendance listener restricted", err));
         } else if (activeTab === 'aee_agenda') {
             unsubscribe = listenToAEEAppointments(setAeeAppointments, (err) => console.warn("AEE listener restricted", err));
         }
 
         return () => unsubscribe();
-    }, [user, activeTab]);
+    }, [user, activeTab, attSelectedDate]);
 
     // 3. Today's Attendance listener (only if on Students tab)
     useEffect(() => {
@@ -1072,6 +1180,7 @@ export const PrintShopDashboard: React.FC = () => {
                     <SidebarItem id="lesson_plans" label="Planejamentos" icon={BookMarked} />
                     <SidebarItem id="diagrammed_exams" label="Provas" icon={FileCheck} />
                     <SidebarItem id="reports" label="Relatórios" icon={FileBarChart} />
+                    <SidebarItem id="attendance" label="Frequência" icon={UserCheck} />
                     <SidebarItem id="substitutions" label="Substituições" icon={CalendarDays} />
                     <SidebarItem 
                         id="schedule" 
@@ -1930,85 +2039,179 @@ export const PrintShopDashboard: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'substitutions' && (
-                    <div className="animate-in fade-in slide-in-from-right-4 max-w-6xl mx-auto pb-40">
-                         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-8">
+                {activeTab === 'attendance' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex justify-between items-center">
                             <div>
-                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Substituições e Extras</h1>
-                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Log diário de faltas e aulas extraordinárias</p>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Controle de Frequência</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Monitoramento diário de presença dos alunos</p>
                             </div>
-                            <div className="bg-[#18181b] border border-white/5 rounded-2xl p-4 flex items-center gap-4 px-6 shadow-xl">
-                                <CalendarDays className="text-red-600" size={18} />
-                                <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="bg-transparent border-none text-white font-black text-sm outline-none cursor-pointer" />
+                            <div className="flex gap-4">
+                                <input 
+                                    type="date" 
+                                    className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs uppercase tracking-widest outline-none focus:border-brand-600"
+                                    value={attendanceDate}
+                                    onChange={e => setAttendanceDate(e.target.value)}
+                                />
+                                <select 
+                                    className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs uppercase tracking-widest outline-none focus:border-brand-600 appearance-none min-w-[150px]"
+                                    value={attendanceFilterClass}
+                                    onChange={e => setAttendanceFilterClass(e.target.value)}
+                                >
+                                    <option value="">Todas as Turmas</option>
+                                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
                             </div>
                         </header>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            {/* FALTAS / SUBSTITUIÇÕES */}
-                            <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
-                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-8 flex items-center gap-3">
-                                    <AlertTriangle className="text-yellow-500" size={24}/> Faltas do Dia
-                                </h3>
-                                <div className="space-y-4">
-                                    {teachers.map(teacher => (
-                                        <div key={teacher.id} className="bg-black/20 p-5 rounded-2xl border border-white/5 flex flex-col gap-4">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <button onClick={() => toggleTeacherPresence(teacher.id)} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${substitutions[teacher.id]?.present === false ? 'bg-red-600 text-white shadow-lg' : 'bg-green-600/10 text-green-500'}`}>
-                                                        {substitutions[teacher.id]?.present === false ? <XCircle size={20}/> : <UserCheck size={20}/>}
-                                                    </button>
-                                                    <span className="font-black text-white uppercase text-xs">{teacher.name}</span>
-                                                </div>
-                                                {substitutions[teacher.id]?.present === false && (
-                                                    <div className="flex-1 ml-6 relative">
-                                                        <select 
-                                                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-bold appearance-none outline-none focus:border-red-600"
-                                                            onChange={(e) => setTeacherSubstitute(teacher.id, e.target.value)}
-                                                            value={substitutions[teacher.id]?.substitute || ''}
-                                                        >
-                                                            <option value="">Sem substituto</option>
-                                                            {staffMembers.filter(s => s.id !== teacher.id && s.active).map(s => (
-                                                                <option key={s.id} value={s.name}>{s.name}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {attendanceLogs
+                                .filter(log => !attendanceFilterClass || log.className === attendanceFilterClass)
+                                .sort((a,b) => b.timestamp - a.timestamp)
+                                .map(log => (
+                                <div key={log.id} className="bg-[#18181b] border border-white/5 p-6 rounded-2xl flex items-center gap-4">
+                                    <div className={`h-12 w-12 rounded-full flex items-center justify-center font-black text-white ${log.type === 'entry' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+                                        {log.type === 'entry' ? <CheckCircle size={20}/> : <XCircle size={20}/>}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-white text-sm">{log.studentName}</h4>
+                                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">{log.className} • {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                    </div>
                                 </div>
-                            </section>
-
-                            {/* AULAS EXTRAS */}
-                            <section className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl flex flex-col">
-                                <div className="flex justify-between items-center mb-8">
-                                    <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
-                                        <PlusCircle className="text-blue-500" size={24}/> Aulas Extras
-                                    </h3>
-                                    <button onClick={handleAddExtraClass} className="p-3 bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white rounded-xl transition-all border border-blue-600/20"><Plus size={18}/></button>
+                            ))}
+                            {attendanceLogs.length === 0 && (
+                                <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem] opacity-30">
+                                    <UserCheck size={64} className="mx-auto mb-4 text-gray-500" />
+                                    <p className="font-black uppercase tracking-widest text-sm text-gray-500">Nenhum registro de frequência encontrado para esta data</p>
                                 </div>
-                                <div className="space-y-4 flex-1">
-                                    {extraClasses.map((ex, idx) => (
-                                        <div key={idx} className="grid grid-cols-3 gap-3 p-4 bg-black/20 rounded-2xl border border-white/5">
-                                            <select className="bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black" value={ex.professor} onChange={e => { const list = [...extraClasses]; list[idx].professor = e.target.value; setExtraClasses(list); }}>
-                                                <option>Professor</option>
-                                                {staffMembers.filter(s => s.isTeacher).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                                            </select>
-                                            <input className="bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black uppercase" placeholder="Turma" value={ex.className} onChange={e => { const list = [...extraClasses]; list[idx].className = e.target.value.toUpperCase(); setExtraClasses(list); }} />
-                                            <div className="relative">
-                                                <input className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black uppercase" placeholder="Matéria" value={ex.subject} onChange={e => { const list = [...extraClasses]; list[idx].subject = e.target.value.toUpperCase(); setExtraClasses(list); }} />
-                                                <button onClick={() => setExtraClasses(extraClasses.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 shadow-lg"><X size={10}/></button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <Button className="w-full h-16 bg-blue-600 rounded-2xl font-black uppercase text-xs mt-8 shadow-xl shadow-blue-900/40"><Save size={18} className="mr-3"/> Salvar Log do Dia</Button>
-                            </section>
+                            )}
                         </div>
                     </div>
                 )}
 
-            </div>
+                {activeTab === 'substitutions' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-12 flex justify-between items-center">
+                            <div>
+                                <h1 className="text-4xl font-black text-white uppercase tracking-tighter">Substituições e Aulas Extras</h1>
+                                <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest">Gestão diária de ausências e reposições</p>
+                            </div>
+                            <input 
+                                type="date" 
+                                className="bg-[#121214] border-2 border-white/10 rounded-xl px-4 py-3 text-white font-bold text-xs uppercase tracking-widest outline-none focus:border-brand-600"
+                                value={substitutionDate}
+                                onChange={e => setSubstitutionDate(e.target.value)}
+                            />
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* Teachers List (Absences) */}
+                            <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-xl h-fit">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                        <UserX size={20} className="text-red-500" />
+                                        Professores Ausentes
+                                    </h2>
+                                    <button onClick={handleAddAbsence} className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all shadow-lg shadow-red-900/20">
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
+                                <div className="space-y-4">
+                                    {dailyLog?.absences?.map((absence, index) => (
+                                        <div key={index} className="bg-white/5 border border-white/5 p-4 rounded-2xl relative group">
+                                            <button onClick={() => handleDeleteAbsence(index)} className="absolute top-2 right-2 text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                                                <XCircle size={16} />
+                                            </button>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <select 
+                                                    className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-red-500 appearance-none"
+                                                    value={absence.teacherId}
+                                                    onChange={e => handleUpdateAbsence(index, 'teacherId', e.target.value)}
+                                                >
+                                                    <option value="">Selecione o Professor...</option>
+                                                    {teachers.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                                    ))}
+                                                </select>
+                                                <select 
+                                                    className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-red-500 appearance-none"
+                                                    value={absence.substitute}
+                                                    onChange={e => handleUpdateAbsence(index, 'substitute', e.target.value)}
+                                                >
+                                                    <option value="">Selecione o Substituto...</option>
+                                                    {teachers.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                                                        <option key={t.id} value={t.name}>{t.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!dailyLog?.absences || dailyLog.absences.length === 0) && (
+                                        <p className="text-center text-gray-500 text-xs py-8 italic">Todos os professores presentes.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Extra Classes */}
+                            <div className="bg-[#18181b] border border-white/5 rounded-[2.5rem] p-8 shadow-xl h-fit">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+                                        <PlusCircle size={20} className="text-blue-500" />
+                                        Aulas Extras / Apoio
+                                    </h2>
+                                    <button onClick={handleAddExtraClass} className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-lg shadow-blue-900/20">
+                                        <Plus size={16} />
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    {dailyLog?.extraClasses?.map((extra, index) => (
+                                        <div key={index} className="bg-white/5 border border-white/5 p-4 rounded-2xl relative group">
+                                            <button onClick={() => handleDeleteExtraClass(index)} className="absolute top-2 right-2 text-gray-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                                                <XCircle size={16} />
+                                            </button>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <select 
+                                                    className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-blue-500 appearance-none"
+                                                    value={extra.professor}
+                                                    onChange={e => handleUpdateExtraClass(index, 'professor', e.target.value)}
+                                                >
+                                                    <option value="">Selecione o Professor...</option>
+                                                    {teachers.sort((a,b) => a.name.localeCompare(b.name)).map(t => (
+                                                        <option key={t.id} value={t.name}>{t.name}</option>
+                                                    ))}
+                                                </select>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <select 
+                                                        className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-blue-500 appearance-none"
+                                                        value={extra.shift}
+                                                        onChange={e => handleUpdateExtraClass(index, 'shift', e.target.value)}
+                                                    >
+                                                        <option value="Manhã">Manhã</option>
+                                                        <option value="Tarde">Tarde</option>
+                                                    </select>
+                                                    <input 
+                                                        type="number" 
+                                                        min="1"
+                                                        placeholder="Qtd. Aulas"
+                                                        className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-blue-500"
+                                                        value={extra.quantity}
+                                                        onChange={e => handleUpdateExtraClass(index, 'quantity', e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!dailyLog?.extraClasses || dailyLog.extraClasses.length === 0) && (
+                                        <p className="text-center text-gray-500 text-xs py-8 italic">Nenhuma aula extra registrada.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                    </div>
             {showExamDetail && selectedExam && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl">
                     <div className="bg-[#121214] border border-white/10 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95">

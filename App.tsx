@@ -13,7 +13,6 @@ import { AEEDashboard } from './pages/AEEDashboard';
 import { InfantilDashboard } from './pages/InfantilDashboard';
 import { StudentPortal } from './pages/StudentPortal';
 import { CorrectionDashboard } from './pages/CorrectionDashboard';
-import { AttendanceDashboard } from './pages/AttendanceDashboard';
 import { UserRole } from './types';
 import { LogOut, LayoutGrid, Heart, BookOpen, Baby, GraduationCap, Printer, Users, School, ScanLine, ClipboardList } from 'lucide-react';
 
@@ -99,12 +98,6 @@ const AppContent = () => {
                                 <span className="font-black uppercase text-xs text-white tracking-widest">Infantil</span>
                             </button>
                         )}
-                        {user.roles.includes(UserRole.ATTENDANCE_MANAGER) && (
-                            <button onClick={() => setSessionRole(UserRole.ATTENDANCE_MANAGER)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-emerald-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
-                                <ClipboardList size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
-                                <span className="font-black uppercase text-xs text-white tracking-widest">Frequência</span>
-                            </button>
-                        )}
                         {user.roles.includes(UserRole.STUDENT) && (
                             <button onClick={() => setSessionRole(UserRole.STUDENT)} className="group bg-[#18181b] border border-white/10 p-8 rounded-[2.5rem] hover:bg-blue-600 transition-all shadow-2xl flex flex-col items-center justify-center gap-4 h-48">
                                 <School size={40} className="text-gray-500 group-hover:text-white transition-colors"/>
@@ -124,7 +117,6 @@ const AppContent = () => {
 
     return (
         <div className="min-h-screen">
-            {activeRole !== UserRole.ATTENDANCE_MANAGER && (
             <nav className="h-20 bg-black/40 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-8 sticky top-0 z-50 print:hidden">
                 <div className="flex items-center gap-6">
                     <img src="https://i.ibb.co/kgxf99k5/LOGOS-10-ANOS-BRANCA-E-VERMELHA.png" className="h-10 w-auto" alt="Logo"/>
@@ -150,9 +142,8 @@ const AppContent = () => {
                     </button>
                 </div>
             </nav>
-            )}
             
-            <main className={activeRole === UserRole.ATTENDANCE_MANAGER ? "" : "p-8 print:p-0"}>
+            <main className="p-8 print:p-0">
                 {activeRole === UserRole.TEACHER && <TeacherDashboard />}
                 {activeRole === UserRole.PRINTSHOP && <PrintShopDashboard />}
                 {activeRole === UserRole.HR && <HRDashboard />}
@@ -160,7 +151,6 @@ const AppContent = () => {
                 {activeRole === UserRole.AEE && <AEEDashboard />}
                 {activeRole === UserRole.KINDERGARTEN && <InfantilDashboard />}
                 {activeRole === UserRole.CORRECTION_MANAGER && <CorrectionDashboard />}
-                {activeRole === UserRole.ATTENDANCE_MANAGER && <AttendanceDashboard />}
             </main>
         </div>
     );

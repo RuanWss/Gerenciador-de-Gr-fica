@@ -382,11 +382,15 @@ export interface StudentCorrection {
 export interface DailySchoolLog {
   id: string;
   date: string;
-  teacherAttendance: Record<string, { present: boolean; substitute?: string }>;
+  absences: Array<{
+    teacherId: string;
+    teacherName: string;
+    substitute: string;
+  }>;
   extraClasses?: Array<{
     professor: string;
-    subject: string;
-    className: string;
+    shift: string;
+    quantity: number;
   }>;
 }
 

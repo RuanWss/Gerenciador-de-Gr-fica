@@ -8,7 +8,8 @@ import {
     deleteLibraryBook, 
     listenToLibraryLoans, 
     createLoan, 
-    returnLoan 
+    returnLoan,
+    renewLoan
 } from '../services/firebaseService';
 import { LibraryBook, LibraryLoan, Student } from '../types';
 import { Button } from '../components/Button';
@@ -26,13 +27,15 @@ import {
     User, 
     CheckCircle, 
     AlertCircle, 
-    Printer 
+    Printer,
+    BarChart2,
+    RefreshCw
 } from 'lucide-react';
 import { CLASSES } from '../constants';
 
 export const LibraryDashboard: React.FC = () => {
     const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'inventory' | 'loans'>('inventory');
+    const [activeTab, setActiveTab] = useState<'inventory' | 'loans' | 'statistics'>('inventory');
     
     // Data State
     const [books, setBooks] = useState<LibraryBook[]>([]);
@@ -41,8 +44,11 @@ export const LibraryDashboard: React.FC = () => {
     
     // UI State
     const [searchTerm, setSearchTerm] = useState('');
+    const [loanFilterTerm, setLoanFilterTerm] = useState('');
+    const [historySearchTerm, setHistorySearchTerm] = useState('');
     const [showBookModal, setShowBookModal] = useState(false);
     const [showLoanModal, setShowLoanModal] = useState(false);
+    const [selectedClassStats, setSelectedClassStats] = useState<string | null>(null);
     const [editingBook, setEditingBook] = useState<LibraryBook | null>(null);
 
     // Forms
@@ -62,9 +68,13 @@ export const LibraryDashboard: React.FC = () => {
         String(b.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
         String(b.author || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         String(b.isbn || '').includes(searchTerm)
-    );
+    ).sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
 
-    const activeLoans = loans.filter(l => l.status === 'active' || l.status === 'late').sort((a,b) => b.loanDate.localeCompare(a.loanDate));
+    const allActiveLoans = loans.filter(l => l.status === 'active' || l.status === 'late');
+    const activeLoans = allActiveLoans.filter(l => 
+        String(l.studentName || '').toLowerCase().includes(loanFilterTerm.toLowerCase()) ||
+        String(l.bookTitle || '').toLowerCase().includes(loanFilterTerm.toLowerCase())
+    ).sort((a,b) => a.dueDate.localeCompare(b.dueDate));
     const historyLoans = loans.filter(l => l.status === 'returned').sort((a,b) => b.returnDate!.localeCompare(a.returnDate!));
 
     useEffect(() => {
@@ -165,6 +175,17 @@ export const LibraryDashboard: React.FC = () => {
         }
     };
 
+    const handleRenewLoan = async (loan: LibraryLoan) => {
+        const currentDueDate = new Date(loan.dueDate + 'T12:00:00');
+        const newDueDate = new Date(currentDueDate);
+        newDueDate.setDate(newDueDate.getDate() + 7); // Add 7 days
+        const newDateString = newDueDate.toISOString().split('T')[0];
+
+        if (confirm(`Renovar empréstimo de "${loan.bookTitle}" para ${loan.studentName} até ${newDueDate.toLocaleDateString('pt-BR')}?`)) {
+            await renewLoan(loan.id, newDateString);
+        }
+    };
+
     // --- PRINT RECEIPT ---
     const printReceipt = (loan: LibraryLoan) => {
         const printWindow = window.open('', '_blank', 'width=600,height=600');
@@ -230,6 +251,12 @@ export const LibraryDashboard: React.FC = () => {
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === 'loans' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}
                     >
                         <Library size={18} /> Empréstimos
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('statistics')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm mb-1 ${activeTab === 'statistics' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}
+                    >
+                        <BarChart2 size={18} /> Estatísticas
                     </button>
                 </div>
             </div>
@@ -309,6 +336,17 @@ export const LibraryDashboard: React.FC = () => {
                             </Button>
                         </header>
 
+                        {/* LOAN SEARCH FILTER */}
+                        <div className="bg-[#18181b] p-4 rounded-xl border border-gray-800 mb-6 flex items-center gap-4">
+                            <Search className="text-gray-500" size={18} />
+                            <input 
+                                className="bg-transparent border-none text-white text-sm w-full outline-none placeholder-gray-600"
+                                placeholder="Buscar empréstimos por aluno ou obra..."
+                                value={loanFilterTerm}
+                                onChange={e => setLoanFilterTerm(e.target.value)}
+                            />
+                        </div>
+
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             {/* ACTIVE LOANS */}
                             <div className="bg-[#18181b] rounded-xl border border-gray-800 overflow-hidden flex flex-col h-[calc(100vh-250px)]">
@@ -318,9 +356,13 @@ export const LibraryDashboard: React.FC = () => {
                                 </div>
                                 <div className="overflow-y-auto flex-1 p-2 space-y-2">
                                     {activeLoans.map(loan => {
-                                        const isLate = new Date() > new Date(loan.dueDate + 'T23:59:59');
+                                        const today = new Date().toISOString().split('T')[0];
+                                        const isLate = loan.dueDate < today;
+                                        const isDueToday = loan.dueDate === today;
+                                        const isCritical = isLate || isDueToday;
+                                        
                                         return (
-                                            <div key={loan.id} className={`p-4 rounded-lg border ${isLate ? 'bg-red-950/20 border-red-900/50' : 'bg-gray-900/50 border-gray-800'}`}>
+                                            <div key={loan.id} className={`p-4 rounded-lg border transition-all ${isCritical ? 'bg-red-950/20 border-red-500/50 animate-pulse' : 'bg-gray-900/50 border-gray-800'}`}>
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div>
                                                         <h4 className="font-bold text-white text-sm">{String(loan.bookTitle || '')}</h4>
@@ -338,6 +380,15 @@ export const LibraryDashboard: React.FC = () => {
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <button onClick={() => printReceipt(loan)} className="p-1.5 hover:bg-white/10 rounded text-gray-400" title="Reimprimir Recibo"><Printer size={14}/></button>
+                                                        {isCritical && (
+                                                            <button 
+                                                                onClick={() => handleRenewLoan(loan)} 
+                                                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-bold text-white transition-colors flex items-center gap-1"
+                                                                title="Renovar por 7 dias"
+                                                            >
+                                                                <RefreshCw size={12} /> Renovar
+                                                            </button>
+                                                        )}
                                                         <button onClick={() => handleReturnLoan(loan)} className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs font-bold text-white transition-colors">
                                                             Devolver
                                                         </button>
@@ -370,6 +421,130 @@ export const LibraryDashboard: React.FC = () => {
                                     ))}
                                     {historyLoans.length === 0 && <p className="text-center text-gray-500 py-10 text-sm">Histórico vazio.</p>}
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- STATISTICS TAB --- */}
+                {activeTab === 'statistics' && (
+                    <div className="animate-in fade-in slide-in-from-right-4">
+                        <header className="mb-8">
+                            <h1 className="text-3xl font-bold text-white flex items-center gap-2"><BarChart2 className="text-red-500"/> Estatísticas e Relatórios</h1>
+                            <p className="text-gray-400">Análise de dados da biblioteca</p>
+                        </header>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                            {/* ACTIVE LOANS BY CLASS */}
+                            <div className="bg-[#18181b] rounded-xl border border-gray-800 p-6">
+                                <h3 className="font-bold text-white mb-6 flex items-center gap-2"><Library size={18} className="text-red-500"/> Empréstimos Ativos por Turma</h3>
+                                <div className="space-y-3">
+                                    {Object.entries(allActiveLoans.reduce((acc, loan) => {
+                                        acc[loan.studentClass] = (acc[loan.studentClass] || 0) + 1;
+                                        return acc;
+                                    }, {} as Record<string, number>))
+                                    .sort(([,a], [,b]) => b - a)
+                                    .map(([className, count]) => (
+                                        <div 
+                                            key={className} 
+                                            onClick={() => setSelectedClassStats(className)}
+                                            className="flex justify-between items-center p-3 bg-gray-900/50 rounded-lg border border-gray-800 cursor-pointer hover:bg-gray-800 transition-colors"
+                                        >
+                                            <span className="text-sm font-bold text-gray-300">{className}</span>
+                                            <span className="bg-red-500/20 text-red-400 px-2 py-1 rounded text-xs font-bold">{count} ativos</span>
+                                        </div>
+                                    ))}
+                                    {allActiveLoans.length === 0 && <p className="text-gray-500 text-sm">Nenhum empréstimo ativo.</p>}
+                                </div>
+                            </div>
+
+                            {/* TOP READERS RANKING */}
+                            <div className="bg-[#18181b] rounded-xl border border-gray-800 p-6">
+                                <h3 className="font-bold text-white mb-6 flex items-center gap-2"><User size={18} className="text-yellow-500"/> Ranking de Leitores</h3>
+                                <div className="space-y-3">
+                                    {Object.entries(loans.reduce((acc, loan) => {
+                                        acc[loan.studentName] = (acc[loan.studentName] || 0) + 1;
+                                        return acc;
+                                    }, {} as Record<string, number>))
+                                    .sort(([,a], [,b]) => b - a)
+                                    .slice(0, 10)
+                                    .map(([studentName, count], index) => (
+                                        <div key={studentName} className="flex justify-between items-center p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${index === 0 ? 'bg-yellow-500 text-black' : index === 1 ? 'bg-gray-400 text-black' : index === 2 ? 'bg-orange-700 text-white' : 'bg-gray-800 text-gray-500'}`}>
+                                                    {index + 1}
+                                                </div>
+                                                <span className="text-sm font-bold text-gray-300">{studentName}</span>
+                                            </div>
+                                            <span className="text-xs font-bold text-gray-500">{count} empréstimos</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* STUDENT HISTORY CHECK */}
+                        <div className="bg-[#18181b] rounded-xl border border-gray-800 p-6">
+                            <h3 className="font-bold text-white mb-6 flex items-center gap-2"><History size={18} className="text-blue-500"/> Histórico por Aluno</h3>
+                            <div className="mb-6">
+                                <input 
+                                    className="w-full bg-black/30 border border-gray-700 rounded-lg p-3 text-white text-sm outline-none focus:border-blue-500"
+                                    placeholder="Digite o nome do aluno para ver o histórico..."
+                                    value={historySearchTerm}
+                                    onChange={e => setHistorySearchTerm(e.target.value)}
+                                />
+                            </div>
+                            {historySearchTerm && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {loans
+                                        .filter(l => l.studentName.toLowerCase().includes(historySearchTerm.toLowerCase()))
+                                        .sort((a,b) => b.loanDate.localeCompare(a.loanDate))
+                                        .map(loan => (
+                                            <div key={loan.id} className="p-4 rounded-lg bg-gray-900/30 border border-gray-800">
+                                                <p className="font-bold text-white text-sm mb-1">{loan.bookTitle}</p>
+                                                <p className="text-xs text-gray-400 mb-2">{loan.studentName}</p>
+                                                <div className="flex justify-between items-center text-[10px] uppercase font-bold">
+                                                    <span className="text-gray-500">{new Date(loan.loanDate).toLocaleDateString('pt-BR')}</span>
+                                                    <span className={loan.status === 'returned' ? 'text-green-500' : 'text-red-500'}>
+                                                        {loan.status === 'returned' ? 'Devolvido' : 'Pendente'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL: CLASS STATS DETAILS */}
+                {selectedClassStats && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                        <div className="bg-[#18181b] border border-gray-800 w-full max-w-lg rounded-2xl shadow-2xl p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <Library size={20} className="text-red-500"/> 
+                                    Empréstimos - {selectedClassStats}
+                                </h3>
+                                <button onClick={() => setSelectedClassStats(null)} className="text-gray-400 hover:text-white"><X size={20}/></button>
+                            </div>
+                            <div className="max-h-[60vh] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                                {allActiveLoans
+                                    .filter(l => l.studentClass === selectedClassStats)
+                                    .sort((a,b) => a.studentName.localeCompare(b.studentName))
+                                    .map(loan => (
+                                        <div key={loan.id} className="p-3 bg-gray-900/50 rounded-lg border border-gray-800">
+                                            <p className="font-bold text-white text-sm">{loan.studentName}</p>
+                                            <p className="text-xs text-gray-400 mt-1">{loan.bookTitle}</p>
+                                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-800">
+                                                <span className="text-[10px] text-gray-500">Devolução: {new Date(loan.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+                                                {new Date(loan.dueDate) < new Date() && (
+                                                    <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded font-bold uppercase">Atrasado</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))
+                                }
                             </div>
                         </div>
                     </div>

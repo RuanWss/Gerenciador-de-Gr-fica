@@ -444,6 +444,44 @@ export const savePEIDocument = async (pei: PEIDocument) => {
     await setDoc(docRef, { ...pei, id: docRef.id });
 };
 
+// --- DAILY SCHOOL LOG (SUBSTITUTIONS) ---
+
+export const saveDailySchoolLog = async (log: DailySchoolLog) => {
+    const docId = log.date; // Use date as ID for easy retrieval
+    const docRef = doc(db, 'dailySchoolLogs', docId);
+    
+    // Sanitize log to ensure no circular references or undefined values
+    const cleanLog = {
+        id: log.id,
+        date: log.date,
+        absences: (log.absences || []).map(a => ({
+            teacherId: a.teacherId || '',
+            teacherName: a.teacherName || '',
+            substitute: a.substitute || ''
+        })),
+        extraClasses: (log.extraClasses || []).map(e => ({
+            professor: e.professor || '',
+            shift: e.shift || 'Manhã',
+            quantity: Number(e.quantity) || 1
+        }))
+    };
+
+    await setDoc(docRef, cleanLog, { merge: true });
+};
+
+export const listenToDailySchoolLog = (date: string, callback: (log: DailySchoolLog | null) => void, onError?: (error: any) => void) => {
+    const docRef = doc(db, 'dailySchoolLogs', date);
+    return onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            callback(docSnap.data() as DailySchoolLog);
+        } else {
+            callback(null);
+        }
+    }, (error) => {
+        if (onError) onError(error);
+    });
+};
+
 // --- AEE APPOINTMENTS ---
 
 export const listenToAEEAppointments = (callback: (appointments: AEEAppointment[]) => void, onError?: (error: any) => void) => {
@@ -667,6 +705,11 @@ export const returnLoan = async (loanId: string, bookId: string) => {
             await updateDoc(bookRef, { availableQuantity: book.availableQuantity + 1 });
         }
     }
+};
+
+export const renewLoan = async (loanId: string, newDueDate: string) => {
+    const loanRef = doc(db, LIBRARY_LOANS_COLLECTION, loanId);
+    await updateDoc(loanRef, { dueDate: newDueDate });
 };
 
 export const listenToStudentLoans = (studentId: string, callback: (loans: LibraryLoan[]) => void, onError?: (error: any) => void) => {
