@@ -11,12 +11,42 @@ import {
 import { analyzeAnswerSheetWithQR } from '../services/geminiService';
 import { AnswerKey, Student, CorrectionResult } from '../types';
 import { Button } from '../components/Button';
+import jsQR from 'jsqr';
 import { 
     CheckSquare, Printer, Camera, UploadCloud, Search, Trash2, 
     FileText, CheckCircle2, AlertTriangle, X, ScanLine, Save, 
     ArrowLeft, Eye, RefreshCw, Plus 
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
+
+const readQRFromFile = async (file: File): Promise<{e: string, s: string} | null> => {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return resolve(null);
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code) {
+                try {
+                    const data = JSON.parse(code.data);
+                    if (data.e && data.s) {
+                        return resolve(data);
+                    }
+                } catch (e) {
+                    // JSON parse error
+                }
+            }
+            resolve(null);
+        };
+        img.onerror = () => resolve(null);
+        img.src = URL.createObjectURL(file);
+    });
+};
 
 export const CorrectionDashboard: React.FC = () => {
     const { user } = useAuth();
@@ -202,16 +232,23 @@ export const CorrectionDashboard: React.FC = () => {
         setIsLoading(true);
         setCorrectionLog(prev => [`${prefix}Iniciando análise...`, ...prev]);
         try {
-            // Assume max questions from the saved key if possible, but here we don't know the key yet.
-            // Using 50 as a safe upper bound for detection.
+            // 1. Try to read QR Code locally first (much more reliable)
+            let qrData = await readQRFromFile(file);
+            
+            // 2. Call Gemini to read answers (and fallback QR if needed)
             const result = await analyzeAnswerSheetWithQR(file, 50);
             
-            if (result.qrData && result.qrData.e && result.qrData.s) {
-                const examKey = savedKeys.find(k => k.id === result.qrData.e);
+            // Merge QR data
+            if (!qrData && result.qrData && result.qrData.e && result.qrData.s) {
+                qrData = result.qrData as {e: string, s: string};
+            }
+            
+            if (qrData && qrData.e && qrData.s) {
+                const examKey = savedKeys.find(k => k.id === qrData!.e);
                 
                 if (examKey) {
                     const allStudents = await getStudents();
-                    const student = allStudents.find(s => s.id === result.qrData.s);
+                    const student = allStudents.find(s => s.id === qrData!.s);
                     
                     if (student) {
                         // Calculate Score
@@ -280,7 +317,7 @@ export const CorrectionDashboard: React.FC = () => {
     };
 
     return (
-        <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b]">
+        <div className="flex h-[calc(100vh-80px)] overflow-hidden -m-8 bg-[#0a0a0b] print:h-auto print:overflow-visible print:m-0 print:bg-white">
             <div className="w-64 bg-[#121214] border-r border-white/5 p-6 flex flex-col h-full z-20 shadow-2xl print:hidden">
                 <div className="mb-8 pl-2">
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Área de Correção</p>
@@ -453,7 +490,7 @@ export const CorrectionDashboard: React.FC = () => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="print:w-full print:h-full print:fixed print:top-0 print:left-0 print:bg-white print:z-50 print:overflow-visible">
+                            <div className="print:w-full print:bg-white print:z-50 print:overflow-visible">
                                 <div className="print:hidden mb-8 flex justify-between items-center bg-[#18181b] p-6 rounded-3xl border border-white/5">
                                     <button onClick={() => setSelectedKeyForPrint(null)} className="flex items-center gap-2 text-gray-400 hover:text-white font-black uppercase text-xs tracking-widest"><ArrowLeft size={16}/> Voltar</button>
                                     <div>
