@@ -345,11 +345,18 @@ export interface InfantilReport {
   descriptiveText: Record<string, string>;
 }
 
+export interface AnswerKeySubject {
+  name: string;
+  startQuestion: number;
+  endQuestion: number;
+}
+
 export interface AnswerKey {
   id: string;
   title: string;
   className: string;
-  subject: string;
+  subject?: string; // Kept for backward compatibility
+  subjects?: AnswerKeySubject[];
   teacherId: string; // Created by
   numQuestions: number;
   correctAnswers: Record<string, string>; // { "1": "A", "2": "C" }

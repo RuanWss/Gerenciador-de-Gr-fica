@@ -14,7 +14,7 @@ import { Button } from '../components/Button';
 import { 
     CheckSquare, Printer, Camera, UploadCloud, Search, Trash2, 
     FileText, CheckCircle2, AlertTriangle, X, ScanLine, Save, 
-    ArrowLeft, Eye, RefreshCw 
+    ArrowLeft, Eye, RefreshCw, Plus 
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
 
@@ -26,7 +26,7 @@ export const CorrectionDashboard: React.FC = () => {
     // --- CREATE TAB ---
     const [newExamTitle, setNewExamTitle] = useState('');
     const [newExamClass, setNewExamClass] = useState('');
-    const [newExamSubject, setNewExamSubject] = useState('');
+    const [newExamSubjects, setNewExamSubjects] = useState<{name: string, startQuestion: number, endQuestion: number}[]>([{name: '', startQuestion: 1, endQuestion: 10}]);
     const [numQuestions, setNumQuestions] = useState(10);
     const [correctAnswers, setCorrectAnswers] = useState<Record<string, string>>({});
 
@@ -55,7 +55,7 @@ export const CorrectionDashboard: React.FC = () => {
     };
 
     const handleSaveKey = async () => {
-        if (!newExamTitle || !newExamClass || !newExamSubject) return alert("Preencha todos os campos.");
+        if (!newExamTitle || !newExamClass || newExamSubjects.length === 0) return alert("Preencha todos os campos.");
         // Validate if all questions have answers
         for (let i = 1; i <= numQuestions; i++) {
             if (!correctAnswers[i]) return alert(`Informe o gabarito da questão ${i}.`);
@@ -67,7 +67,11 @@ export const CorrectionDashboard: React.FC = () => {
                 id: '',
                 title: newExamTitle.toUpperCase(),
                 className: newExamClass,
-                subject: newExamSubject,
+                subjects: newExamSubjects.map(s => ({
+                    name: s.name,
+                    startQuestion: Number(s.startQuestion),
+                    endQuestion: Number(s.endQuestion)
+                })),
                 teacherId: user?.id || 'admin',
                 numQuestions,
                 correctAnswers,
@@ -75,6 +79,7 @@ export const CorrectionDashboard: React.FC = () => {
             });
             alert("Gabarito criado com sucesso!");
             setNewExamTitle('');
+            setNewExamSubjects([{name: '', startQuestion: 1, endQuestion: 10}]);
             setCorrectAnswers({});
             loadKeys();
             setActiveTab('print');
@@ -142,13 +147,60 @@ export const CorrectionDashboard: React.FC = () => {
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            await processImage(e.target.files[0]);
+            const file = e.target.files[0];
+            if (file.type === 'application/pdf') {
+                await processPdf(file);
+            } else {
+                await processImage(file);
+            }
         }
     };
 
-    const processImage = async (file: File) => {
+    const processPdf = async (file: File) => {
         setIsLoading(true);
-        setCorrectionLog(prev => ["Iniciando análise...", ...prev]);
+        setCorrectionLog(prev => ["Processando PDF...", ...prev]);
+        try {
+            const pdfjsLib = await import('pdfjs-dist');
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+            
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const numPages = pdf.numPages;
+            
+            setCorrectionLog(prev => [`PDF carregado com ${numPages} páginas. Iniciando correção...`, ...prev]);
+            
+            for (let i = 1; i <= numPages; i++) {
+                setCorrectionLog(prev => [`Extraindo página ${i} de ${numPages}...`, ...prev]);
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2.0 }); // Higher scale for better OCR
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                if (context) {
+                    await page.render({ canvasContext: context, viewport: viewport, canvas: canvas }).promise;
+                    
+                    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+                    if (blob) {
+                        const imageFile = new File([blob], `page_${i}.jpg`, { type: 'image/jpeg' });
+                        await processImage(imageFile, `Página ${i}: `);
+                    }
+                }
+            }
+            setCorrectionLog(prev => ["✅ Processamento do PDF concluído.", ...prev]);
+        } catch (error) {
+            console.error("Error processing PDF:", error);
+            setCorrectionLog(prev => ["❌ ERRO ao processar PDF.", ...prev]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const processImage = async (file: File, prefix: string = '') => {
+        setIsLoading(true);
+        setCorrectionLog(prev => [`${prefix}Iniciando análise...`, ...prev]);
         try {
             // Assume max questions from the saved key if possible, but here we don't know the key yet.
             // Using 50 as a safe upper bound for detection.
@@ -190,19 +242,19 @@ export const CorrectionDashboard: React.FC = () => {
                             scannedAt: Date.now()
                         });
 
-                        setCorrectionLog(prev => [`✅ SUCESSO: ${student.name} - Nota: ${finalScore.toFixed(1)} (${score}/${total})`, ...prev]);
+                        setCorrectionLog(prev => [`${prefix}✅ SUCESSO: ${student.name} - Nota: ${finalScore.toFixed(1)} (${score}/${total})`, ...prev]);
                     } else {
-                        setCorrectionLog(prev => ["❌ ERRO: Aluno não encontrado na base de dados.", ...prev]);
+                        setCorrectionLog(prev => [`${prefix}❌ ERRO: Aluno não encontrado na base de dados.`, ...prev]);
                     }
                 } else {
-                    setCorrectionLog(prev => ["❌ ERRO: Gabarito da prova não encontrado no sistema.", ...prev]);
+                    setCorrectionLog(prev => [`${prefix}❌ ERRO: Gabarito da prova não encontrado no sistema.`, ...prev]);
                 }
             } else {
-                setCorrectionLog(prev => ["⚠️ AVISO: QR Code não identificado. Melhore o foco ou iluminação.", ...prev]);
+                setCorrectionLog(prev => [`${prefix}⚠️ AVISO: QR Code não identificado. Melhore o foco ou iluminação.`, ...prev]);
             }
         } catch (error) {
             console.error(error);
-            setCorrectionLog(prev => ["❌ ERRO DE SISTEMA: Tente novamente.", ...prev]);
+            setCorrectionLog(prev => [`${prefix}❌ ERRO DE SISTEMA: Tente novamente.`, ...prev]);
         } finally {
             setIsLoading(false);
         }
@@ -262,16 +314,86 @@ export const CorrectionDashboard: React.FC = () => {
                                         {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Disciplina</label>
-                                    <select className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-cyan-500" value={newExamSubject} onChange={e => setNewExamSubject(e.target.value)}>
-                                        <option value="">Selecione...</option>
-                                        {[...EFAF_SUBJECTS, ...EM_SUBJECTS].map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
+                                <div className="space-y-2 col-span-1 md:col-span-2">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Disciplinas e Intervalo de Questões</label>
+                                        <button 
+                                            onClick={() => setNewExamSubjects([...newExamSubjects, {name: '', startQuestion: 1, endQuestion: numQuestions}])}
+                                            className="text-xs font-bold text-cyan-500 hover:text-cyan-400 flex items-center gap-1"
+                                        >
+                                            <Plus size={14} /> Adicionar Disciplina
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {newExamSubjects.map((subj, idx) => (
+                                            <div key={idx} className="flex gap-3 items-center bg-white/5 p-3 rounded-2xl border border-white/5">
+                                                <select 
+                                                    className="flex-1 bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold outline-none focus:border-cyan-500 text-sm" 
+                                                    value={subj.name} 
+                                                    onChange={e => {
+                                                        const newSubjs = [...newExamSubjects];
+                                                        newSubjs[idx].name = e.target.value;
+                                                        setNewExamSubjects(newSubjs);
+                                                    }}
+                                                >
+                                                    <option value="">Selecione a disciplina...</option>
+                                                    {[...EFAF_SUBJECTS, ...EM_SUBJECTS].map(s => <option key={s} value={s}>{s}</option>)}
+                                                </select>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-500 font-bold">De</span>
+                                                    <input 
+                                                        type="number" min="1" max={numQuestions}
+                                                        className="w-16 bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold outline-none focus:border-cyan-500 text-center text-sm"
+                                                        value={subj.startQuestion}
+                                                        onChange={e => {
+                                                            const newSubjs = [...newExamSubjects];
+                                                            newSubjs[idx].startQuestion = Number(e.target.value);
+                                                            setNewExamSubjects(newSubjs);
+                                                        }}
+                                                    />
+                                                    <span className="text-xs text-gray-500 font-bold">Até</span>
+                                                    <input 
+                                                        type="number" min="1" max={numQuestions}
+                                                        className="w-16 bg-black/40 border border-white/10 rounded-xl p-3 text-white font-bold outline-none focus:border-cyan-500 text-center text-sm"
+                                                        value={subj.endQuestion}
+                                                        onChange={e => {
+                                                            const newSubjs = [...newExamSubjects];
+                                                            newSubjs[idx].endQuestion = Number(e.target.value);
+                                                            setNewExamSubjects(newSubjs);
+                                                        }}
+                                                    />
+                                                </div>
+                                                {newExamSubjects.length > 1 && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            const newSubjs = [...newExamSubjects];
+                                                            newSubjs.splice(idx, 1);
+                                                            setNewExamSubjects(newSubjs);
+                                                        }}
+                                                        className="p-2 text-gray-500 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Qtd. Questões</label>
-                                    <input type="number" min="5" max="50" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-cyan-500" value={numQuestions} onChange={e => setNumQuestions(Number(e.target.value))} />
+                                <div className="space-y-2 col-span-1 md:col-span-2">
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Qtd. Total de Questões</label>
+                                    <input type="number" min="5" max="100" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-cyan-500" value={numQuestions} onChange={e => {
+                                        const newNum = Number(e.target.value);
+                                        setNumQuestions(newNum);
+                                        // Update the last subject's endQuestion if it was the old max
+                                        if (newExamSubjects.length > 0) {
+                                            const lastSubj = newExamSubjects[newExamSubjects.length - 1];
+                                            if (lastSubj.endQuestion > newNum) {
+                                                const newSubjs = [...newExamSubjects];
+                                                newSubjs[newSubjs.length - 1].endQuestion = newNum;
+                                                setNewExamSubjects(newSubjs);
+                                            }
+                                        }
+                                    }} />
                                 </div>
                             </div>
 
@@ -318,7 +440,9 @@ export const CorrectionDashboard: React.FC = () => {
                                     {savedKeys.map(key => (
                                         <div key={key.id} className="bg-[#18181b] border border-white/5 p-8 rounded-[2.5rem] shadow-xl group hover:border-cyan-500/30 transition-all">
                                             <h3 className="text-xl font-black text-white mb-2">{key.title}</h3>
-                                            <p className="text-cyan-500 font-black text-[10px] uppercase tracking-widest mb-6">{key.className} • {key.subject}</p>
+                                            <p className="text-cyan-500 font-black text-[10px] uppercase tracking-widest mb-6">
+                                                {key.className} • {key.subjects ? key.subjects.map(s => s.name).join(', ') : key.subject}
+                                            </p>
                                             <div className="flex gap-2">
                                                 <button onClick={() => preparePrint(key)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-white font-black text-[10px] uppercase tracking-widest">Imprimir</button>
                                                 <button onClick={() => viewResults(key)} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 rounded-xl text-white font-black text-[10px] uppercase tracking-widest shadow-lg">Resultados</button>
@@ -383,7 +507,7 @@ export const CorrectionDashboard: React.FC = () => {
                                                     <span className="text-[10px] font-bold uppercase mt-1 block">ASSINATURA DO PARTICIPANTE:</span>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="text-sm font-black uppercase">{selectedKeyForPrint.subject}</p>
+                                                    <p className="text-sm font-black uppercase">{selectedKeyForPrint.subjects ? selectedKeyForPrint.subjects.map(s => s.name).join(' / ') : selectedKeyForPrint.subject}</p>
                                                     <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{selectedKeyForPrint.title}</p>
                                                 </div>
                                             </div>
