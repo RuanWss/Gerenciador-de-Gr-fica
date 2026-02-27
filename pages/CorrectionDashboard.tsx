@@ -337,7 +337,7 @@ export const CorrectionDashboard: React.FC = () => {
                                                     }}
                                                 >
                                                     <option value="">Selecione a disciplina...</option>
-                                                    {[...EFAF_SUBJECTS, ...EM_SUBJECTS].map(s => <option key={s} value={s}>{s}</option>)}
+                                                    {Array.from(new Set([...EFAF_SUBJECTS, ...EM_SUBJECTS])).map(s => <option key={s} value={s}>{s}</option>)}
                                                 </select>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-xs text-gray-500 font-bold">De</span>
@@ -466,7 +466,7 @@ export const CorrectionDashboard: React.FC = () => {
                                 {/* LAYOUT DE IMPRESSÃO ESTILO ENEM */}
                                 <div className="flex flex-col gap-8 print:block print:gap-0">
                                     {studentsForPrint.map((student, idx) => (
-                                        <div key={student.id} className="bg-white text-black w-[210mm] min-h-[297mm] mx-auto p-12 relative box-border border border-gray-200 print:border-0 print:break-after-page shadow-xl print:shadow-none mb-8 print:mb-0 font-sans">
+                                        <div key={student.id} className="bg-white text-black w-[210mm] min-h-[297mm] mx-auto p-12 relative box-border border border-gray-200 print:border-0 shadow-xl print:shadow-none mb-8 print:mb-0 font-sans" style={{ pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
                                             
                                             {/* Header Principal */}
                                             <div className="flex justify-between items-start mb-6">
@@ -477,9 +477,9 @@ export const CorrectionDashboard: React.FC = () => {
                                                     <h1 className="text-5xl font-black uppercase tracking-tighter leading-none mb-1 border-b-4 border-black inline-block pb-1">CARTÃO-RESPOSTA</h1>
                                                     <p className="text-xs font-bold uppercase tracking-widest text-gray-600 mt-1">SIMULADO / AVALIAÇÃO INSTITUCIONAL - CEMAL</p>
                                                 </div>
-                                                <div className="flex flex-col items-center justify-center border-4 border-black rounded-full w-24 h-24 relative overflow-hidden shrink-0">
-                                                    <span className="text-[9px] font-bold uppercase absolute top-3">TURMA</span>
-                                                    <span className="text-3xl font-black">{selectedKeyForPrint.className?.split(' ')[0] || ''}</span>
+                                                <div className="flex flex-col items-end justify-center shrink-0">
+                                                    <span className="text-[10px] font-bold uppercase text-gray-500 tracking-widest mb-1">TURMA</span>
+                                                    <span className="text-2xl font-black uppercase text-right leading-none">{selectedKeyForPrint.className}</span>
                                                 </div>
                                             </div>
 
@@ -592,7 +592,7 @@ export const CorrectionDashboard: React.FC = () => {
                                     <Button onClick={startCamera} className="bg-cyan-600 h-12 rounded-xl text-xs font-black uppercase"><Camera size={18} className="mr-2"/> Ativar Webcam</Button>
                                     <label className="cursor-pointer bg-white/5 hover:bg-white/10 text-white h-12 px-6 rounded-xl flex items-center justify-center font-black uppercase text-xs transition-all border border-white/10">
                                         <UploadCloud size={18} className="mr-2"/> Upload
-                                        <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+                                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
                                     </label>
                                 </div>
                             )}

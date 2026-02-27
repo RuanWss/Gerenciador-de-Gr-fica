@@ -139,7 +139,7 @@ export const analyzeAnswerSheetWithQR = async (imageFile: File, numQuestions: nu
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
+            model: 'gemini-3-flash-preview',
             contents: {
                 parts: [
                     { inlineData: { mimeType: imageFile.type, data: base64Image } },
@@ -151,8 +151,8 @@ export const analyzeAnswerSheetWithQR = async (imageFile: File, numQuestions: nu
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
-                        examId: { type: Type.STRING, description: "The exam ID from QR code 'e' field" },
-                        studentId: { type: Type.STRING, description: "The student ID from QR code 's' field" },
+                        examId: { type: Type.STRING, description: "The exam ID from QR code 'e' field", nullable: true },
+                        studentId: { type: Type.STRING, description: "The student ID from QR code 's' field", nullable: true },
                         responses: {
                             type: Type.ARRAY,
                             items: {
@@ -170,7 +170,13 @@ export const analyzeAnswerSheetWithQR = async (imageFile: File, numQuestions: nu
             }
         });
 
-        const json = JSON.parse(response.text || "{}");
+        let json;
+        try {
+            json = JSON.parse(response.text || "{}");
+        } catch (e) {
+            console.error("Failed to parse JSON from Gemini:", response.text);
+            throw new Error("Falha ao interpretar a resposta da IA.");
+        }
         
         // Transform schema array back to object map for easier consumption
         const answersMap: Record<string, string> = {};
@@ -181,7 +187,7 @@ export const analyzeAnswerSheetWithQR = async (imageFile: File, numQuestions: nu
         }
 
         return {
-            qrData: { e: json.examId, s: json.studentId },
+            qrData: { e: json.examId || null, s: json.studentId || null },
             answers: answersMap
         };
 
