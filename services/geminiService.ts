@@ -127,9 +127,9 @@ export const analyzeAnswerSheetWithQR = async (imageFile: File, numQuestions: nu
             Analise a imagem enviada, que é um Cartão Resposta.
             
             TAREFA 1: IDENTIFICAÇÃO
-            - Localize e DECODIFIQUE o QR CODE presente no cabeçalho.
-            - O QR Code contém um JSON (ex: {"e":"examId","s":"studentId"}). 
-            - Extraia o valor de 'e' para o campo 'examId' e 's' para o campo 'studentId'.
+            - Localize a área "USO EXCLUSIVO SISTEMA" no cabeçalho.
+            - Há um código de barras e um texto abaixo dele no formato "E:ID_DA_PROVA S:ID_DO_ALUNO".
+            - Extraia o valor exato após "E:" para o campo 'examId' e após "S:" para o campo 'studentId'.
             - Se não conseguir ler, deixe os campos como null.
 
             TAREFA 2: RESPOSTAS

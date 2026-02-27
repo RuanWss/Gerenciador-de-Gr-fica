@@ -11,42 +11,13 @@ import {
 import { analyzeAnswerSheetWithQR } from '../services/geminiService';
 import { AnswerKey, Student, CorrectionResult } from '../types';
 import { Button } from '../components/Button';
-import jsQR from 'jsqr';
+import Barcode from 'react-barcode';
 import { 
     CheckSquare, Printer, Camera, UploadCloud, Search, Trash2, 
     FileText, CheckCircle2, AlertTriangle, X, ScanLine, Save, 
     ArrowLeft, Eye, RefreshCw, Plus 
 } from 'lucide-react';
 import { CLASSES, EFAF_SUBJECTS, EM_SUBJECTS } from '../constants';
-
-const readQRFromFile = async (file: File): Promise<{e: string, s: string} | null> => {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return resolve(null);
-            ctx.drawImage(img, 0, 0);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-            if (code) {
-                try {
-                    const data = JSON.parse(code.data);
-                    if (data.e && data.s) {
-                        return resolve(data);
-                    }
-                } catch (e) {
-                    // JSON parse error
-                }
-            }
-            resolve(null);
-        };
-        img.onerror = () => resolve(null);
-        img.src = URL.createObjectURL(file);
-    });
-};
 
 export const CorrectionDashboard: React.FC = () => {
     const { user } = useAuth();
@@ -232,23 +203,17 @@ export const CorrectionDashboard: React.FC = () => {
         setIsLoading(true);
         setCorrectionLog(prev => [`${prefix}Iniciando análise...`, ...prev]);
         try {
-            // 1. Try to read QR Code locally first (much more reliable)
-            let qrData = await readQRFromFile(file);
-            
-            // 2. Call Gemini to read answers (and fallback QR if needed)
+            // Call Gemini to read barcode text and answers
             const result = await analyzeAnswerSheetWithQR(file, 50);
             
-            // Merge QR data
-            if (!qrData && result.qrData && result.qrData.e && result.qrData.s) {
-                qrData = result.qrData as {e: string, s: string};
-            }
+            const qrData = result.qrData;
             
             if (qrData && qrData.e && qrData.s) {
-                const examKey = savedKeys.find(k => k.id === qrData!.e);
+                const examKey = savedKeys.find(k => k.id === qrData.e);
                 
                 if (examKey) {
                     const allStudents = await getStudents();
-                    const student = allStudents.find(s => s.id === qrData!.s);
+                    const student = allStudents.find(s => s.id === qrData.s);
                     
                     if (student) {
                         // Calculate Score
@@ -520,20 +485,27 @@ export const CorrectionDashboard: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Dados do Aluno e QR Code */}
+                                            {/* Dados do Aluno e Barcode */}
                                             <div className="border-4 border-black mb-3 flex h-32">
                                                 <div className="flex-1 p-4 border-r-4 border-black flex flex-col justify-center">
                                                     <span className="block text-[10px] font-black uppercase mb-1 tracking-widest">NOME COMPLETO DO PARTICIPANTE:</span>
                                                     <div className="text-2xl font-black uppercase truncate leading-tight">{student.name}</div>
                                                 </div>
-                                                <div className="w-56 relative bg-gray-50 flex items-center justify-center overflow-hidden">
+                                                <div className="w-64 relative bg-gray-50 flex flex-col items-center justify-center overflow-hidden p-2">
                                                     <div className="absolute top-1 left-2 text-[8px] font-black uppercase z-10 text-gray-500">USO EXCLUSIVO SISTEMA</div>
-                                                    <img 
-                                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${JSON.stringify({e: selectedKeyForPrint.id, s: student.id})}`} 
-                                                        className="h-24 w-24 object-contain mix-blend-multiply"
-                                                        alt="QR"
-                                                    />
-                                                    <div className="absolute bottom-1 right-2 text-[8px] font-mono text-gray-400">{student.id.substring(0,6)}</div>
+                                                    <div className="mt-2 w-full flex justify-center">
+                                                        <Barcode 
+                                                            value={`${selectedKeyForPrint.id.substring(0,10)}-${student.id.substring(0,10)}`} 
+                                                            width={1.5} 
+                                                            height={40} 
+                                                            displayValue={false} 
+                                                            margin={0} 
+                                                            background="transparent" 
+                                                        />
+                                                    </div>
+                                                    <div className="text-[9px] font-mono text-black mt-2 font-bold tracking-widest">
+                                                        E:{selectedKeyForPrint.id} S:{student.id}
+                                                    </div>
                                                 </div>
                                             </div>
 
